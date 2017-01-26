@@ -56,9 +56,18 @@ datatype tcb_invocation =
                   (tc_new_croot: "(cap * cslot_ptr) option")
                   (tc_new_vroot: "(cap * cslot_ptr) option")
                   (tc_new_buffer: "(vspace_ref * (cap * cslot_ptr) option) option")
+                  (tc_new_sc: "obj_ref option option")
   | Suspend "obj_ref"
   | Resume "obj_ref"
   | NotificationControl "obj_ref" "obj_ref option"
+
+datatype sched_context_invocation =
+    InvokeSchedContextBind obj_ref obj_ref
+  | InvokeSchedContextUnbindObject obj_ref
+  | InvokeSchedContextUnbind obj_ref
+
+datatype sched_control_invocation =
+    InvokeSchedControlConfigure obj_ref ticks
 
 datatype irq_control_invocation =
     IRQControl irq cslot_ptr cslot_ptr
@@ -76,6 +85,8 @@ datatype invocation =
   | InvokeReply obj_ref cslot_ptr
   | InvokeTCB tcb_invocation
   | InvokeDomain obj_ref word8
+  | InvokeSchedContext sched_context_invocation
+  | InvokeSchedControl sched_control_invocation
   | InvokeCNode cnode_invocation
   | InvokeIRQControl irq_control_invocation
   | InvokeIRQHandler irq_handler_invocation

@@ -48,12 +48,12 @@ definition
   restart :: "obj_ref \<Rightarrow> (unit,'z::state_ext) s_monad" where
  "restart thread \<equiv> do
     state \<leftarrow> get_thread_state thread;
+    sc_opt \<leftarrow> thread_get tcb_sched_context thread;
     when (\<not> runnable state \<and> \<not> idle state) $ do
       cancel_ipc thread;
       setup_reply_master thread;
       set_thread_state thread Restart;
-      do_extended_op (tcb_sched_action (tcb_sched_enqueue) thread);
-      do_extended_op (switch_if_required_to thread)
+      when (sc_opt \<noteq> None) $ sched_context_resume (the sc_opt)
     od
   od"
 
@@ -155,13 +155,22 @@ where
   "invoke_tcb (Suspend thread) = liftE (do suspend thread; return [] od)"
 | "invoke_tcb (Resume thread) = liftE (do restart thread; return [] od)"
 
-| "invoke_tcb (ThreadControl target slot faultep mcp priority croot vroot buffer)
+| "invoke_tcb (ThreadControl target slot faultep mcp priority croot vroot buffer sc)
    = doE
     liftE $ option_update_thread target (tcb_fault_handler_update o K) faultep;
     liftE $  case mcp of None \<Rightarrow> return()
      | Some newmcp \<Rightarrow> set_mcpriority target newmcp;
     liftE $ case priority of None \<Rightarrow> return()
      | Some prio \<Rightarrow> do_extended_op (set_priority target prio);
+    liftE $ case sc of None \<Rightarrow> return ()
+     | Some None \<Rightarrow> do
+       sc_ptr_opt \<leftarrow> thread_get tcb_sched_context target;
+       when (sc_ptr_opt \<noteq> None) $ sched_context_unbind (the sc_ptr_opt)
+     od
+     | Some (Some sc_ptr) \<Rightarrow> do
+        sc' \<leftarrow> thread_get tcb_sched_context target;
+        when (sc' \<noteq> Some sc_ptr) $ sched_context_bind sc_ptr target
+     od;
     (case croot of None \<Rightarrow> returnOk ()
      | Some (new_cap, src_slot) \<Rightarrow> doE
       cap_delete (target, tcb_cnode_index 0);

@@ -208,6 +208,18 @@ where
      returnOk []
    odE"
 
+| "perform_invocation _ _ (InvokeSchedContext i) =
+   doE
+     liftE $ invoke_sched_context i;
+     returnOk []
+   odE"
+
+| "perform_invocation _ _ (InvokeSchedControl i) =
+   doE
+     liftE $ invoke_sched_control_configure i;
+     returnOk []
+   odE"
+
 | "perform_invocation block call (InvokeArchObject i) =
     arch_perform_invocation i"
 

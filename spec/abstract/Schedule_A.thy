@@ -36,8 +36,7 @@ where
   "getActiveTCB tcb_ref state \<equiv>
    case (get_tcb tcb_ref state)
      of None           \<Rightarrow> None
-      | Some tcb       \<Rightarrow> if (runnable $ tcb_state tcb)
-                         then Some tcb else None"
+      | Some tcb       \<Rightarrow> if (schedulable tcb) then Some tcb else None"
 
 text {* Gets all schedulable threads in the system. *}
 definition
@@ -58,10 +57,10 @@ definition
      modify (\<lambda>s. s \<lparr> cur_thread := t \<rparr>)
    od"
 
-text {* Asserts that a thread is runnable before switching to it. *}
+text {* Asserts that a thread is schedulable before switching to it. *}
 definition guarded_switch_to :: "obj_ref \<Rightarrow> (unit,'z::state_ext) s_monad" where
-"guarded_switch_to thread \<equiv> do ts \<leftarrow> get_thread_state thread;
-                    assert (runnable ts);
+"guarded_switch_to thread \<equiv> do sched \<leftarrow> thread_get schedulable thread;
+                    assert sched;
                     switch_to_thread thread
                  od"
 
@@ -92,22 +91,22 @@ begin
 
 definition "schedule_det_ext_ext \<equiv> do
      cur \<leftarrow> gets cur_thread;
-     cur_ts \<leftarrow> get_thread_state cur;
+     cur_sched \<leftarrow> thread_get schedulable cur;
      action \<leftarrow> gets scheduler_action;
      (case action of
        resume_cur_thread \<Rightarrow> do
                             id \<leftarrow> gets idle_thread;
-                            assert (runnable cur_ts \<or> cur = id);
+                            assert (cur_sched \<or> cur = id);
                             return ()
                            od |
        choose_new_thread \<Rightarrow> do
-         when (runnable cur_ts) ((tcb_sched_action tcb_sched_enqueue cur));
+         when cur_sched ((tcb_sched_action tcb_sched_enqueue cur));
          dom_time \<leftarrow> gets domain_time;
          when (dom_time = 0) next_domain;
          choose_thread;
          (set_scheduler_action resume_cur_thread) od |
        switch_thread t \<Rightarrow> do
-         when (runnable cur_ts) ((tcb_sched_action tcb_sched_enqueue cur));
+         when cur_sched ((tcb_sched_action tcb_sched_enqueue cur));
          guarded_switch_to t;
          (set_scheduler_action resume_cur_thread) od)
     od"

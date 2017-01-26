@@ -57,6 +57,7 @@ datatype apiobject_type =
   | EndpointObject
   | NotificationObject
   | CapTableObject
+  | SchedContextObject
   | ArchObject aobject_type
 
 definition 
@@ -107,6 +108,8 @@ datatype cap
            -- "CNode ptr, number of bits translated, guard"
          | ThreadCap obj_ref
          | DomainCap
+         | SchedContextCap obj_ref
+         | SchedControlCap
          | IRQControlCap
          | IRQHandlerCap irq
          | Zombie obj_ref "nat option" nat
@@ -207,6 +210,11 @@ fun is_ntfn_cap :: "cap \<Rightarrow> bool"
 where
   "is_ntfn_cap (NotificationCap _ _ _) = True"
 | "is_ntfn_cap _                        = False"
+
+fun is_sched_context_cap :: "cap \<Rightarrow> bool"
+where
+  "is_sched_context_cap (SchedContextCap _) = True"
+| "is_sched_context_cap _ = False"
 
 primrec (nonexhaustive)
   cap_rights :: "cap \<Rightarrow> cap_rights"
@@ -374,6 +382,7 @@ record tcb =
  tcb_fault         :: "fault option"
  tcb_bound_notification     :: "obj_ref option"
  tcb_mcpriority    :: priority
+ tcb_sched_context :: "obj_ref option"
  tcb_arch          :: arch_tcb
 
 
@@ -390,6 +399,9 @@ where
 | "runnable (IdleThreadState)       = False"
 | "runnable (BlockedOnReply)        = False"
 
+definition
+  schedulable :: "tcb \<Rightarrow> bool" where 
+  "schedulable tcb \<equiv> runnable (tcb_state tcb) \<and> tcb_sched_context tcb \<noteq> None"
 
 definition
   default_tcb :: tcb where
@@ -405,7 +417,24 @@ definition
       tcb_fault      = None, 
       tcb_bound_notification  = None,
       tcb_mcpriority = minBound,
+      tcb_sched_context = None,
       tcb_arch       = default_arch_tcb\<rparr>"
+
+type_synonym ticks = "64 word"
+
+record sched_context =
+  sc_budget :: ticks
+  sc_remaining :: ticks
+  sc_tcb :: "obj_ref option"
+
+definition
+  default_sched_context :: sched_context where
+  "default_sched_context \<equiv> \<lparr>
+    sc_budget = 0,
+    sc_remaining = 0,
+    sc_tcb = None
+  \<rparr>"
+
 
 text {*
 All kernel objects are CNodes, TCBs, Endpoints, Notifications or architecture
@@ -416,6 +445,7 @@ datatype kernel_object
          | TCB tcb
          | Endpoint endpoint
          | Notification notification
+         | SchedContext sched_context
          | ArchObj (the_arch_obj: arch_kernel_obj)
 
 lemmas kernel_object_cases =
@@ -443,6 +473,7 @@ where
 | "obj_bits (TCB t) = 9"
 | "obj_bits (Endpoint ep) = 4"
 | "obj_bits (Notification ntfn) = 4"
+| "obj_bits (SchedContext sc) = 4" (* FIXME-RT: check *)
 | "obj_bits (ArchObj ao) = arch_kobj_size ao"
 
 primrec (nonexhaustive)
@@ -454,6 +485,7 @@ where
 | "obj_size (NotificationCap r b R) = 1 << obj_bits (Notification undefined)"
 | "obj_size (CNodeCap r bits g) = 1 << (cte_level_bits + bits)"
 | "obj_size (ThreadCap r) = 1 << obj_bits (TCB undefined)"
+| "obj_size (SchedContextCap r) = 1 << obj_bits (SchedContext undefined)"
 | "obj_size (Zombie r zb n) = (case zb of None \<Rightarrow> 1 << obj_bits (TCB undefined)
                                         | Some n \<Rightarrow> 1 << (cte_level_bits + n))"
 | "obj_size (ArchObjectCap a) = 1 << arch_obj_size a"
@@ -570,6 +602,8 @@ where
 | "obj_refs (NotificationCap r b cr) = {r}"
 | "obj_refs (ThreadCap r) = {r}"
 | "obj_refs DomainCap = {}"
+| "obj_refs (SchedContextCap r) = {r}"
+| "obj_refs SchedControlCap = {}"
 | "obj_refs (Zombie ptr b n) = {ptr}"
 | "obj_refs (ArchObjectCap x) = set_option (aobj_ref x)"
 
@@ -587,6 +621,7 @@ where
 | "obj_ref_of (EndpointCap r b cr) = r"
 | "obj_ref_of (NotificationCap r b cr) = r"
 | "obj_ref_of (ThreadCap r) = r"
+| "obj_ref_of (SchedContextCap r) = r"
 | "obj_ref_of (Zombie ptr b n) = ptr"
 | "obj_ref_of (ArchObjectCap x) = the (aobj_ref x)"
 

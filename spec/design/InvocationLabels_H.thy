@@ -34,6 +34,7 @@ datatype invocation_label =
   | TCBConfigure
   | TCBSetPriority
   | TCBSetMCPriority
+  | TCBSetSchedContext
   | TCBSetIPCBuffer
   | TCBSetSpace
   | TCBSuspend
@@ -54,6 +55,10 @@ datatype invocation_label =
   | IRQSetIRQHandler
   | IRQClearIRQHandler
   | DomainSetSet
+  | SchedControlConfigure
+  | SchedContextBind
+  | SchedContextUnbind
+  | SchedContextUnbindObject
   | ArchInvocationLabel arch_invocation_label
 
 (* invocation_label instance proofs *)
@@ -70,6 +75,7 @@ definition
       TCBConfigure,
       TCBSetPriority,
       TCBSetMCPriority,
+      TCBSetSchedContext,
       TCBSetIPCBuffer,
       TCBSetSpace,
       TCBSuspend,
@@ -89,7 +95,11 @@ definition
       IRQAckIRQ,
       IRQSetIRQHandler,
       IRQClearIRQHandler,
-      DomainSetSet
+      DomainSetSet,
+      SchedControlConfigure,
+      SchedContextBind,
+      SchedContextUnbind,
+      SchedContextUnbindObject
     ]
     @ (map ArchInvocationLabel enum)"
 

@@ -72,10 +72,14 @@ definition timer_tick :: "unit det_ext_monad" where
      cur \<leftarrow> gets cur_thread;
      state \<leftarrow> get_thread_state cur;
      case state of Running \<Rightarrow> do
-       ts \<leftarrow> ethread_get tcb_time_slice cur;
+       sc_ptr \<leftarrow> thread_get (the o tcb_sched_context) cur;
+       sc \<leftarrow> get_sched_context sc_ptr;
+       ts \<leftarrow> return $ sc_remaining sc;
        let ts' = ts - 1 in
-       if (ts' > 0) then thread_set_time_slice cur ts' else do
-         thread_set_time_slice cur time_slice;
+       if (ts' > 0) then
+         set_sched_context sc_ptr (sc\<lparr> sc_remaining := ts' \<rparr>)
+       else do
+         recharge sc_ptr;
          tcb_sched_action tcb_sched_append cur;
          reschedule_required
        od

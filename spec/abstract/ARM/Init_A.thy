@@ -78,6 +78,7 @@ definition
     tcb_fault = None,
     tcb_bound_notification = None,
     tcb_mcpriority = minBound,
+    tcb_sched_context = None,
     tcb_arch = init_arch_tcb
   \<rparr>, 
   init_globals_frame \<mapsto> ArchObj (DataPage False ARMSmallPage), (* FIXME: same reason as why we kept the definition of init_globals_frame *)

@@ -17,6 +17,7 @@ chapter "CSpace"
 theory CSpace_A
 imports
   "./$L4V_ARCH/ArchVSpace_A"
+  SchedContext_A
   IpcCancel_A
   "./$L4V_ARCH/ArchCSpace_A"
   "../../lib/Monad_WP/NonDetMonadLemmas"
@@ -438,7 +439,7 @@ where
 text {* Actions that must be taken when a capability is deleted. Returns a
 Zombie capability if deletion requires a long-running operation and also a
 possible IRQ to be cleared. *}
-fun
+fun                                           
   finalise_cap :: "cap \<Rightarrow> bool \<Rightarrow> (cap \<times> irq option,'z::state_ext) s_monad"
 where
   "finalise_cap NullCap                  final = return (NullCap, None)"
@@ -456,11 +457,18 @@ where
 | "finalise_cap (ThreadCap r)            final =
       do
          when final $ unbind_notification r;
+         when final $ unbind_from_sc r;
          when final $ suspend r;
          when final $ prepare_thread_delete r;
          return (if final then (Zombie r None 5) else NullCap, None)
       od"
 | "finalise_cap DomainCap                final = return (NullCap, None)"
+| "finalise_cap (SchedContextCap sc)     final =
+      do
+         when final $ sched_context_unbind_all_tcbs sc;
+         return (NullCap, None)
+      od"
+| "finalise_cap SchedControlCap          final = return (NullCap, None)"
 | "finalise_cap (Zombie r b n)           final =
       do assert final; return (Zombie r b n, None) od"
 | "finalise_cap IRQControlCap            final = return (NullCap, None)"
@@ -573,13 +581,13 @@ where
  "rec_del (ReduceZombieCall cap slot exposed) s =
   fail s"
   defer
-   apply (simp_all cong: if_cong)[406]
+   apply (simp_all cong: if_cong)[528]
   apply (case_tac x)
   apply (case_tac a)
     apply (auto)[2]
   apply (rename_tac cap cslot_ptr bool)
   apply (case_tac cap, safe)
-             apply auto[10]
+             apply auto[13]
    -- Zombie
    apply (rename_tac obj_ref option nat)
    apply (case_tac bool)
@@ -656,6 +664,7 @@ definition
   "is_physical cap \<equiv> case cap of
     NullCap \<Rightarrow> False
   | DomainCap \<Rightarrow> False
+  | SchedControlCap \<Rightarrow> False
   | IRQControlCap \<Rightarrow> False
   | IRQHandlerCap _ \<Rightarrow> False
   | ReplyCap _ _ \<Rightarrow> False
@@ -680,6 +689,10 @@ where
 | "same_region_as (ReplyCap n m) c' = (\<exists>m'. c' = ReplyCap n m')"
 | "same_region_as (ThreadCap r) c' =
     (is_thread_cap c' \<and> obj_ref_of c' = r)"
+| "same_region_as (SchedContextCap sc) c' =
+    (is_sched_context_cap c' \<and> obj_ref_of c' = sc)"
+| "same_region_as SchedControlCap c' =
+    (c' = SchedControlCap)"
 | "same_region_as (Zombie r b n) c' = False"
 | "same_region_as (IRQControlCap) c' =
     (c' = IRQControlCap \<or> (\<exists>n. c' = IRQHandlerCap n))"

@@ -223,7 +223,7 @@ where
      else let prio = ucast (args ! 0) in doE
        check_prio (args ! 0);
        returnOk (ThreadControl (obj_ref_of cap) slot None
-             None (Some prio) None None None)
+             None (Some prio) None None None None)
     odE"
 
 definition
@@ -234,7 +234,7 @@ where
      else let new_mcp = ucast $ args ! 0 in doE
        check_prio (args ! 0);
        returnOk (ThreadControl (obj_ref_of cap) slot None
-             (Some new_mcp) None None None None)
+             (Some new_mcp) None None None None None)
      odE"
 
 
@@ -254,7 +254,7 @@ where
       returnOk $ Some (buffer_cap, bslot)
     odE;
   returnOk $ 
-    ThreadControl (obj_ref_of cap) slot None None None None None (Some (buffer, newbuf))
+    ThreadControl (obj_ref_of cap) slot None None None None None (Some (buffer, newbuf)) None
 odE"
 
 
@@ -292,9 +292,25 @@ where
    vroot \<leftarrow> returnOk (vroot_cap', vroot_slot);       
    
    returnOk $ ThreadControl (obj_ref_of cap) slot (Some (to_bl fault_ep)) None None
-                            (Some croot) (Some vroot) None
+                            (Some croot) (Some vroot) None None
  odE"
 
+definition
+  decode_udpate_sc :: "cap \<Rightarrow> cslot_ptr \<Rightarrow> cap \<Rightarrow> (tcb_invocation,'z::state_ext) se_monad"
+where
+  "decode_udpate_sc cap slot sc_cap \<equiv>
+    if sc_cap = NullCap then
+      returnOk $ ThreadControl (obj_ref_of cap) slot None None None None None None (Some None)
+    else doE
+      tcb_ptr \<leftarrow> returnOk $ obj_ref_of cap;
+      unlessE (is_sched_context_cap sc_cap) $ throwError (InvalidCapability 0);
+      sc_ptr \<leftarrow> returnOk $ obj_ref_of sc_cap;
+      sc_ptr' \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
+      whenE (sc_ptr' \<noteq> None \<and> sc_ptr' \<noteq> Some sc_ptr) $ throwError IllegalOperation;
+      sc \<leftarrow> liftE $ get_sched_context sc_ptr;
+      whenE (sc_tcb sc \<noteq> None \<and> sc_tcb sc \<noteq> Some tcb_ptr) $ throwError IllegalOperation;
+      returnOk $ ThreadControl tcb_ptr slot None None None None None None (Some (Some sc_ptr))
+    odE"
 
 definition
   prio_from_word :: "data \<Rightarrow> data"
@@ -313,22 +329,24 @@ definition
 where
   "decode_tcb_configure args cap slot extra_caps \<equiv> doE
      whenE (length args < 5) $ throwError TruncatedMessage;
-     whenE (length extra_caps < 3) $ throwError TruncatedMessage;
+     whenE (length extra_caps < 4) $ throwError TruncatedMessage;
      fault_ep \<leftarrow> returnOk $ args ! 0;
      prioProps  \<leftarrow> returnOk $ args ! 1;
      croot_data \<leftarrow> returnOk $ args ! 2;
      vroot_data \<leftarrow> returnOk $ args ! 3;
-     crootvroot \<leftarrow> returnOk $ take 2 extra_caps;
-     buffer_cap \<leftarrow> returnOk $ extra_caps ! 2;
+     sc_cap \<leftarrow> returnOk $ fst (hd extra_caps);
+     crootvroot \<leftarrow> returnOk $ take 2 (drop 1 extra_caps);
+     buffer_cap \<leftarrow> returnOk $ extra_caps ! 3;
      buffer \<leftarrow> returnOk $ args ! 4;
      set_prio \<leftarrow> decode_set_priority [prio_from_word prioProps] cap slot;
      set_mcp \<leftarrow> decode_set_mcpriority [mcp_from_word prioProps] cap slot;
      set_params \<leftarrow> decode_set_ipc_buffer [buffer] cap slot [buffer_cap];
      set_space \<leftarrow> decode_set_space [fault_ep, croot_data, vroot_data] cap slot crootvroot;
+     update_sc \<leftarrow> decode_udpate_sc cap slot sc_cap;
      returnOk $ ThreadControl (obj_ref_of cap) slot (tc_new_fault_ep set_space)
                               (tc_new_mcpriority set_mcp) (tc_new_priority set_prio)
-                              (tc_new_croot set_space) (tc_new_vroot set_space) 
-                              (tc_new_buffer set_params)
+                              (tc_new_croot set_space) (tc_new_vroot set_space)
+                              (tc_new_buffer set_params) (tc_new_sc update_sc)
    odE" 
 
 definition
@@ -407,6 +425,67 @@ where
      case (fst (hd excs)) of ThreadCap ptr \<Rightarrow> returnOk $ (ptr, domain)
        | _ \<Rightarrow> throwError $ InvalidArgument 1
    odE"
+
+section "Scheduling Contexts"
+
+text {* The following definitions decode system calls related to scheduling contexts
+and scheduling control. *}
+
+definition
+  decode_sched_context_invocation :: 
+  "data \<Rightarrow> obj_ref \<Rightarrow> cap list \<Rightarrow> (sched_context_invocation,'z::state_ext) se_monad"
+where
+  "decode_sched_context_invocation label sc_ptr excaps \<equiv>
+  case invocation_type label of
+    SchedContextBind \<Rightarrow> doE
+      whenE (length excaps = 0) $ throwError TruncatedMessage;
+      cap \<leftarrow> returnOk $ hd excaps;
+      sc \<leftarrow> liftE $ get_sched_context sc_ptr;
+      whenE (sc_tcb sc \<noteq> None) $ throwError IllegalOperation;
+      whenE (\<not>is_thread_cap cap) $ throwError (InvalidCapability 1);
+      tcb_ptr \<leftarrow> returnOk $ obj_ref_of cap;
+      sc_ptr_opt \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
+      whenE (sc_ptr_opt \<noteq> None) $ throwError IllegalOperation;
+      returnOk $ InvokeSchedContextBind sc_ptr tcb_ptr
+    odE
+  | SchedContextUnbindObject \<Rightarrow> doE
+      whenE (length excaps = 0) $ throwError TruncatedMessage;
+      cap \<leftarrow> returnOk $ hd excaps;
+      whenE (\<not>is_thread_cap cap) $ throwError (InvalidCapability 1);
+      tcb_ptr \<leftarrow> returnOk $ obj_ref_of cap;
+      sc_ptr_opt \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
+      whenE (Some sc_ptr \<noteq> sc_ptr_opt) $ throwError IllegalOperation;
+      returnOk $ InvokeSchedContextUnbindObject sc_ptr
+    odE
+  | SchedContextUnbind \<Rightarrow> returnOk $ InvokeSchedContextUnbind sc_ptr
+  | _ \<Rightarrow> throwError $ IllegalOperation"
+
+
+definition
+  TIME_ARG_SIZE :: nat
+where
+  "TIME_ARG_SIZE \<equiv> 2" (* sizeof(ticks_t) / sizeof(word_t) *)
+
+definition
+  parse_time_arg :: "nat \<Rightarrow> data list \<Rightarrow> ticks"
+where
+  "parse_time_arg i args \<equiv> (ucast (args!(i+1)) << 32) + ucast (args!i)"
+
+definition
+  decode_sched_control_invocation :: 
+  "data \<Rightarrow> data list \<Rightarrow> cap list \<Rightarrow> (sched_control_invocation,'z::state_ext) se_monad"
+where
+  "decode_sched_control_invocation label args excaps \<equiv> doE
+    unlessE (invocation_type label = SchedControlConfigure) $ throwError IllegalOperation;
+    whenE (length excaps = 0) $ throwError TruncatedMessage;
+    whenE (length args < TIME_ARG_SIZE) $ throwError TruncatedMessage;
+    budget \<leftarrow> returnOk $ parse_time_arg 0 args;
+    target_cap \<leftarrow> returnOk $ hd excaps;
+    whenE (\<not>is_sched_context_cap target_cap) $ throwError (InvalidCapability 1);
+    sc_ptr \<leftarrow> returnOk $ obj_ref_of target_cap;
+    returnOk $ InvokeSchedControlConfigure sc_ptr budget
+  odE"
+
 
 section "IRQ"
 
@@ -597,6 +676,10 @@ where
       liftME InvokeTCB $ decode_tcb_invocation label args cap slot excaps
   | DomainCap \<Rightarrow>
       liftME (case_prod InvokeDomain) $ decode_domain_invocation label args excaps
+  | SchedContextCap sc \<Rightarrow>
+      liftME InvokeSchedContext $ decode_sched_context_invocation label sc (map fst excaps)
+  | SchedControlCap \<Rightarrow>
+      liftME InvokeSchedControl $ decode_sched_control_invocation label args (map fst excaps)
   | CNodeCap ptr bits _ \<Rightarrow>
       liftME InvokeCNode $ decode_cnode_invocation label args cap (map fst excaps)
   | UntypedCap dev ptr sz fi \<Rightarrow>
@@ -606,5 +689,6 @@ where
         arch_decode_invocation label args cap_index slot arch_cap excaps
   | _ \<Rightarrow> 
       throwError $ InvalidCapability 0"
+
 
 end

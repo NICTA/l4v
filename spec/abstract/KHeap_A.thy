@@ -106,10 +106,10 @@ where
 
 definition set_thread_state_ext :: "obj_ref \<Rightarrow> unit det_ext_monad" where
   "set_thread_state_ext t \<equiv> do
-     ts \<leftarrow> get_thread_state t;
+     sched \<leftarrow> thread_get schedulable t;
      cur \<leftarrow> gets cur_thread;
      action \<leftarrow> gets scheduler_action;
-     when (\<not> (runnable ts) \<and> cur = t \<and> action = resume_cur_thread) (set_scheduler_action choose_new_thread)
+     when (\<not>sched \<and> cur = t \<and> action = resume_cur_thread) (set_scheduler_action choose_new_thread)
    od"
 
 definition
@@ -184,6 +184,24 @@ where
      assert (is_simple_type obj);
      assert (case partial_inv f obj of Some e \<Rightarrow> a_type obj = a_type (f ep) | _ \<Rightarrow> False);
      set_object ptr (f ep)
+   od"
+
+definition
+  get_sched_context :: "obj_ref \<Rightarrow> (sched_context,'z::state_ext) s_monad"
+where
+  "get_sched_context ptr \<equiv> do
+     kobj \<leftarrow> get_object ptr;
+     case kobj of SchedContext sc \<Rightarrow> return sc
+                 | _ \<Rightarrow> fail
+   od"
+
+definition
+  set_sched_context :: "obj_ref \<Rightarrow> sched_context \<Rightarrow> (unit,'z::state_ext) s_monad"
+where
+  "set_sched_context ptr sc \<equiv> do
+     obj \<leftarrow> get_object ptr;
+     assert (case obj of SchedContext sc \<Rightarrow> True | _ \<Rightarrow> False);
+     set_object ptr (SchedContext sc)
    od"
 
 

@@ -208,10 +208,12 @@ where
 | "fast_finalise (CNodeCap r bits g)      final = fail"
 | "fast_finalise (ThreadCap r)            final = fail"
 | "fast_finalise DomainCap                final = fail"
+| "fast_finalise (SchedContextCap sc)     final = fail"
+| "fast_finalise SchedControlCap          final = fail"
 | "fast_finalise (Zombie r b n)           final = fail"
 | "fast_finalise IRQControlCap            final = fail"
 | "fast_finalise (IRQHandlerCap irq)      final = fail"
-| "fast_finalise (UntypedCap dev r n f)       final = fail"
+| "fast_finalise (UntypedCap dev r n f)   final = fail"
 | "fast_finalise (ArchObjectCap a)        final = fail"
 
 text {* The optional IRQ stored in a capability, presented either as an optional

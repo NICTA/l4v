@@ -36,8 +36,7 @@ where
   "getActiveTCB tcb_ref state \<equiv>
    case (get_tcb tcb_ref state)
      of None           \<Rightarrow> None
-      | Some tcb       \<Rightarrow> if (runnable $ tcb_state tcb)
-                         then Some tcb else None"
+      | Some tcb       \<Rightarrow> if (schedulable tcb) then Some tcb else None"
 
 text {* Gets all schedulable threads in the system. *}
 definition
@@ -58,10 +57,10 @@ definition
      modify (\<lambda>s. s \<lparr> cur_thread := t \<rparr>)
    od"
 
-text {* Asserts that a thread is runnable before switching to it. *}
+text {* Asserts that a thread is schedulable before switching to it. *}
 definition guarded_switch_to :: "obj_ref \<Rightarrow> (unit,'z::state_ext) s_monad" where
-"guarded_switch_to thread \<equiv> do ts \<leftarrow> get_thread_state thread;
-                    assert (runnable ts);
+"guarded_switch_to thread \<equiv> do sched \<leftarrow> thread_get schedulable thread;
+                    assert sched;
                     switch_to_thread thread
                  od"
 
@@ -117,20 +116,20 @@ definition
   "schedule_det_ext_ext \<equiv> do
      ct \<leftarrow> gets cur_thread;
      ct_st \<leftarrow> get_thread_state ct;
-     ct_runnable \<leftarrow> return $ runnable ct_st;
+     ct_schedulable \<leftarrow> thread_get schedulable ct;
      action \<leftarrow> gets scheduler_action;
      (case action
        of resume_cur_thread \<Rightarrow> do
             id \<leftarrow> gets idle_thread;
-            assert (ct_runnable \<or> ct = id);
+            assert (ct_schedulable \<or> ct = id);
             return ()
          od
        | choose_new_thread \<Rightarrow> do
-           when ct_runnable (tcb_sched_action tcb_sched_enqueue ct);
+           when ct_schedulable (tcb_sched_action tcb_sched_enqueue ct);
            schedule_choose_new_thread
          od
        | switch_thread candidate \<Rightarrow> do
-           when ct_runnable (tcb_sched_action tcb_sched_enqueue ct);
+           when ct_schedulable (tcb_sched_action tcb_sched_enqueue ct);
 
            it \<leftarrow> gets idle_thread;
            target_prio \<leftarrow> ethread_get tcb_priority candidate;
@@ -150,7 +149,7 @@ definition
                set_scheduler_action choose_new_thread;
                schedule_choose_new_thread
              od
-           else if (ct_runnable \<and> ct_prio = target_prio)
+           else if (ct_schedulable \<and> ct_prio = target_prio)
            then do
                (* current thread was runnable and candidate is not strictly better
                   want current thread to run next, so append the candidate to end of queue

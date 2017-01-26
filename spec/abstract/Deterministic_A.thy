@@ -63,7 +63,7 @@ lemma trans_state[simp]: "kheap (trans_state t s) = kheap s"
                             "idle_thread (trans_state t s) = idle_thread s"
                             "machine_state (trans_state t s) = machine_state s"
                             "interrupt_irq_node (trans_state t s) = interrupt_irq_node s"
-                           "interrupt_states (trans_state t s) = interrupt_states s"
+                            "interrupt_states (trans_state t s) = interrupt_states s"
                             "arch_state (trans_state t s) = arch_state s"
                             "exst (trans_state t s) = (t (exst s))"
                             "exst (trans_state (\<lambda>_. e) s) = e"
@@ -118,14 +118,10 @@ type_synonym domain = word8
 
 record etcb =
  tcb_priority :: "priority"
- tcb_time_slice :: "nat"
  tcb_domain :: "domain"
 
 definition num_domains :: nat where
   "num_domains \<equiv> 16"
-
-definition time_slice :: "nat" where
-  "time_slice \<equiv> 5"
 
 definition default_priority :: "priority" where
   "default_priority \<equiv> minBound"
@@ -134,7 +130,7 @@ definition default_domain :: "domain" where
   "default_domain \<equiv> minBound"
 
 definition default_etcb :: "etcb" where
-  "default_etcb \<equiv> \<lparr>tcb_priority = default_priority, tcb_time_slice = time_slice, tcb_domain = default_domain\<rparr>"
+  "default_etcb \<equiv> \<lparr>tcb_priority = default_priority, tcb_domain = default_domain\<rparr>"
 
 type_synonym ready_queue = "obj_ref list"
 
@@ -225,6 +221,30 @@ abbreviation
 
 type_synonym 'a det_ext_monad = "(det_state,'a) nondet_monad"
 
+
+section \<open>Type Class\<close>
+
+text {*
+  A type class for all instantiations of the abstract specification. In
+  practice, this is restricted to basically allow only two sensible
+  implementations at present: the deterministic abstract specification and
+  the nondeterministic one.
+*}
+class state_ext =
+ fixes unwrap_ext :: "'a state \<Rightarrow> det_ext state"
+ fixes wrap_ext :: "(det_ext \<Rightarrow> det_ext) \<Rightarrow> ('a \<Rightarrow> 'a)"
+ fixes wrap_ext_op :: "unit det_ext_monad \<Rightarrow> ('a state,unit) nondet_monad"
+ fixes wrap_ext_bool :: "bool det_ext_monad \<Rightarrow> ('a state,bool) nondet_monad"
+ fixes select_switch :: "'a \<Rightarrow> bool"
+ fixes ext_init :: "'a"
+
+definition detype_ext :: "obj_ref set \<Rightarrow> 'z::state_ext \<Rightarrow> 'z" where
+ "detype_ext S \<equiv> wrap_ext (\<lambda>s. s\<lparr>ekheap_internal := (\<lambda>x. if x \<in> S then None else ekheap_internal s x)\<rparr>)"
+
+
+
+section \<open>Basic Deterministic Monadic Accessors\<close>
+
 text {*
   Basic monadic functions for operating on the extended state of the
   deterministic abstract specification.
@@ -276,10 +296,6 @@ definition
   "thread_set_priority tptr prio \<equiv> ethread_set (\<lambda>tcb. tcb\<lparr>tcb_priority := prio\<rparr>) tptr"
 
 definition
-  thread_set_time_slice :: "obj_ref \<Rightarrow> nat \<Rightarrow> unit det_ext_monad" where
-  "thread_set_time_slice tptr time \<equiv> ethread_set (\<lambda>tcb. tcb\<lparr>tcb_time_slice := time\<rparr>) tptr"
-
-definition
   thread_set_domain :: "obj_ref \<Rightarrow> domain \<Rightarrow> unit det_ext_monad" where
   "thread_set_domain tptr domain \<equiv> ethread_set (\<lambda>tcb. tcb\<lparr>tcb_domain := domain\<rparr>) tptr"
 
@@ -319,11 +335,24 @@ definition
   tcb_sched_dequeue :: "obj_ref \<Rightarrow> obj_ref list \<Rightarrow> obj_ref list" where
   "tcb_sched_dequeue thread queue \<equiv> filter (\<lambda>x. x \<noteq> thread) queue"
 
+definition
+  thread_get_det :: "(tcb \<Rightarrow> 'a) \<Rightarrow> obj_ref \<Rightarrow> 'a det_ext_monad"
+where
+  "thread_get_det f tptr \<equiv> do
+     hp \<leftarrow> gets kheap;
+     assert (\<exists>tcb. hp tptr = Some (TCB tcb));
+     case the (hp tptr) of TCB tcb \<Rightarrow> return $ f tcb
+   od"
 
 definition reschedule_required :: "unit det_ext_monad" where
   "reschedule_required \<equiv> do
      action \<leftarrow> gets scheduler_action;
-     case action of switch_thread t \<Rightarrow> tcb_sched_action (tcb_sched_enqueue) t | _ \<Rightarrow> return ();
+     case action of 
+       switch_thread t \<Rightarrow> do
+         sched \<leftarrow> thread_get_det schedulable t;
+         when sched $ tcb_sched_action (tcb_sched_enqueue) t
+       od
+     | _ \<Rightarrow> return ();
      set_scheduler_action choose_new_thread
    od"
 
@@ -344,6 +373,15 @@ definition
      else
        set_scheduler_action $ switch_thread target
    od"
+
+definition
+  schedule_tcb :: "obj_ref \<Rightarrow> tcb \<Rightarrow> unit det_ext_monad"
+where
+  "schedule_tcb tcb_ptr tcb \<equiv> do
+    cur \<leftarrow> gets cur_thread;
+    sched_act \<leftarrow> gets scheduler_action;
+    when (tcb_ptr = cur \<and> sched_act = resume_cur_thread \<and> \<not>schedulable tcb) $ reschedule_required
+  od"
 
 definition
   next_domain :: "unit det_ext_monad" where
@@ -530,22 +568,9 @@ definition work_units_limit_reached where
      return (work_units_limit \<le> work_units)
    od"
 
-text {*
-  A type class for all instantiations of the abstract specification. In
-  practice, this is restricted to basically allow only two sensible
-  implementations at present: the deterministic abstract specification and
-  the nondeterministic one.
-*}
-class state_ext =
- fixes unwrap_ext :: "'a state \<Rightarrow> det_ext state"
- fixes wrap_ext :: "(det_ext \<Rightarrow> det_ext) \<Rightarrow> ('a \<Rightarrow> 'a)"
- fixes wrap_ext_op :: "unit det_ext_monad \<Rightarrow> ('a state,unit) nondet_monad"
- fixes wrap_ext_bool :: "bool det_ext_monad \<Rightarrow> ('a state,bool) nondet_monad"
- fixes select_switch :: "'a \<Rightarrow> bool"
- fixes ext_init :: "'a"
 
-definition detype_ext :: "obj_ref set \<Rightarrow> 'z::state_ext \<Rightarrow> 'z" where
- "detype_ext S \<equiv> wrap_ext (\<lambda>s. s\<lparr>ekheap_internal := (\<lambda>x. if x \<in> S then None else ekheap_internal s x)\<rparr>)"
+
+section \<open>Type Class Instances\<close>
 
 instantiation  det_ext_ext :: (type) state_ext
 begin

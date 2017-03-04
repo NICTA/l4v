@@ -41,7 +41,7 @@ where
      ts \<leftarrow> thread_get tcb_state tptr;
      when (runnable ts \<and> 0 < sc_budget sc) $ do
         recharge sc_ptr;
-        do_extended_op $ switch_if_required_to tptr
+        do_extended_op $ possible_switch_to tptr
     od
   od"
 
@@ -119,8 +119,59 @@ where
       if \<not>schedulable tcb then
         do_extended_op $ tcb_sched_action tcb_sched_dequeue tcb_ptr
       else
-        do_extended_op $ switch_if_required_to tcb_ptr
+        do_extended_op $ possible_switch_to tcb_ptr
     od
+  od"
+
+
+text \<open> Update time consumption of given scheduling context and current domain. \<close>
+definition
+  commit_time :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+where
+  "commit_time sc_ptr = do
+    sc \<leftarrow> get_sched_context sc_ptr;
+    consumed \<leftarrow> gets consumed_time;
+    rem' \<leftarrow> return (if sc_remaining sc < consumed then 0 else sc_remaining sc - consumed);
+    set_sched_context sc_ptr (sc\<lparr>sc_remaining := rem'\<rparr>);
+    do_extended_op $ commit_domain_time;
+    modify (\<lambda>s. s\<lparr>cur_time := cur_time s + consumed \<rparr>);
+    modify (\<lambda>s. s\<lparr>consumed_time := 0\<rparr> )
+  od"
+
+definition
+  is_cur_thread_expired :: "(bool,'z::state_ext) s_monad"
+where
+  "is_cur_thread_expired = do
+     cur \<leftarrow> gets cur_thread;
+     tcb \<leftarrow> gets_the $ get_tcb cur;
+     sc_ptr \<leftarrow> return (the (tcb_sched_context tcb));
+     sc \<leftarrow> get_sched_context sc_ptr;
+     consumed \<leftarrow> gets consumed_time;
+     return (sc_remaining sc < consumed + kernelWCET_ticks)
+  od"
+
+
+section "Global time"
+
+definition
+  rollback_time :: "(unit, 'z::state_ext) s_monad"
+where
+  "rollback_time = do
+    consumed \<leftarrow> gets consumed_time;
+    modify (\<lambda>s. s\<lparr>cur_time := cur_time s - consumed \<rparr>);
+    modify (\<lambda>s. s\<lparr>consumed_time := 0\<rparr> )
+  od"
+
+
+text \<open>Update current and consumed time.\<close>
+definition
+  update_time_stamp :: "(unit, 'z::state_ext) s_monad"
+where
+  "update_time_stamp = do
+    prev_time \<leftarrow> gets cur_time;
+    cur_time' \<leftarrow> do_machine_op getCurrentTime;
+    modify (\<lambda>s. s\<lparr> cur_time := cur_time' \<rparr>);
+    modify (\<lambda>s. s\<lparr> consumed_time := cur_time' - prev_time \<rparr>)
   od"
 
 end

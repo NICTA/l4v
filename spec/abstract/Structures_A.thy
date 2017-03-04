@@ -428,6 +428,7 @@ definition
       tcb_arch       = default_arch_tcb\<rparr>"
 
 type_synonym ticks = "64 word"
+type_synonym time = "64 word"
 
 record sched_context =
   sc_budget :: ticks
@@ -558,6 +559,11 @@ record abstract_state =
   is_original_cap    :: "cslot_ptr \<Rightarrow> bool"
   cur_thread         :: obj_ref
   idle_thread        :: obj_ref
+  consumed_time      :: time     -- "amount of time since kernel time was last updated"
+  cur_time           :: time     -- "current time at kernel entry"
+(* FIXME: RT - do these really need to be globals? *)
+  cur_sc             :: "obj_ref option" -- "current scheduling context"
+  reprogram_timer    :: bool     -- "whether we need to reprogram the timer on exit"
   machine_state      :: machine_state
   interrupt_irq_node :: "irq \<Rightarrow> obj_ref"
   interrupt_states   :: "irq \<Rightarrow> irq_state"

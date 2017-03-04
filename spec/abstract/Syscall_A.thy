@@ -338,8 +338,10 @@ section {* Top-level event handling  *}
 fun
   handle_event :: "event \<Rightarrow> (unit,'z::state_ext) p_monad"
 where
-  "handle_event (SyscallEvent call) =
-   (case call of
+  "handle_event (SyscallEvent call) = doE
+    liftE $ update_time_stamp;
+    restart \<leftarrow> liftE $ check_budget_restart;
+    whenE restart (case call of
           SysSend \<Rightarrow> handle_send True
         | SysNBSend \<Rightarrow> handle_send False
         | SysCall \<Rightarrow> handle_call
@@ -350,18 +352,25 @@ where
             handle_reply;
             handle_recv True
           od
-        | SysNBRecv \<Rightarrow> without_preemption $ handle_recv False)"
+        | SysNBRecv \<Rightarrow> without_preemption $ handle_recv False)
+  odE"
 
 | "handle_event (UnknownSyscall n) = (without_preemption $ do
-    thread \<leftarrow> gets cur_thread;
-    handle_fault thread $ UnknownSyscallException $ of_nat n;
-    return ()
+    update_time_stamp;
+    restart \<leftarrow> check_budget_restart;
+    when restart $ do
+      thread \<leftarrow> gets cur_thread;
+      handle_fault thread $ UnknownSyscallException $ of_nat n
+    od
   od)"
 
 | "handle_event (UserLevelFault w1 w2) = (without_preemption $ do
-    thread \<leftarrow> gets cur_thread;
-    handle_fault thread $ UserException w1 (w2 && mask 29);
-    return ()
+    update_time_stamp;
+    restart \<leftarrow> check_budget_restart;
+    when restart $ do
+      thread \<leftarrow> gets cur_thread;
+      handle_fault thread $ UserException w1 (w2 && mask 29)
+    od
   od)"
 
 | "handle_event Interrupt = (without_preemption $ do
@@ -372,9 +381,12 @@ where
   od)"
 
 | "handle_event (VMFaultEvent fault_type) = (without_preemption $ do
-    thread \<leftarrow> gets cur_thread;
-    handle_vm_fault thread fault_type <catch> handle_fault thread;
-    return ()
+    update_time_stamp;
+    restart \<leftarrow> check_budget_restart;
+    when restart $ do
+      thread \<leftarrow> gets cur_thread;
+      handle_vm_fault thread fault_type <catch> handle_fault thread
+    od
   od)"
 
 | "handle_event (HypervisorEvent hypfault_type) = (without_preemption $ do
@@ -397,7 +409,12 @@ definition
        handle_event ev <handle>
            (\<lambda>_. without_preemption $ do
                   irq \<leftarrow> do_machine_op $ getActiveIRQ True;
-                  when (irq \<noteq> None) $ handle_interrupt (the irq)
+                  when (irq \<noteq> None) $ do
+                    sc \<leftarrow> gets_the cur_sc;
+                    commit_time sc;
+                    check_reschedule;
+                    handle_interrupt (the irq)
+                  od
                 od);
        schedule;
        activate_thread

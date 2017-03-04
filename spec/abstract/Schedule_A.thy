@@ -73,6 +73,107 @@ definition
      modify (\<lambda>s. s \<lparr> cur_thread := thread \<rparr>)
    od"
 
+definition
+  end_timeslice :: "(unit,'z::state_ext) s_monad"
+where
+  "end_timeslice = do
+     cur \<leftarrow> gets cur_thread;
+     tcb \<leftarrow> gets_the $ get_tcb cur;
+     sc_ptr \<leftarrow> return $ the (tcb_sched_context tcb);
+     recharge sc_ptr;
+     st \<leftarrow> get_thread_state cur;
+     when (st = Running) (do_extended_op $ tcb_sched_action tcb_sched_append cur);
+     do_extended_op reschedule_required
+  od"
+
+definition
+  set_next_interrupt :: "(unit, 'z::state_ext) s_monad"
+where
+  "set_next_interrupt = do
+     cur_tm \<leftarrow> gets cur_time;
+     cur_th \<leftarrow> gets cur_thread;
+     tcb \<leftarrow> gets_the $ get_tcb cur_th;
+     sc \<leftarrow> get_sched_context $ the (tcb_sched_context tcb);
+     new_thread_time \<leftarrow> return (cur_tm + sc_remaining sc);
+     do_extended_op $ set_next_timer_interrupt new_thread_time
+  od"
+
+definition
+  check_budget :: "(bool, 'z::state_ext) s_monad"
+where
+  "check_budget = do
+    cur_exp \<leftarrow> is_cur_thread_expired;
+    cur_sc \<leftarrow> gets_the cur_sc;
+    if cur_exp then do
+      commit_time cur_sc;
+      end_timeslice;
+      return False
+    od
+    else do
+      dom_exp \<leftarrow> select_ext is_cur_domain_expired {True,False};
+      if dom_exp then do
+        commit_time cur_sc;
+        do_extended_op reschedule_required;
+        return False
+      od
+      else return True
+    od
+  od"
+
+definition
+  check_budget_restart :: "(bool, 'z::state_ext) s_monad"
+where
+  "check_budget_restart = do
+     cont \<leftarrow> check_budget;
+     when (\<not>cont) $ do
+       cur \<leftarrow> gets cur_thread;
+       set_thread_state cur Restart
+     od;
+     return cont
+  od"
+
+definition
+  check_reschedule :: "(unit,'z::state_ext) s_monad"
+where
+  "check_reschedule = do
+     expired \<leftarrow> is_cur_thread_expired;
+     if expired then end_timeslice
+     else do
+       dom_exp \<leftarrow> select_ext is_cur_domain_expired {True,False};
+       when dom_exp (do_extended_op reschedule_required)
+     od
+   od"
+
+definition
+  switch_sched_context :: "(unit,'z::state_ext) s_monad"
+where
+  "switch_sched_context = do
+    cur_sc \<leftarrow> gets cur_sc;
+    cur_th \<leftarrow> gets cur_thread;
+    tcb \<leftarrow> gets_the $ get_tcb cur_th;
+    if cur_sc \<noteq> tcb_sched_context tcb
+    then do
+      modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>);
+      commit_time (the cur_sc)
+    od
+    else
+      rollback_time;
+    modify (\<lambda>s. s\<lparr> cur_sc:= tcb_sched_context tcb \<rparr>)
+  od"
+
+definition
+  sc_and_timer :: "(unit, 'z::state_ext) s_monad"
+where
+  "sc_and_timer = do
+    switch_sched_context;
+    reprogram \<leftarrow> gets reprogram_timer;
+    when reprogram $ do
+      set_next_interrupt;
+      modify (\<lambda>s. s\<lparr>reprogram_timer:= False\<rparr>)
+    od
+  od"
+
+
 class state_ext_sched = state_ext +
   fixes schedule :: "(unit,'a) s_monad"
 
@@ -163,7 +264,8 @@ definition
              (* duplication assists in wp proof under different sched. actions *)
              set_scheduler_action resume_cur_thread
            od
-        od)
+        od);
+     sc_and_timer
     od"
 
 instance ..
@@ -183,7 +285,8 @@ text {*
   idle thread is the current thread.
 *}
 definition schedule_unit :: "(unit,unit) s_monad" where
-"schedule_unit \<equiv> (do
+"schedule_unit \<equiv> do
+ (do
    cur \<leftarrow> gets cur_thread;
    threads \<leftarrow> allActiveTCBs;
    thread \<leftarrow> select threads;
@@ -198,7 +301,9 @@ definition schedule_unit :: "(unit,unit) s_monad" where
    if idl = cur then
      return () \<sqinter> switch_to_idle_thread
    else switch_to_idle_thread
-  od)"
+  od);
+  sc_and_timer
+  od"
 
 instance ..
 end

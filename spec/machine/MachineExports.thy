@@ -42,12 +42,20 @@ requalify_consts
   gpRegisters
   frameRegisters
   ackInterrupt
+  ackDeadlineIRQ
   resetTimer
+  getCurrentTime
   maxIRQ
   minIRQ
   word_size_bits
   clearMemory
   non_kernel_IRQs
+  kernelWCET_us
+  kernelWCET_ticks
+  maxTimer_us
+  us_to_ticks
+  setDeadline
+  timerPrecision
 
 (* HERE IS THE PLACE FOR GENERIC WORD LEMMAS FOR ALL ARCHITECTURES *)
 

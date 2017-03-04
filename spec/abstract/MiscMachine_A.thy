@@ -56,7 +56,6 @@ requalify_consts
   data_offset_to_nat
   combine_ntfn_badges
   
-
 end
 
 

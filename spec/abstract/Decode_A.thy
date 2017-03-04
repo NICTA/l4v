@@ -479,11 +479,13 @@ where
     unlessE (invocation_type label = SchedControlConfigure) $ throwError IllegalOperation;
     whenE (length excaps = 0) $ throwError TruncatedMessage;
     whenE (length args < TIME_ARG_SIZE) $ throwError TruncatedMessage;
-    budget \<leftarrow> returnOk $ parse_time_arg 0 args;
+    budget_\<mu>s \<leftarrow> returnOk $ parse_time_arg 0 args;
     target_cap \<leftarrow> returnOk $ hd excaps;
     whenE (\<not>is_sched_context_cap target_cap) $ throwError (InvalidCapability 1);
     sc_ptr \<leftarrow> returnOk $ obj_ref_of target_cap;
-    returnOk $ InvokeSchedControlConfigure sc_ptr budget
+    whenE (budget_\<mu>s > maxTimer_us \<or> budget_\<mu>s < kernelWCET_us) $
+      throwError (RangeError (ucast kernelWCET_us) (ucast maxTimer_us)); (* FIXME: RT - range type too small *)
+    returnOk $ InvokeSchedControlConfigure sc_ptr (us_to_ticks budget_\<mu>s)
   odE"
 
 

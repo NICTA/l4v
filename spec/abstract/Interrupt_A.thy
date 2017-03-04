@@ -103,15 +103,23 @@ definition
    st \<leftarrow> get_irq_state irq;
    case st of
      IRQSignal \<Rightarrow> do
+       update_time_stamp;
        slot \<leftarrow> get_irq_slot irq;
        cap \<leftarrow> get_cap slot;
        when (is_ntfn_cap cap \<and> AllowSend \<in> cap_rights cap)
-         $ send_signal (obj_ref_of cap) (cap_ep_badge cap);
-       do_machine_op $ maskInterrupt True irq
+         $ send_signal (obj_ref_of cap) (cap_ep_badge cap); 
+       do_machine_op $ maskInterrupt True irq;
+       cur_sc \<leftarrow> gets_the cur_sc;
+       commit_time cur_sc;
+       check_reschedule
      od
    | IRQTimer \<Rightarrow> do
-       do_extended_op timer_tick;
-       do_machine_op resetTimer
+       update_time_stamp;
+       do_machine_op ackDeadlineIRQ;
+       cur_sc \<leftarrow> gets_the cur_sc;
+       commit_time cur_sc;
+       check_budget;
+       return ()
      od
    | IRQInactive \<Rightarrow> fail (* not meant to be able to get IRQs from inactive lines *)
    | IRQReserved \<Rightarrow> handle_reserved_irq irq;

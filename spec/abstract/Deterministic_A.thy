@@ -50,6 +50,8 @@ text {* Translate a state of type @{typ "'a state"} to one of type @{typ "'b sta
 definition trans_state :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a state \<Rightarrow> 'b state" where
 "trans_state t s = \<lparr>kheap = kheap s, cdt = cdt s, is_original_cap = is_original_cap s,
                      cur_thread = cur_thread s, idle_thread = idle_thread s,
+                     consumed_time = consumed_time s, cur_time = cur_time s,
+                     cur_sc = cur_sc s, reprogram_timer = reprogram_timer s,
                      machine_state = machine_state s,
                      interrupt_irq_node = interrupt_irq_node s,
                      interrupt_states = interrupt_states s, arch_state = arch_state s,
@@ -65,6 +67,10 @@ lemma trans_state[simp]: "kheap (trans_state t s) = kheap s"
                             "interrupt_irq_node (trans_state t s) = interrupt_irq_node s"
                             "interrupt_states (trans_state t s) = interrupt_states s"
                             "arch_state (trans_state t s) = arch_state s"
+                            "consumed_time (trans_state t s) = consumed_time s"
+                            "cur_time (trans_state t s) = cur_time s"
+                            "cur_sc (trans_state t s) = cur_sc s"
+                            "reprogram_timer (trans_state t s) = reprogram_timer s"
                             "exst (trans_state t s) = (t (exst s))"
                             "exst (trans_state (\<lambda>_. e) s) = e"
   apply (simp add: trans_state_def)+
@@ -79,6 +85,10 @@ lemma trans_state_update[simp]:
  "trans_state t (machine_state_update k s) = machine_state_update k (trans_state t s)"
  "trans_state t (interrupt_irq_node_update l s) = interrupt_irq_node_update l (trans_state t s)"
  "trans_state t (arch_state_update m s) = arch_state_update m (trans_state t s)"
+ "trans_state t (consumed_time_update x s) = consumed_time_update x (trans_state t s)"
+ "trans_state t (cur_time_update y s) = cur_time_update y (trans_state t s)"
+ "trans_state t (cur_sc_update z s) = cur_sc_update z (trans_state t s)"
+ "trans_state t (reprogram_timer_update a s) = reprogram_timer_update a (trans_state t s)"
  "trans_state t (interrupt_states_update p s) = interrupt_states_update p (trans_state t s)"
   apply (simp add: trans_state_def)+
   done
@@ -149,10 +159,10 @@ record det_ext =
    work_units_completed_internal :: "machine_word"
    scheduler_action_internal :: scheduler_action
    ekheap_internal :: "obj_ref \<Rightarrow> etcb option"
-   domain_list_internal :: "(domain \<times> machine_word) list"
+   domain_list_internal :: "(domain \<times> time) list"
    domain_index_internal :: nat
    cur_domain_internal :: domain
-   domain_time_internal :: "machine_word"
+   domain_time_internal :: time
    ready_queues_internal :: "domain \<Rightarrow> priority \<Rightarrow> ready_queue"
    cdt_list_internal :: cdt_list
 
@@ -218,6 +228,8 @@ abbreviation
 
 abbreviation
   "cdt_list_update f (s::det_state) \<equiv> trans_state (cdt_list_internal_update f) s"
+
+
 
 type_synonym 'a det_ext_monad = "(det_state,'a) nondet_monad"
 
@@ -336,6 +348,21 @@ where
      case the (hp tptr) of TCB tcb \<Rightarrow> return $ f tcb
    od"
 
+definition
+  is_cur_domain_expired :: "det_ext state \<Rightarrow> bool"
+where
+  "is_cur_domain_expired = (\<lambda>s. domain_time  s < consumed_time s + kernelWCET_ticks)"
+
+definition
+  commit_domain_time :: "unit det_ext_monad"
+where
+  "commit_domain_time = do
+    domain_time \<leftarrow> gets domain_time;
+    consumed \<leftarrow> gets consumed_time;
+    time' \<leftarrow> return (if domain_time < consumed then 0 else domain_time - consumed);
+    modify (\<lambda>s. s\<lparr>domain_time := time'\<rparr>)
+  od"
+
 definition reschedule_required :: "unit det_ext_monad" where
   "reschedule_required \<equiv> do
      action \<leftarrow> gets scheduler_action;
@@ -345,7 +372,8 @@ definition reschedule_required :: "unit det_ext_monad" where
          when sched $ tcb_sched_action (tcb_sched_enqueue) t
        od
      | _ \<Rightarrow> return ();
-     set_scheduler_action choose_new_thread
+     set_scheduler_action choose_new_thread;
+     modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)  (* FIXME: RT - this means we miss timer action on the generic spec *)
    od"
 
 definition
@@ -383,6 +411,8 @@ where
     when (tcb_ptr = cur \<and> sched_act = resume_cur_thread \<and> \<not>schedulable tcb) $ reschedule_required
   od"
 
+definition "\<mu>s_to_ms = 1000"
+
 definition
   next_domain :: "unit det_ext_monad" where
   "next_domain \<equiv>
@@ -391,12 +421,23 @@ definition
       let next_dom = (domain_list s)!domain_index'
       in s\<lparr> domain_index := domain_index',
             cur_domain := fst next_dom,
-            domain_time := snd next_dom,
-            work_units_completed := 0\<rparr>)"
+            domain_time := us_to_ticks (snd next_dom * \<mu>s_to_ms),
+            work_units_completed := 0,
+            reprogram_timer := True\<rparr>)"
 
 definition
   dec_domain_time :: "unit det_ext_monad" where
   "dec_domain_time = modify (\<lambda>s. s\<lparr>domain_time := domain_time s - 1\<rparr>)"
+
+definition
+  set_next_timer_interrupt :: "time \<Rightarrow> unit det_ext_monad"
+where
+  "set_next_timer_interrupt thread_time = do
+     cur_tm \<leftarrow> gets cur_time;
+     domain_tm \<leftarrow> gets domain_time;
+     new_domain_tm \<leftarrow> return $ cur_tm + domain_tm;
+     do_machine_op $ setDeadline (min thread_time new_domain_tm - timerPrecision)
+  od"
 
 definition set_cdt_list :: "cdt_list \<Rightarrow> (det_state, unit) nondet_monad" where
   "set_cdt_list t \<equiv> do
@@ -568,6 +609,21 @@ definition work_units_limit_reached where
      return (work_units_limit \<le> work_units)
    od"
 
+
+(* 
+void
+awaken(void)   FIXME: RT - currently unused
+{
+    while (NODE_STATE(ksReleaseHead) != NULL &&
+           isReady(NODE_STATE(ksReleaseHead)->tcbSchedContext)) {
+           tcb_t *awakened = tcbReleaseDequeue();
+           SMP_COND_STATEMENT(assert(awakened->tcbAffinity == getCurrentCPUIndex()));
+           recharge(awakened->tcbSchedContext);
+           tcbSchedAppend(awakened);
+           switchIfRequiredTo(awakened);
+    }
+}
+*)
 
 
 section \<open>Type Class Instances\<close>

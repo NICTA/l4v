@@ -407,10 +407,6 @@ where
 | "runnable (BlockedOnReply)        = False"
 
 definition
-  schedulable :: "tcb \<Rightarrow> bool" where 
-  "schedulable tcb \<equiv> runnable (tcb_state tcb) \<and> tcb_sched_context tcb \<noteq> None"
-
-definition
   default_tcb :: tcb where
   "default_tcb \<equiv> \<lparr>
       tcb_ctable   = NullCap,
@@ -430,17 +426,26 @@ definition
 type_synonym ticks = "64 word"
 type_synonym time = "64 word"
 
+record refill =
+  r_time :: time
+  r_amount :: time
+
 record sched_context =
-  sc_budget :: ticks
-  sc_remaining :: ticks
+  sc_period :: ticks
   sc_tcb :: "obj_ref option"
+  sc_refills :: "refill list"
+  sc_refill_max :: nat
+
+definition "MIN_REFILLS = 2"
+definition "MAX_REFILLS = 12"
 
 definition
   default_sched_context :: sched_context where
   "default_sched_context \<equiv> \<lparr>
-    sc_budget = 0,
-    sc_remaining = 0,
-    sc_tcb = None
+    sc_period = 0,
+    sc_tcb = None,
+    sc_refills = [\<lparr>r_time=0, r_amount=0\<rparr>],
+    sc_refill_max = 0
   \<rparr>"
 
 
@@ -477,7 +482,7 @@ where
 | "obj_bits (TCB t) = tcb_bits"
 | "obj_bits (Endpoint ep) = endpoint_bits"
 | "obj_bits (Notification ntfn) = ntfn_bits"
-| "obj_bits (SchedContext sc) = 4" (* FIXME-RT: check *)
+| "obj_bits (SchedContext sc) = 8"
 | "obj_bits (ArchObj ao) = arch_kobj_size ao"
 
 primrec (nonexhaustive)
@@ -561,7 +566,6 @@ record abstract_state =
   idle_thread        :: obj_ref
   consumed_time      :: time     -- "amount of time since kernel time was last updated"
   cur_time           :: time     -- "current time at kernel entry"
-(* FIXME: RT - do these really need to be globals? *)
   cur_sc             :: "obj_ref option" -- "current scheduling context"
   reprogram_timer    :: bool     -- "whether we need to reprogram the timer on exit"
   machine_state      :: machine_state

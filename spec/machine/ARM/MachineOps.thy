@@ -96,6 +96,13 @@ definition
   storeWordVM :: "machine_word \<Rightarrow> machine_word \<Rightarrow> unit machine_monad"
   where "storeWordVM w p \<equiv> return ()"
 
+consts' kernelWCET_us :: "64 word"
+consts' maxTimer_us :: "64 word"
+consts' timerPrecision :: "64 word"
+consts' us_to_ticks :: "64 word \<Rightarrow> 64 word"
+definition
+  "kernelWCET_ticks = us_to_ticks (kernelWCET_us)"
+
 text \<open>
 This encodes the following assumptions:
   a) time increases monotonically,
@@ -108,7 +115,7 @@ where
     modify (\<lambda>s. s \<lparr> time_state := time_state s + 1 \<rparr>);
     passed \<leftarrow> gets $ time_oracle o time_state;
     last \<leftarrow> gets last_machine_time;
-    current \<leftarrow> return (if last + passed < last then -1 else last + passed);
+    current \<leftarrow> return (if last + passed + kernelWCET_ticks < last then -(kernelWCET_ticks+1) else last + passed);
     modify (\<lambda>s. s\<lparr>last_machine_time := current\<rparr>);
     return current
   od"
@@ -535,13 +542,6 @@ definition
 
 definition
   "setNextPC \<equiv> setRegister LR_svc"
-
-consts' kernelWCET_us :: "64 word"
-consts' maxTimer_us :: "64 word"
-consts' timerPrecision :: "64 word"
-consts' us_to_ticks :: "64 word \<Rightarrow> 64 word"
-definition
-  "kernelWCET_ticks = us_to_ticks (kernelWCET_us)"
 
 end
 

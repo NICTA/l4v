@@ -491,14 +491,23 @@ where
   "decode_sched_control_invocation label args excaps \<equiv> doE
     unlessE (invocation_type label = SchedControlConfigure) $ throwError IllegalOperation;
     whenE (length excaps = 0) $ throwError TruncatedMessage;
-    whenE (length args < TIME_ARG_SIZE) $ throwError TruncatedMessage;
+    whenE (length args < TIME_ARG_SIZE*2 + 1) $ throwError TruncatedMessage;
     budget_\<mu>s \<leftarrow> returnOk $ parse_time_arg 0 args;
+    period_\<mu>s \<leftarrow> returnOk $ parse_time_arg TIME_ARG_SIZE args;
+    max_refills \<leftarrow> returnOk $ args ! (2 * TIME_ARG_SIZE);
     target_cap \<leftarrow> returnOk $ hd excaps;
     whenE (\<not>is_sched_context_cap target_cap) $ throwError (InvalidCapability 1);
     sc_ptr \<leftarrow> returnOk $ obj_ref_of target_cap;
-    whenE (budget_\<mu>s > maxTimer_us \<or> budget_\<mu>s < kernelWCET_us) $
-      throwError (RangeError (ucast kernelWCET_us) (ucast maxTimer_us)); (* FIXME: RT - range type too small *)
-    returnOk $ InvokeSchedControlConfigure sc_ptr (us_to_ticks budget_\<mu>s)
+    whenE (budget_\<mu>s > maxTimer_us \<or> budget_\<mu>s < MIN_BUDGET_US) $
+      throwError (RangeError (ucast MIN_BUDGET_US) (ucast maxTimer_us));
+    whenE (period_\<mu>s > maxTimer_us \<or> period_\<mu>s < MIN_BUDGET_US) $
+      throwError (RangeError (ucast MIN_BUDGET_US) (ucast maxTimer_us));
+    whenE (period_\<mu>s < budget_\<mu>s) $
+      throwError (RangeError (ucast MIN_BUDGET_US) (ucast period_\<mu>s));
+    whenE (MAX_REFILLS < max_refills) $
+      throwError (RangeError 0 (of_nat (MAX_REFILLS - MIN_REFILLS - 1)));
+    returnOk $ InvokeSchedControlConfigure sc_ptr
+                 (us_to_ticks budget_\<mu>s) (us_to_ticks period_\<mu>s) (unat $ max_refills + MIN_REFILLS)
   odE"
 
 

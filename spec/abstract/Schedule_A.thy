@@ -33,10 +33,10 @@ text {* Gets the TCB at an address if the thread can be scheduled. *}
 definition
   getActiveTCB :: "obj_ref \<Rightarrow> 'z::state_ext state \<Rightarrow> tcb option"
 where
-  "getActiveTCB tcb_ref state \<equiv>
-   case (get_tcb tcb_ref state)
-     of None           \<Rightarrow> None
-      | Some tcb       \<Rightarrow> if (schedulable tcb) then Some tcb else None"
+  "getActiveTCB tcb_ref s \<equiv>
+   case get_tcb tcb_ref s
+     of None     \<Rightarrow> None
+      | Some tcb \<Rightarrow> if is_schedulable_opt tcb_ref False s = Some True then Some tcb else None"
 
 text {* Gets all schedulable threads in the system. *}
 definition
@@ -58,11 +58,13 @@ definition
    od"
 
 text {* Asserts that a thread is schedulable before switching to it. *}
-definition guarded_switch_to :: "obj_ref \<Rightarrow> (unit,'z::state_ext) s_monad" where
-"guarded_switch_to thread \<equiv> do sched \<leftarrow> thread_get schedulable thread;
-                    assert sched;
-                    switch_to_thread thread
-                 od"
+definition guarded_switch_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
+  "guarded_switch_to thread \<equiv> do
+     inq \<leftarrow> gets $ in_release_queue thread;
+     sched \<leftarrow> is_schedulable thread inq;
+     assert sched;
+     switch_to_thread thread
+   od"
 
 text {* Switches to the idle thread. *}
 definition
@@ -77,51 +79,77 @@ definition
   end_timeslice :: "(unit,'z::state_ext) s_monad"
 where
   "end_timeslice = do
-     cur \<leftarrow> gets cur_thread;
-     tcb \<leftarrow> gets_the $ get_tcb cur;
-     sc_ptr \<leftarrow> return $ the (tcb_sched_context tcb);
-     recharge sc_ptr;
-     st \<leftarrow> get_thread_state cur;
-     when (st = Running) (do_extended_op $ tcb_sched_action tcb_sched_append cur);
+     sc_ptr \<leftarrow> gets_the cur_sc;
+     ready \<leftarrow> refill_ready sc_ptr;
+     sufficient \<leftarrow> refill_sufficient sc_ptr 0;
+     if ready \<and> sufficient then do
+       cur \<leftarrow> gets cur_thread;
+       do_extended_op $ tcb_sched_action tcb_sched_append cur
+     od
+     else
+       postpone sc_ptr;
      do_extended_op reschedule_required
   od"
 
 definition
-  set_next_interrupt :: "(unit, 'z::state_ext) s_monad"
+  set_next_interrupt :: "unit det_ext_monad"
 where
   "set_next_interrupt = do
      cur_tm \<leftarrow> gets cur_time;
      cur_th \<leftarrow> gets cur_thread;
-     tcb \<leftarrow> gets_the $ get_tcb cur_th;
-     sc \<leftarrow> get_sched_context $ the (tcb_sched_context tcb);
-     new_thread_time \<leftarrow> return (cur_tm + sc_remaining sc);
-     do_extended_op $ set_next_timer_interrupt new_thread_time
+     sc_opt \<leftarrow> thread_get tcb_sched_context cur_th;
+     sc_ptr \<leftarrow> assert_opt sc_opt;
+     sc \<leftarrow> get_sched_context sc_ptr;
+     new_thread_time \<leftarrow> return $ cur_tm + r_amount (refill_hd sc);
+     rq \<leftarrow> gets release_queue;
+     new_thread_time \<leftarrow> if rq = [] then return new_thread_time else do
+       sc_opt \<leftarrow> thread_get tcb_sched_context (hd rq);
+       sc_ptr \<leftarrow> assert_opt sc_opt;
+       sc \<leftarrow> get_sched_context sc_ptr;
+       return $ min (r_time (refill_hd sc)) new_thread_time
+     od;
+     set_next_timer_interrupt new_thread_time
   od"
 
 definition
-  check_budget :: "(bool, 'z::state_ext) s_monad"
+  check_budget :: "bool det_ext_monad"
 where
   "check_budget = do
-    cur_exp \<leftarrow> is_cur_thread_expired;
-    cur_sc \<leftarrow> gets_the cur_sc;
-    if cur_exp then do
-      commit_time cur_sc;
-      end_timeslice;
-      return False
-    od
-    else do
-      dom_exp \<leftarrow> select_ext is_cur_domain_expired {True,False};
-      if dom_exp then do
-        commit_time cur_sc;
-        do_extended_op reschedule_required;
+    ct \<leftarrow> gets cur_thread;
+    it \<leftarrow> gets idle_thread;
+    if ct = it then return True else do
+      csc \<leftarrow> gets_the cur_sc;
+      consumed \<leftarrow> gets consumed_time;
+      capacity \<leftarrow> refill_capacity csc consumed;
+      if capacity < MIN_BUDGET then do
+        when (capacity = 0) $ do
+          cs' \<leftarrow> refill_budget_check csc consumed;
+          modify $ consumed_time_update (K cs')
+        od;
+        consumed \<leftarrow> gets consumed_time;
+        when (0 < consumed) $ refill_split_check csc consumed;
+        modify $ consumed_time_update (K 0);
+        st \<leftarrow> get_thread_state ct;
+        when (runnable st) $ do
+          end_timeslice;
+          reschedule_required
+        od;
         return False
       od
-      else return True
+      else do
+        dom_exp \<leftarrow> gets is_cur_domain_expired;
+        if dom_exp then do
+          commit_time;
+          reschedule_required;
+          return False
+        od
+        else return True
+      od
     od
   od"
 
 definition
-  check_budget_restart :: "(bool, 'z::state_ext) s_monad"
+  check_budget_restart :: "bool det_ext_monad"
 where
   "check_budget_restart = do
      cont \<leftarrow> check_budget;
@@ -133,18 +161,6 @@ where
   od"
 
 definition
-  check_reschedule :: "(unit,'z::state_ext) s_monad"
-where
-  "check_reschedule = do
-     expired \<leftarrow> is_cur_thread_expired;
-     if expired then end_timeslice
-     else do
-       dom_exp \<leftarrow> select_ext is_cur_domain_expired {True,False};
-       when dom_exp (do_extended_op reschedule_required)
-     od
-   od"
-
-definition
   switch_sched_context :: "(unit,'z::state_ext) s_monad"
 where
   "switch_sched_context = do
@@ -154,7 +170,8 @@ where
     if cur_sc \<noteq> tcb_sched_context tcb
     then do
       modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>);
-      commit_time (the cur_sc)
+      commit_time;
+      refill_unblock_check (the (tcb_sched_context tcb))
     od
     else
       rollback_time;
@@ -168,11 +185,70 @@ where
     switch_sched_context;
     reprogram \<leftarrow> gets reprogram_timer;
     when reprogram $ do
-      set_next_interrupt;
+      do_extended_op set_next_interrupt;
       modify (\<lambda>s. s\<lparr>reprogram_timer:= False\<rparr>)
     od
   od"
 
+definition
+  fun_of_m :: "('s, 'a) nondet_monad \<Rightarrow> 's \<Rightarrow> 'a option"
+where
+  "fun_of_m m \<equiv> \<lambda>s. if \<exists>x s'. m s = ({(x,s')}, False)
+                    then Some (THE x. \<exists>s'. m s = ({(x,s')}, False))
+                    else None"
+
+definition
+  refill_ready_tcb :: "obj_ref \<Rightarrow> bool det_ext_monad"
+where
+  "refill_ready_tcb t = do
+     sc_opt \<leftarrow> thread_get tcb_sched_context t;
+     sc_ptr \<leftarrow> assert_opt sc_opt;
+     refill_ready sc_ptr
+   od"
+
+definition
+  possible_switch_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
+  "possible_switch_to target \<equiv> do
+     sc_opt \<leftarrow> thread_get tcb_sched_context target;
+     inq \<leftarrow> gets $ in_release_queue target;
+     when (sc_opt \<noteq> None \<and> \<not>inq) $ do
+     cur_dom \<leftarrow> gets cur_domain;
+     target_dom \<leftarrow> ethread_get tcb_domain target;
+     action \<leftarrow> gets scheduler_action;
+     if (target_dom \<noteq> cur_dom) then
+       tcb_sched_action tcb_sched_enqueue target
+     else if (action \<noteq> resume_cur_thread) then
+       do
+         reschedule_required;
+         tcb_sched_action tcb_sched_enqueue target
+       od
+     else
+       set_scheduler_action $ switch_thread target
+   od
+   od"
+
+definition
+  awaken :: "unit det_ext_monad"
+where
+  "awaken \<equiv> do
+    rq \<leftarrow> gets release_queue;
+    s \<leftarrow> get;
+    rq1 \<leftarrow> return $ takeWhile (\<lambda>t. the (fun_of_m (refill_ready_tcb t) s)) rq;
+    rq2 \<leftarrow> return $ drop (length rq1) rq;
+    modify $ release_queue_update (K rq);
+    mapM_x (\<lambda>t. do
+      sc_opt \<leftarrow> thread_get tcb_sched_context t;
+      sc_ptr \<leftarrow> assert_opt sc_opt;
+      refill_unblock_check sc_ptr;
+      ready \<leftarrow> refill_ready sc_ptr;
+      if \<not>ready then
+        tcb_release_enqueue t
+      else do
+        tcb_sched_action tcb_sched_append t;
+        possible_switch_to t
+      od
+    od) rq1
+  od"
 
 class state_ext_sched = state_ext +
   fixes schedule :: "(unit,'a) s_monad"
@@ -215,9 +291,11 @@ definition
 
 definition
   "schedule_det_ext_ext \<equiv> do
+     reprogram \<leftarrow> gets reprogram_timer;
+     when reprogram awaken;
      ct \<leftarrow> gets cur_thread;
-     ct_st \<leftarrow> get_thread_state ct;
-     ct_schedulable \<leftarrow> thread_get schedulable ct;
+     inq \<leftarrow> gets $ in_release_queue ct;
+     ct_schedulable \<leftarrow> is_schedulable ct inq;
      action \<leftarrow> gets scheduler_action;
      (case action
        of resume_cur_thread \<Rightarrow> do
@@ -266,7 +344,7 @@ definition
            od
         od);
      sc_and_timer
-    od"
+   od"
 
 instance ..
 end

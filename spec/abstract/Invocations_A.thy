@@ -67,7 +67,7 @@ datatype sched_context_invocation =
   | InvokeSchedContextUnbind obj_ref
 
 datatype sched_control_invocation =
-    InvokeSchedControlConfigure obj_ref ticks
+    InvokeSchedControlConfigure obj_ref ticks ticks nat
 
 datatype irq_control_invocation =
     IRQControl irq cslot_ptr cslot_ptr

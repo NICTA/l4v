@@ -143,6 +143,7 @@ definition default_etcb :: "etcb" where
   "default_etcb \<equiv> \<lparr>tcb_priority = default_priority, tcb_domain = default_domain\<rparr>"
 
 type_synonym ready_queue = "obj_ref list"
+type_synonym release_queue = "obj_ref list"
 
 text {*
   For each entry in the CDT, we record an ordered list of its children.
@@ -165,6 +166,7 @@ record det_ext =
    domain_time_internal :: time
    ready_queues_internal :: "domain \<Rightarrow> priority \<Rightarrow> ready_queue"
    cdt_list_internal :: cdt_list
+   release_queue_internal :: release_queue
 
 text {*
   The state of the deterministic abstract specification extends the
@@ -229,7 +231,11 @@ abbreviation
 abbreviation
   "cdt_list_update f (s::det_state) \<equiv> trans_state (cdt_list_internal_update f) s"
 
+abbreviation
+  "release_queue (s::det_state) \<equiv> release_queue_internal (exst s)"
 
+abbreviation
+  "release_queue_update f (s::det_state) \<equiv> trans_state (release_queue_internal_update f) s"
 
 type_synonym 'a det_ext_monad = "(det_state,'a) nondet_monad"
 
@@ -253,6 +259,74 @@ class state_ext =
 definition detype_ext :: "obj_ref set \<Rightarrow> 'z::state_ext \<Rightarrow> 'z" where
  "detype_ext S \<equiv> wrap_ext (\<lambda>s. s\<lparr>ekheap_internal := (\<lambda>x. if x \<in> S then None else ekheap_internal s x)\<rparr>)"
 
+
+section \<open>Type Class Instances\<close>
+
+subsection "Deterministic Abstract Specification"
+
+instantiation  det_ext_ext :: (type) state_ext
+begin
+
+definition "unwrap_ext_det_ext_ext == (\<lambda>x. x) :: det_ext state \<Rightarrow> det_ext state"
+
+definition "wrap_ext_det_ext_ext == (\<lambda>x. x) ::
+  (det_ext \<Rightarrow> det_ext) \<Rightarrow> det_ext \<Rightarrow> det_ext"
+
+definition "wrap_ext_op_det_ext_ext == (\<lambda>x. x) ::
+  (det_ext state \<Rightarrow> ((unit \<times> det_ext state) set) \<times> bool)
+  \<Rightarrow> det_ext state  \<Rightarrow> ((unit \<times> det_ext state) set) \<times> bool"
+
+definition "wrap_ext_bool_det_ext_ext == (\<lambda>x. x) ::
+  (det_ext state \<Rightarrow> ((bool \<times> det_ext state) set) \<times> bool)
+  \<Rightarrow> det_ext state \<Rightarrow> ((bool \<times> det_ext state) set) \<times> bool"
+
+definition "select_switch_det_ext_ext == (\<lambda>_. True)  :: det_ext\<Rightarrow> bool"
+
+(* this probably doesn't satisfy the invariants *)
+definition "ext_init_det_ext_ext \<equiv>
+     \<lparr>work_units_completed_internal = 0,
+      scheduler_action_internal = resume_cur_thread,
+      ekheap_internal = Map.empty (idle_thread_ptr \<mapsto> default_etcb),
+      domain_list_internal = [(0,15)],
+      domain_index_internal = 0,
+      cur_domain_internal = 0,
+      domain_time_internal = 15,
+      ready_queues_internal = const (const []),
+      cdt_list_internal = const [],
+      release_queue_internal = []\<rparr> :: det_ext"
+
+instance ..
+
+end
+
+subsection "Nondeterministic Abstract Specification"
+
+text {* \label{s:nondet-spec} 
+The nondeterministic abstract specification instantiates the extended state
+with the unit type -- i.e. it doesn't have any meaningful extended state.
+*}
+
+instantiation unit :: state_ext
+begin
+
+definition "unwrap_ext_unit == (\<lambda>_. undefined) :: unit state \<Rightarrow> det_ext state"
+
+definition "wrap_ext_unit == (\<lambda>f s. ()) :: (det_ext \<Rightarrow> det_ext) \<Rightarrow> unit \<Rightarrow> unit"
+
+
+definition "wrap_ext_op_unit == (\<lambda>m. return ()) ::
+  (det_ext state \<Rightarrow> ((unit \<times> det_ext state) set) \<times> bool) \<Rightarrow> unit state \<Rightarrow> ((unit \<times> unit state) set) \<times> bool"
+
+definition "wrap_ext_bool_unit == (\<lambda>m. select UNIV) ::
+  (det_ext state \<Rightarrow> ((bool \<times> det_ext state ) set) \<times> bool) \<Rightarrow> unit state \<Rightarrow> ((bool \<times> unit state) set) \<times> bool"
+
+definition "select_switch_unit == (\<lambda>s. False) :: unit \<Rightarrow> bool"
+
+definition "ext_init_unit \<equiv> () :: unit"
+
+instance ..
+
+end
 
 
 section \<open>Basic Deterministic Monadic Accessors\<close>
@@ -340,6 +414,22 @@ definition
   "tcb_sched_dequeue thread queue \<equiv> filter (\<lambda>x. x \<noteq> thread) queue"
 
 definition
+  in_release_queue :: "obj_ref \<Rightarrow> det_state \<Rightarrow> bool"
+where
+  "in_release_queue tcb_ptr \<equiv> \<lambda>s. tcb_ptr \<in> set (release_queue s)"
+
+definition
+  tcb_release_dequeue :: "unit det_ext_monad"
+where
+  "tcb_release_dequeue =
+    modify (\<lambda>s. s\<lparr> release_queue := tl (release_queue s), reprogram_timer := True \<rparr>)"
+  
+definition
+  tcb_release_remove :: "obj_ref \<Rightarrow> unit det_ext_monad"
+where
+  "tcb_release_remove tcb_ptr = modify (release_queue_update (tcb_sched_dequeue tcb_ptr))"
+
+definition
   thread_get_det :: "(tcb \<Rightarrow> 'a) \<Rightarrow> obj_ref \<Rightarrow> 'a det_ext_monad"
 where
   "thread_get_det f tptr \<equiv> do
@@ -363,52 +453,52 @@ where
     modify (\<lambda>s. s\<lparr>domain_time := time'\<rparr>)
   od"
 
+definition
+  get_tcb :: "obj_ref \<Rightarrow> 'z::state_ext state \<Rightarrow> tcb option"
+where
+  "get_tcb tcb_ref state \<equiv>
+   case kheap state tcb_ref of
+      None      \<Rightarrow> None
+    | Some kobj \<Rightarrow> (case kobj of
+        TCB tcb \<Rightarrow> Some tcb
+      | _       \<Rightarrow> None)"
+
+
+definition
+  is_schedulable_opt :: "obj_ref \<Rightarrow> bool \<Rightarrow> 'z::state_ext state \<Rightarrow> bool option"
+where 
+  "is_schedulable_opt tcb_ptr in_release_q \<equiv> \<lambda>s.
+    case get_tcb tcb_ptr s of None \<Rightarrow> None | Some tcb \<Rightarrow>
+      Some (runnable (tcb_state tcb) \<and> tcb_sched_context tcb \<noteq> None \<and> \<not>in_release_q)"
+
+definition
+  is_schedulable :: "obj_ref \<Rightarrow> bool \<Rightarrow> ('z::state_ext state, bool) nondet_monad"
+where
+  "is_schedulable tcb_ptr in_release_q \<equiv> gets_the $ is_schedulable_opt tcb_ptr in_release_q"
+
 definition reschedule_required :: "unit det_ext_monad" where
   "reschedule_required \<equiv> do
      action \<leftarrow> gets scheduler_action;
      case action of 
        switch_thread t \<Rightarrow> do
-         sched \<leftarrow> thread_get_det schedulable t;
+         in_release_q \<leftarrow> gets $ in_release_queue t;
+         sched \<leftarrow> is_schedulable t in_release_q;
          when sched $ tcb_sched_action (tcb_sched_enqueue) t
        od
      | _ \<Rightarrow> return ();
      set_scheduler_action choose_new_thread;
-     modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)  (* FIXME: RT - this means we miss timer action on the generic spec *)
+     modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)
    od"
 
 definition
-  possible_switch_to :: "obj_ref \<Rightarrow> bool \<Rightarrow> unit det_ext_monad" where
-  "possible_switch_to target on_same_prio \<equiv> do
-     cur \<leftarrow> gets cur_thread;
-     cur_dom \<leftarrow> gets cur_domain;
-     cur_prio \<leftarrow> ethread_get tcb_priority cur;
-     target_dom \<leftarrow> ethread_get tcb_domain target;
-     target_prio \<leftarrow> ethread_get tcb_priority target;
-     action \<leftarrow> gets scheduler_action;
-     if (target_dom \<noteq> cur_dom) then tcb_sched_action tcb_sched_enqueue target
-     else do
-       if ((target_prio > cur_prio \<or> (target_prio = cur_prio \<and> on_same_prio))
-              \<and> action = resume_cur_thread) then set_scheduler_action $ switch_thread target
-         else tcb_sched_action tcb_sched_enqueue target;
-       case action of switch_thread _ \<Rightarrow> reschedule_required | _ \<Rightarrow> return ()
-     od
-   od"
-
-definition
-  attempt_switch_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "attempt_switch_to target \<equiv> possible_switch_to target True"
-
-definition
-  switch_if_required_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "switch_if_required_to target \<equiv> possible_switch_to target False"
-
-definition
-  schedule_tcb :: "obj_ref \<Rightarrow> tcb \<Rightarrow> unit det_ext_monad"
+  schedule_tcb :: "obj_ref \<Rightarrow> unit det_ext_monad"
 where
-  "schedule_tcb tcb_ptr tcb \<equiv> do
+  "schedule_tcb tcb_ptr \<equiv> do
     cur \<leftarrow> gets cur_thread;
     sched_act \<leftarrow> gets scheduler_action;
-    when (tcb_ptr = cur \<and> sched_act = resume_cur_thread \<and> \<not>schedulable tcb) $ reschedule_required
+    in_release_q \<leftarrow> gets $ in_release_queue tcb_ptr;
+    schedulable \<leftarrow> is_schedulable tcb_ptr in_release_q;
+    when (tcb_ptr = cur \<and> sched_act = resume_cur_thread \<and> \<not>schedulable) $ reschedule_required
   od"
 
 definition "\<mu>s_to_ms = 1000"
@@ -609,88 +699,6 @@ definition work_units_limit_reached where
      return (work_units_limit \<le> work_units)
    od"
 
-
-(* 
-void
-awaken(void)   FIXME: RT - currently unused
-{
-    while (NODE_STATE(ksReleaseHead) != NULL &&
-           isReady(NODE_STATE(ksReleaseHead)->tcbSchedContext)) {
-           tcb_t *awakened = tcbReleaseDequeue();
-           SMP_COND_STATEMENT(assert(awakened->tcbAffinity == getCurrentCPUIndex()));
-           recharge(awakened->tcbSchedContext);
-           tcbSchedAppend(awakened);
-           switchIfRequiredTo(awakened);
-    }
-}
-*)
-
-
-section \<open>Type Class Instances\<close>
-
-instantiation  det_ext_ext :: (type) state_ext
-begin
-
-definition "unwrap_ext_det_ext_ext == (\<lambda>x. x) :: det_ext state \<Rightarrow> det_ext state"
-
-definition "wrap_ext_det_ext_ext == (\<lambda>x. x) ::
-  (det_ext \<Rightarrow> det_ext) \<Rightarrow> det_ext \<Rightarrow> det_ext"
-
-definition "wrap_ext_op_det_ext_ext == (\<lambda>x. x) ::
-  (det_ext state \<Rightarrow> ((unit \<times> det_ext state) set) \<times> bool)
-  \<Rightarrow> det_ext state  \<Rightarrow> ((unit \<times> det_ext state) set) \<times> bool"
-
-definition "wrap_ext_bool_det_ext_ext == (\<lambda>x. x) ::
-  (det_ext state \<Rightarrow> ((bool \<times> det_ext state) set) \<times> bool)
-  \<Rightarrow> det_ext state \<Rightarrow> ((bool \<times> det_ext state) set) \<times> bool"
-
-definition "select_switch_det_ext_ext == (\<lambda>_. True)  :: det_ext\<Rightarrow> bool"
-
-(* this probably doesn't satisfy the invariants *)
-definition "ext_init_det_ext_ext \<equiv>
-     \<lparr>work_units_completed_internal = 0,
-      scheduler_action_internal = resume_cur_thread,
-      ekheap_internal = Map.empty (idle_thread_ptr \<mapsto> default_etcb),
-      domain_list_internal = [(0,15)],
-      domain_index_internal = 0,
-      cur_domain_internal = 0,
-      domain_time_internal = 15,
-      ready_queues_internal = const (const []),
-      cdt_list_internal = const []\<rparr> :: det_ext"
-
-instance ..
-
-end
-
-section "Nondeterministic Abstract Specification"
-
-text {* \label{s:nondet-spec}
-The nondeterministic abstract specification instantiates the extended state
-with the unit type -- i.e. it doesn't have any meaningful extended state.
-*}
-
-instantiation unit :: state_ext
-begin
-
-
-definition "unwrap_ext_unit == (\<lambda>_. undefined) :: unit state \<Rightarrow> det_ext state"
-
-definition "wrap_ext_unit == (\<lambda>f s. ()) :: (det_ext \<Rightarrow> det_ext) \<Rightarrow> unit \<Rightarrow> unit"
-
-
-definition "wrap_ext_op_unit == (\<lambda>m. return ()) ::
-  (det_ext state \<Rightarrow> ((unit \<times> det_ext state) set) \<times> bool) \<Rightarrow> unit state \<Rightarrow> ((unit \<times> unit state) set) \<times> bool"
-
-definition "wrap_ext_bool_unit == (\<lambda>m. select UNIV) ::
-  (det_ext state \<Rightarrow> ((bool \<times> det_ext state ) set) \<times> bool) \<Rightarrow> unit state \<Rightarrow> ((bool \<times> unit state) set) \<times> bool"
-
-definition "select_switch_unit == (\<lambda>s. False) :: unit \<Rightarrow> bool"
-
-definition "ext_init_unit \<equiv> () :: unit"
-
-instance ..
-
-end
 
 text {* Run an extended operation over the extended state without
   modifying it and use the return value to choose between two computations

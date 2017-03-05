@@ -53,7 +53,7 @@ definition
       cancel_ipc thread;
       setup_reply_master thread;
       set_thread_state thread Restart;
-      when (sc_opt \<noteq> None) $ sched_context_resume (the sc_opt)
+      when (sc_opt \<noteq> None) $ do_extended_op (sched_context_resume sc_opt)
     od
   od"
 

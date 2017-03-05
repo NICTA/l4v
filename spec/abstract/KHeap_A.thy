@@ -45,16 +45,6 @@ where
 section "TCBs"
 
 definition
-  get_tcb :: "obj_ref \<Rightarrow> 'z::state_ext state \<Rightarrow> tcb option"
-where
-  "get_tcb tcb_ref state \<equiv>
-   case kheap state tcb_ref of
-      None      \<Rightarrow> None
-    | Some kobj \<Rightarrow> (case kobj of
-        TCB tcb \<Rightarrow> Some tcb
-      | _       \<Rightarrow> None)"
-
-definition
   thread_get :: "(tcb \<Rightarrow> 'a) \<Rightarrow> obj_ref \<Rightarrow> ('a,'z::state_ext) s_monad"
 where
   "thread_get f tptr \<equiv> do
@@ -106,7 +96,8 @@ where
 
 definition set_thread_state_ext :: "obj_ref \<Rightarrow> unit det_ext_monad" where
   "set_thread_state_ext t \<equiv> do
-     sched \<leftarrow> thread_get schedulable t;
+     inq \<leftarrow> gets $ in_release_queue t;
+     sched \<leftarrow> is_schedulable t inq;
      cur \<leftarrow> gets cur_thread;
      action \<leftarrow> gets scheduler_action;
      when (\<not>sched \<and> cur = t \<and> action = resume_cur_thread) (set_scheduler_action choose_new_thread)

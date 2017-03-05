@@ -336,7 +336,7 @@ definition
 section {* Top-level event handling  *}
 
 fun
-  handle_event :: "event \<Rightarrow> (unit,'z::state_ext) p_monad"
+  handle_event :: "event \<Rightarrow> (unit, det_ext) p_monad"
 where
   "handle_event (SyscallEvent call) = doE
     liftE $ update_time_stamp;
@@ -405,15 +405,14 @@ text {*
 *}
 
 definition
-  call_kernel :: "event \<Rightarrow> (unit,'z::state_ext_sched) s_monad" where
+  call_kernel :: "event \<Rightarrow> (unit, det_ext) s_monad" where
   "call_kernel ev \<equiv> do
        handle_event ev <handle>
            (\<lambda>_. without_preemption $ do
                   irq \<leftarrow> do_machine_op getActiveIRQ;
                   when (irq \<noteq> None) $ do
-                    sc \<leftarrow> gets_the cur_sc;
-                    commit_time sc;
-                    check_reschedule;
+                    commit \<leftarrow> check_budget;
+                    when commit commit_time;
                     handle_interrupt (the irq)
                   od
                 od);

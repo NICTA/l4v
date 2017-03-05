@@ -62,43 +62,18 @@ where
      cap_delete_one irq_slot
    od)"
 
-text {* Handle an interrupt occurence. Timing and scheduling details are not
+text {* Handle an interrupt occurrence. Timing and scheduling details are not
 included in this model, so no scheduling action needs to be taken on timer
 ticks. If the IRQ has a valid Notification cap loaded a message is
 delivered. *}
 
-definition timer_tick :: "unit det_ext_monad" where
-  "timer_tick \<equiv> do
-     cur \<leftarrow> gets cur_thread;
-     state \<leftarrow> get_thread_state cur;
-     case state of Running \<Rightarrow> do
-       sc_ptr \<leftarrow> thread_get (the o tcb_sched_context) cur;
-       sc \<leftarrow> get_sched_context sc_ptr;
-       ts \<leftarrow> return $ sc_remaining sc;
-       let ts' = ts - 1 in
-       if (ts' > 0) then
-         set_sched_context sc_ptr (sc\<lparr> sc_remaining := ts' \<rparr>)
-       else do
-         recharge sc_ptr;
-         tcb_sched_action tcb_sched_append cur;
-         reschedule_required
-       od
-     od
-     | _ \<Rightarrow> return ();
-     when (num_domains > 1) (do
-       dec_domain_time;
-       dom_time \<leftarrow> gets domain_time;
-       when (dom_time = 0) reschedule_required
-     od)
-   od"
-
 definition
-  handle_interrupt :: "irq \<Rightarrow> (unit,'z::state_ext) s_monad" where
+  handle_interrupt :: "irq \<Rightarrow> unit det_ext_monad" where
  "handle_interrupt irq \<equiv> 
    if (irq > maxIRQ) then do_machine_op $ do
     maskInterrupt True irq;
     ackInterrupt irq
-    od
+  od
   else do
    st \<leftarrow> get_irq_state irq;
    case st of
@@ -109,21 +84,19 @@ definition
        when (is_ntfn_cap cap \<and> AllowSend \<in> cap_rights cap)
          $ send_signal (obj_ref_of cap) (cap_ep_badge cap); 
        do_machine_op $ maskInterrupt True irq;
-       cur_sc \<leftarrow> gets_the cur_sc;
-       commit_time cur_sc;
-       check_reschedule
+       commit \<leftarrow> check_budget;
+       when commit commit_time
      od
    | IRQTimer \<Rightarrow> do
        update_time_stamp;
        do_machine_op ackDeadlineIRQ;
-       cur_sc \<leftarrow> gets_the cur_sc;
-       commit_time cur_sc;
-       check_budget;
-       return ()
+       commit \<leftarrow> check_budget;
+       when commit commit_time;
+       modify $ reprogram_timer_update (K True)
      od
    | IRQInactive \<Rightarrow> fail (* not meant to be able to get IRQs from inactive lines *)
    | IRQReserved \<Rightarrow> handle_reserved_irq irq;
    do_machine_op $ ackInterrupt irq
-   od"
+ od"
 
 end

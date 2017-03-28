@@ -158,7 +158,7 @@ preemptable.
 *}
 
 fun
-  perform_invocation :: "bool \<Rightarrow> bool \<Rightarrow> invocation \<Rightarrow> (data list,'z::state_ext) p_monad"
+  perform_invocation :: "bool \<Rightarrow> bool \<Rightarrow> invocation \<Rightarrow> (data list, det_ext) p_monad"
 where
   "perform_invocation block call (InvokeUntyped i) =
     doE
@@ -225,7 +225,7 @@ where
 
 
 definition
-  handle_invocation :: "bool \<Rightarrow> bool \<Rightarrow> (unit,'z::state_ext) p_monad"
+  handle_invocation :: "bool \<Rightarrow> bool \<Rightarrow> (unit, det_ext) p_monad"
 where
   "handle_invocation calling blocking \<equiv> doE
     thread \<leftarrow> liftE $ gets cur_thread;
@@ -274,11 +274,11 @@ definition
    od"
 
 definition
-  handle_send :: "bool \<Rightarrow> (unit,'z::state_ext) p_monad" where
+  handle_send :: "bool \<Rightarrow> (unit, det_ext) p_monad" where
   "handle_send bl \<equiv> handle_invocation False bl"
 
 definition
-  handle_call :: "(unit,'z::state_ext) p_monad" where
+  handle_call :: "(unit, det_ext) p_monad" where
  "handle_call \<equiv> handle_invocation True True"
 
 definition
@@ -286,7 +286,7 @@ definition
  "delete_caller_cap t \<equiv> cap_delete_one (t, tcb_cnode_index 3)"
 
 definition
-  handle_recv :: "bool \<Rightarrow> (unit,'z::state_ext) s_monad" where
+  handle_recv :: "bool \<Rightarrow> (unit, det_ext) s_monad" where
   "handle_recv is_blocking \<equiv> do
      thread \<leftarrow> gets cur_thread;
 

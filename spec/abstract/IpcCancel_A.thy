@@ -34,6 +34,82 @@ where
 | "update_ep_queue (SendEP q) q' = SendEP q'"
 
 
+text {* The endpoint a TCB is blocked on *}
+definition
+  ep_blocked :: "thread_state \<Rightarrow> obj_ref option"
+where
+  "ep_blocked ts \<equiv> case ts of
+     BlockedOnReceive r \<Rightarrow> Some r
+   | BlockedOnSend r _ \<Rightarrow> Some r
+   | _ \<Rightarrow> None"
+
+text {* The notification a TCB is blocked on *}
+definition
+  ntfn_blocked :: "thread_state \<Rightarrow> obj_ref option"
+where
+  "ntfn_blocked ts \<equiv> case ts of
+    BlockedOnNotification r \<Rightarrow> Some r
+  | _ \<Rightarrow> None"
+
+text {*
+  Sort a list of TCB refs by priority, otherwise keeping order stable.
+  In the implementation, there will only ever be one element out of order
+  or be inserted. Here, we just require a sorted result.
+*}
+definition
+  sort_queue :: "obj_ref list \<Rightarrow> obj_ref list det_ext_monad"
+where
+  "sort_queue qs = do
+     prios \<leftarrow> mapM (ethread_get tcb_priority) qs;
+     return $ map snd $ sort_key fst (zip prios qs)
+   od"
+
+text {* Bring endpoint queue back into priority order *}
+definition
+  reorder_ep :: "obj_ref \<Rightarrow> unit det_ext_monad"
+where
+  "reorder_ep ep_ptr = do
+    ep \<leftarrow> get_endpoint ep_ptr;
+    qs \<leftarrow> get_ep_queue ep;
+    qs' \<leftarrow> sort_queue qs;
+    set_endpoint ep_ptr (update_ep_queue ep qs')
+  od"
+
+text {* Extract list of TCBs waiting on this notification *}
+definition
+  ntfn_queue :: "notification \<Rightarrow> obj_ref list option"
+where
+  "ntfn_queue ntfn \<equiv> case ntfn_obj ntfn of
+     WaitingNtfn qs \<Rightarrow> Some qs
+   | _ \<Rightarrow> None"
+
+text {* Bring notification queue back into priority order *}
+definition
+  reorder_ntfn :: "obj_ref \<Rightarrow> unit det_ext_monad"
+where
+  "reorder_ntfn ntfn_ptr = do
+    ntfn \<leftarrow> get_notification ntfn_ptr;
+    qs \<leftarrow> assert_opt $ ntfn_queue ntfn;
+    qs' \<leftarrow> sort_queue qs;
+    set_notification ntfn_ptr (ntfn \<lparr> ntfn_obj := WaitingNtfn qs' \<rparr>)
+  od"
+
+text {* Set new priority for a TCB *}
+definition
+  set_priority :: "obj_ref \<Rightarrow> priority \<Rightarrow> unit det_ext_monad" where
+  "set_priority tptr prio \<equiv> do
+     tcb_sched_action tcb_sched_dequeue tptr;
+     thread_set_priority tptr prio;
+     ts \<leftarrow> get_thread_state tptr;
+     when (runnable ts) $ do
+       tcb_sched_action tcb_sched_enqueue tptr;
+       cur \<leftarrow> gets cur_thread;
+       when (tptr = cur) reschedule_required
+     od;
+     maybeM reorder_ep (ep_blocked ts);
+     maybeM reorder_ntfn (ntfn_blocked ts)
+   od"
+
 text {* Cancel all message operations on threads currently queued within this
 synchronous message endpoint. Threads so queued are placed in the Restart state.
 Once scheduled they will reattempt the operation that previously caused them

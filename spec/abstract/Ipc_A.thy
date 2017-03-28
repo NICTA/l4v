@@ -301,7 +301,7 @@ and the thread is willing to block waiting to send then put it in the endpoint
 sending queue. *}
 definition
   send_ipc :: "bool \<Rightarrow> bool \<Rightarrow> badge \<Rightarrow> bool
-                \<Rightarrow> obj_ref \<Rightarrow> obj_ref \<Rightarrow> (unit,'z::state_ext) s_monad"
+                \<Rightarrow> obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
 where
   "send_ipc block call badge can_grant thread epptr \<equiv> do
      ep \<leftarrow> get_endpoint epptr;
@@ -318,7 +318,8 @@ where
                                    \<lparr> sender_badge = badge,
                                      sender_can_grant = can_grant,
                                      sender_is_call = call\<rparr>);
-               set_endpoint epptr $ SendEP (queue @ [thread])
+               qs' \<leftarrow> sort_queue (queue @ [thread]);
+               set_endpoint epptr $ SendEP qs'
              od
        | (IdleEP, False) \<Rightarrow> return ()
        | (SendEP queue, False) \<Rightarrow> return ()
@@ -374,7 +375,7 @@ where
   "do_nbrecv_failed_transfer thread = do as_user thread $ set_register badge_register 0; return () od"
 
 definition
-  receive_ipc :: "obj_ref \<Rightarrow> cap \<Rightarrow> bool \<Rightarrow> (unit,'z::state_ext) s_monad"
+  receive_ipc :: "obj_ref \<Rightarrow> cap \<Rightarrow> bool \<Rightarrow> unit det_ext_monad"
 where
   "receive_ipc thread cap is_blocking \<equiv> do
      (epptr,rights) \<leftarrow> (case cap
@@ -397,7 +398,8 @@ where
             | RecvEP queue \<Rightarrow> (case is_blocking of
               True \<Rightarrow> do
                   set_thread_state thread (BlockedOnReceive epptr);
-                  set_endpoint epptr (RecvEP (queue @ [thread]))
+                  qs' \<leftarrow> sort_queue (queue @ [thread]);
+                  set_endpoint epptr (RecvEP qs')
                 od
               | False \<Rightarrow> do_nbrecv_failed_transfer thread)
           | SendEP q \<Rightarrow> do
@@ -487,7 +489,7 @@ text {* Handle a receive operation performed on a notification object by a
 thread. If a message is waiting then perform the transfer, otherwise put the
 thread in the endpoint's receiving queue. *}
 definition
-  receive_signal :: "obj_ref \<Rightarrow> cap \<Rightarrow> bool \<Rightarrow> (unit,'z::state_ext) s_monad"
+  receive_signal :: "obj_ref \<Rightarrow> cap \<Rightarrow> bool \<Rightarrow> unit det_ext_monad"
 where
    "receive_signal thread cap is_blocking \<equiv> do
     ntfnptr \<leftarrow>
@@ -507,7 +509,8 @@ where
                    (case is_blocking of
                      True \<Rightarrow> do
                           set_thread_state thread (BlockedOnNotification ntfnptr);
-                          set_notification ntfnptr $ ntfn_set_obj ntfn $ WaitingNtfn (queue @ [thread])
+                          qs' \<leftarrow> sort_queue (queue @ [thread]);
+                          set_notification ntfnptr $ ntfn_set_obj ntfn $ WaitingNtfn qs'
                         od
                    | False \<Rightarrow> do_nbrecv_failed_transfer thread)
        | ActiveNtfn badge \<Rightarrow> do
@@ -521,7 +524,7 @@ section {* Sending Fault Messages *}
 text {* When a thread encounters a fault, retreive its fault handler capability
 and send a fault message. *}
 definition
-  send_fault_ipc :: "obj_ref \<Rightarrow> fault \<Rightarrow> (unit,'z::state_ext) f_monad"
+  send_fault_ipc :: "obj_ref \<Rightarrow> fault \<Rightarrow> (unit, det_ext) f_monad"
 where
   "send_fault_ipc tptr fault \<equiv> doE
      handler_cptr \<leftarrow> liftE $ thread_get tcb_fault_handler tptr;
@@ -550,7 +553,7 @@ where
 
 text {* Handle a thread fault by sending a fault message if possible. *}
 definition
-  handle_fault :: "obj_ref \<Rightarrow> fault \<Rightarrow> (unit,'z::state_ext) s_monad"
+  handle_fault :: "obj_ref \<Rightarrow> fault \<Rightarrow> unit det_ext_monad"
 where
   "handle_fault thread ex \<equiv> do
      _ \<leftarrow> gets_the $ get_tcb thread;

@@ -113,21 +113,11 @@ where
    od"
 
 definition
-  set_priority :: "obj_ref \<Rightarrow> priority \<Rightarrow> unit det_ext_monad" where
-  "set_priority tptr prio \<equiv> do
-     tcb_sched_action tcb_sched_dequeue tptr;
-     thread_set_priority tptr prio;
-     ts \<leftarrow> get_thread_state tptr;
-     when (runnable ts) $ tcb_sched_action tcb_sched_enqueue tptr;
-     cur \<leftarrow> gets cur_thread;
-     when (tptr = cur) reschedule_required
-   od"
-
-definition
   set_mcpriority :: "obj_ref \<Rightarrow> priority \<Rightarrow> (unit, 'z::state_ext) s_monad"  where
   "set_mcpriority ref mcp \<equiv> thread_set (\<lambda>tcb. tcb\<lparr>tcb_mcpriority:=mcp\<rparr>) ref "
 
-section {* Synchronous and Asyncronous Endpoints *}
+
+section {* Endpoints and Notifications *}
 
 definition
   get_endpoint :: "obj_ref \<Rightarrow> (endpoint,'z::state_ext) s_monad"

@@ -168,6 +168,16 @@ definition
 defs initContext_def:
 "initContext\<equiv> [(CPSR,0x150)]"
 
+(* FIXME: these 3 are manually added; generate from Haskell instead *)
+definition
+"replyRegister = R6"
+
+definition
+"syscallNoRegister = R7"
+
+definition
+"nbsendRecvDest = R8"
+
 
 section "Machine State"
 

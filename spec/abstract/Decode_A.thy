@@ -55,7 +55,7 @@ definition
   "data \<Rightarrow> data list \<Rightarrow> cap \<Rightarrow> cap list \<Rightarrow> (cnode_invocation,'z::state_ext) se_monad"
 where
 "decode_cnode_invocation label args cap excaps \<equiv> doE
-  unlessE (invocation_type label \<in> set [CNodeRevoke .e. CNodeSaveCaller]) $
+  unlessE (invocation_type label \<in> set [CNodeRevoke .e. CNodeRotate]) $
     throwError IllegalOperation;
   whenE (length args < 2) (throwError TruncatedMessage);
   index \<leftarrow> returnOk $ data_to_cptr $ args ! 0;
@@ -96,10 +96,6 @@ where
   odE
   else if invocation_type label = CNodeRevoke then returnOk $ RevokeCall dest_slot
   else if invocation_type label = CNodeDelete then returnOk $ DeleteCall dest_slot
-  else if invocation_type label = CNodeSaveCaller then doE
-    ensure_empty dest_slot;
-    returnOk $ SaveCall dest_slot
-  odE
   else if invocation_type label = CNodeCancelBadgedSends then doE
     cap \<leftarrow> liftE $ get_cap dest_slot;
     unlessE (has_cancel_send_rights cap) $ throwError IllegalOperation;
@@ -147,13 +143,7 @@ odE"
 
 section "Threads"
 
-text {* The definitions in this section decode invocations 
-on TCBs.
-*}
-
-text {* This definition checks whether the first argument is 
-between the second and third. 
-*}
+text {* The definitions in this section decode invocations on TCBs. *}
 
 definition
   decode_read_registers :: "data list \<Rightarrow> cap \<Rightarrow> (tcb_invocation,'z::state_ext) se_monad"
@@ -663,7 +653,7 @@ invocation is allowed.
 
 definition
   decode_invocation :: 
-  "data \<Rightarrow> data list \<Rightarrow> cap_ref \<Rightarrow> cslot_ptr \<Rightarrow> cap \<Rightarrow> (cap \<times> cslot_ptr) list \<Rightarrow> (invocation,'z::state_ext) se_monad"
+  "data \<Rightarrow> data list \<Rightarrow> cap_ref \<Rightarrow> cslot_ptr \<Rightarrow> cap \<Rightarrow> (cap \<times> cslot_ptr) list \<Rightarrow> (invocation, det_ext) se_monad"
 where
   "decode_invocation label args cap_index slot cap excaps \<equiv> 
   case cap of
@@ -675,8 +665,8 @@ where
       if AllowSend \<in> rights then
         returnOk $ InvokeNotification ptr badge
       else throwError $ InvalidCapability 0
-  | ReplyCap thread False \<Rightarrow>
-      returnOk $ InvokeReply thread slot
+  | ReplyCap reply \<Rightarrow>
+      returnOk $ InvokeReply reply
   | IRQControlCap \<Rightarrow>
       liftME InvokeIRQControl
         $ decode_irq_control_invocation label args slot (map fst excaps)

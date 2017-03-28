@@ -29,30 +29,18 @@ end
 
 section "Activating Threads"
 
-text {* Threads that are active always have a master Reply capability to
-themselves stored in their reply slot. This is so that a derived Reply
-capability can be generated immediately if they wish to issue one. This function
-sets up a new master Reply capability if one does not exist. *}
-definition
-  "setup_reply_master thread \<equiv> do
-     old_cap <- get_cap (thread, tcb_cnode_index 2);
-     when (old_cap = NullCap) $ do
-         set_original (thread, tcb_cnode_index 2) True;
-         set_cap (ReplyCap thread True) (thread, tcb_cnode_index 2)
-     od
-  od"
-
 text {* Reactivate a thread if it is not already running. *}
 definition
-  restart :: "obj_ref \<Rightarrow> (unit,'z::state_ext) s_monad" where
+  restart :: "obj_ref \<Rightarrow> unit det_ext_monad" where
  "restart thread \<equiv> do
     state \<leftarrow> get_thread_state thread;
     sc_opt \<leftarrow> thread_get tcb_sched_context thread;
     when (\<not> runnable state \<and> \<not> idle state) $ do
       cancel_ipc thread;
-      setup_reply_master thread;
       set_thread_state thread Restart;
-      when (sc_opt \<noteq> None) $ do_extended_op (sched_context_resume sc_opt)
+      sc_ptr \<leftarrow> assert_opt sc_opt;
+      do_extended_op (sched_context_resume (Some sc_ptr));
+      switch_if_required_to thread
     od
   od"
 
@@ -149,7 +137,7 @@ request to yield its timeslice to another, to suspend or resume another, to
 reconfigure another thread, or to copy register sets into, out of or between
 other threads. *}
 fun
-  invoke_tcb :: "tcb_invocation \<Rightarrow> (data list,'z::state_ext) p_monad"
+  invoke_tcb :: "tcb_invocation \<Rightarrow> (data list,det_ext) p_monad"
 where
   "invoke_tcb (Suspend thread) = liftE (do suspend thread; return [] od)" 
 | "invoke_tcb (Resume thread) = liftE (do restart thread; return [] od)"
@@ -186,14 +174,14 @@ where
     odE);
     (case buffer of None \<Rightarrow> returnOk ()
      | Some (ptr, frame) \<Rightarrow> doE
-      cap_delete (target, tcb_cnode_index 4);
+      cap_delete (target, tcb_cnode_index 2);
       liftE $ thread_set (\<lambda>t. t \<lparr> tcb_ipc_buffer := ptr \<rparr>) target;
       liftE $ arch_tcb_set_ipc_buffer target ptr;
       liftE $ case frame of None \<Rightarrow> return ()
        | Some (new_cap, src_slot) \<Rightarrow>
             check_cap_at new_cap src_slot
           $ check_cap_at (ThreadCap target) slot
-          $ cap_insert new_cap src_slot (target, tcb_cnode_index 4)
+          $ cap_insert new_cap src_slot (target, tcb_cnode_index 2)
     odE);
     returnOk []
   odE"

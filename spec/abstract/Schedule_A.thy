@@ -87,8 +87,7 @@ where
        do_extended_op $ tcb_sched_action tcb_sched_append cur
      od
      else
-       postpone sc_ptr;
-     do_extended_op reschedule_required
+       postpone sc_ptr
   od"
 
 definition
@@ -205,36 +204,6 @@ where
      sc_ptr \<leftarrow> assert_opt sc_opt;
      refill_ready sc_ptr
    od"
-
-definition
-  possible_switch_to :: "obj_ref \<Rightarrow> bool \<Rightarrow> unit det_ext_monad" where
-  "possible_switch_to target on_same_prio \<equiv> do
-     sc_opt \<leftarrow> thread_get tcb_sched_context target;
-     inq \<leftarrow> gets $ in_release_queue target;
-     when (sc_opt \<noteq> None \<and> \<not>inq) $ do
-       cur \<leftarrow> gets cur_thread;
-       cur_dom \<leftarrow> gets cur_domain;
-       cur_prio \<leftarrow> ethread_get tcb_priority cur;
-       target_dom \<leftarrow> ethread_get tcb_domain target;
-       target_prio \<leftarrow> ethread_get tcb_priority target;
-       action \<leftarrow> gets scheduler_action;
-       if (target_dom \<noteq> cur_dom) then tcb_sched_action tcb_sched_enqueue target
-       else do
-         if (target_prio > cur_prio \<or> (target_prio = cur_prio \<and> on_same_prio))
-                \<and> action = resume_cur_thread then set_scheduler_action $ switch_thread target
-           else tcb_sched_action tcb_sched_enqueue target;
-         case action of switch_thread _ \<Rightarrow> reschedule_required | _ \<Rightarrow> return ()
-       od
-     od
-   od"
-
-definition
-  attempt_switch_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "attempt_switch_to target \<equiv> possible_switch_to target True"
-
-definition
-  switch_if_required_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "switch_if_required_to target \<equiv> possible_switch_to target False"
 
 definition
   awaken :: "unit det_ext_monad"

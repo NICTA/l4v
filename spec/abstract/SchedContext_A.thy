@@ -11,7 +11,7 @@
 chapter "Scheduling Contexts and Control"
 
 theory SchedContext_A
-imports KHeap_A Invocations_A
+imports IpcCancel_A Invocations_A
 begin
 
 text \<open> This theory contains operations on scheduling contexts and scheduling control. \<close>
@@ -315,40 +315,16 @@ where
 
 text \<open>  Bind a TCB to a scheduling context. \<close>
 definition
-  sched_context_bind :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+  sched_context_bind :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
 where
   "sched_context_bind sc_ptr tcb_ptr = do
     sc \<leftarrow> get_sched_context sc_ptr;
     set_sched_context sc_ptr (sc\<lparr>sc_tcb := Some tcb_ptr\<rparr>);
     thread_set (\<lambda>tcb. tcb\<lparr>tcb_sched_context := Some sc_ptr\<rparr>) tcb_ptr; 
-    sched_context_resume (Some sc_ptr)
-  od"
-
-
-text \<open>
-  Unbind a TCB from its scheduling context. If the TCB is runnable,
-  remove from the scheduler.
-\<close>
-definition
-  sched_context_unbind :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
-where
-  "sched_context_unbind sc_ptr = do
-     sc \<leftarrow> get_sched_context sc_ptr;
-     tptr \<leftarrow> assert_opt $ sc_tcb sc;
-     do_extended_op $ tcb_sched_action tcb_sched_dequeue tptr;
-     do_extended_op $ tcb_release_remove tptr;
-     thread_set (\<lambda>tcb. tcb \<lparr> tcb_sched_context := None \<rparr>) tptr;
-     cur \<leftarrow> gets $ cur_thread;
-     when (tptr = cur) $ do_extended_op reschedule_required
-  od"
-
-text \<open> Unbind TCB, if there is one bound. \<close>
-definition
-  sched_context_unbind_all_tcbs :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
-where
-  "sched_context_unbind_all_tcbs sc_ptr = do
-    sc \<leftarrow> get_sched_context sc_ptr;
-    when (sc_tcb sc \<noteq> None) $ sched_context_unbind sc_ptr
+    sched_context_resume (Some sc_ptr);
+    inq \<leftarrow> gets $ in_release_queue tcb_ptr;
+    sched \<leftarrow> is_schedulable tcb_ptr inq;
+    when sched $ switch_if_required_to tcb_ptr
   od"
 
 text \<open> Unbind TCB from its scheduling context, if there is one bound. \<close>
@@ -360,10 +336,9 @@ where
     when (sc_ptr_opt \<noteq> None) $ sched_context_unbind (the sc_ptr_opt)
   od"
 
-
 text \<open> User-level scheduling context invocations. \<close>
 definition
-  invoke_sched_context :: "sched_context_invocation \<Rightarrow> (unit, 'z::state_ext) se_monad"
+  invoke_sched_context :: "sched_context_invocation \<Rightarrow> (unit, det_ext) se_monad"
 where
   "invoke_sched_context iv \<equiv> liftE $ case iv of
     InvokeSchedContextBind sc_ptr tcb_ptr \<Rightarrow> sched_context_bind sc_ptr tcb_ptr 
@@ -373,7 +348,7 @@ where
 
 text \<open> The Scheduling Control invocation configures the budget of a scheduling context. \<close>
 definition
-  invoke_sched_control_configure :: "sched_control_invocation \<Rightarrow> (unit, 'z::state_ext) se_monad"
+  invoke_sched_control_configure :: "sched_control_invocation \<Rightarrow> (unit, det_ext) se_monad"
 where
   "invoke_sched_control_configure iv \<equiv>
   case iv of InvokeSchedControlConfigure sc_ptr budget period mrefills \<Rightarrow> liftE $ do
@@ -385,7 +360,8 @@ where
       st \<leftarrow> get_thread_state tcb_ptr;
       if 0 < sc_refill_max sc \<and> runnable st then do
         refill_update sc_ptr period budget mrefills;
-        sched_context_resume (Some sc_ptr)
+        sched_context_resume (Some sc_ptr);
+        switch_if_required_to tcb_ptr
       od
       else
         refill_new sc_ptr mrefills budget period

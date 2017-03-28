@@ -45,6 +45,7 @@ where
 | "default_cap EndpointObject oref s _ = EndpointCap oref 0 UNIV"
 | "default_cap NotificationObject oref s _ = NotificationCap oref 0 {AllowRead, AllowWrite}"
 | "default_cap SchedContextObject oref s _ = SchedContextCap oref"
+| "default_cap ReplyObject oref _ _ = ReplyCap oref"
 | "default_cap (ArchObject aobj) oref s dev = ArchObjectCap (arch_default_cap aobj oref s dev)"
 
 text {* Create and install a new capability to a newly created object. *}
@@ -79,6 +80,7 @@ definition
          | EndpointObject \<Rightarrow> Endpoint default_ep
          | NotificationObject \<Rightarrow> Notification default_notification
          | SchedContextObject \<Rightarrow> SchedContext default_sched_context
+         | ReplyObject \<Rightarrow> Reply default_reply
          | ArchObject aobj \<Rightarrow> ArchObj (default_arch_object aobj dev n)"
 
 text {* The size in bits of the objects that will be created when a given type
@@ -92,6 +94,7 @@ definition
          | EndpointObject \<Rightarrow> obj_bits (Endpoint undefined)
          | NotificationObject \<Rightarrow> obj_bits (Notification undefined)
          | SchedContextObject \<Rightarrow> obj_bits (SchedContext undefined)
+         | ReplyObject \<Rightarrow> obj_bits (Reply default_reply)
          | ArchObject aobj \<Rightarrow> obj_bits $ ArchObj $ default_arch_object aobj False obj_size_bits"
 
 section "Main Retype Implementation"

@@ -25,12 +25,15 @@ text {*
 datatype syscall =
     SysCall
   | SysReplyRecv
+  | SysNBSendRecv
+  | SysNBSendWait
   | SysSend
   | SysNBSend
   | SysRecv
-  | SysReply
-  | SysYield
   | SysNBRecv
+  | SysWait
+  | SysNBWait
+  | SysYield
 
 datatype event =
     SyscallEvent syscall

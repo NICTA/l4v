@@ -488,6 +488,12 @@ definition
 where
   "liftME f m \<equiv> doE x \<leftarrow> m; returnOk (f x) odE"
 
+text {* Execute @{term f} for @{term "Some x"}, otherwise do nothing. *}
+definition
+  maybeM :: "('a \<Rightarrow> ('s, unit) nondet_monad) \<Rightarrow> 'a option \<Rightarrow> ('s, unit) nondet_monad"
+where
+  "maybeM f y \<equiv> case y of Some x \<Rightarrow> f x | None \<Rightarrow> return ()"
+
 text {* 
   Run a sequence of monads from left to right, ignoring return values. *}
 definition

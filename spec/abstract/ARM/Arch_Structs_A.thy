@@ -131,7 +131,7 @@ definition endpoint_bits :: nat where
   "endpoint_bits \<equiv> 4"
 
 definition ntfn_bits :: nat where
-  "ntfn_bits \<equiv> 4"
+  "ntfn_bits \<equiv> 5"
 
 primrec
   arch_kobj_size :: "arch_kernel_obj \<Rightarrow> nat"

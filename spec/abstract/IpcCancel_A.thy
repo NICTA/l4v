@@ -19,15 +19,45 @@ theory IpcCancel_A
 imports CSpaceAcc_A
 begin                                 
 
+definition
+  sched_context_bind_ntfn :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+where
+  "sched_context_bind_ntfn sc ntfn = do
+    n \<leftarrow> get_notification ntfn;
+    set_notification ntfn (n\<lparr>ntfn_sc:= Some sc\<rparr>);
+    s \<leftarrow> get_sched_context sc;
+    set_sched_context sc (s\<lparr>sc_ntfn:= Some ntfn\<rparr>)
+  od"
+
+definition
+  sched_context_unbind_ntfn :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+where
+  "sched_context_unbind_ntfn sc_ptr = do
+    sc \<leftarrow> get_sched_context sc_ptr;
+    return (sc_ntfn sc) >>=
+    maybeM (\<lambda>ntfn. do
+      set_sched_context sc_ptr (sc\<lparr>sc_ntfn:= None\<rparr>);
+      n \<leftarrow> get_notification ntfn;
+      set_notification ntfn (n\<lparr>ntfn_sc:= None\<rparr>)
+    od)
+  od"
+
+definition
+  sched_context_maybe_unbind_ntfn :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+where
+  "sched_context_maybe_unbind_ntfn ntfn_ptr = do
+    sc_opt \<leftarrow> liftM ntfn_sc $ get_notification ntfn_ptr;
+    maybeM sched_context_unbind_ntfn sc_opt
+  od"
 
 text \<open>
   Unbind a TCB from its scheduling context. If the TCB is runnable,
   remove from the scheduler.
 \<close>
 definition
-  sched_context_unbind :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+  sched_context_unbind_tcb :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
 where
-  "sched_context_unbind sc_ptr = do
+  "sched_context_unbind_tcb sc_ptr = do
      sc \<leftarrow> get_sched_context sc_ptr;
      tptr \<leftarrow> assert_opt $ sc_tcb sc;
      do_extended_op $ tcb_sched_action tcb_sched_dequeue tptr;
@@ -44,7 +74,7 @@ where
   "sched_context_donate sc_ptr tcb_ptr = do
     sc \<leftarrow> get_sched_context sc_ptr;
     from_opt \<leftarrow> return $ sc_tcb sc;
-    when (from_opt \<noteq> None) $ sched_context_unbind sc_ptr;
+    when (from_opt \<noteq> None) $ sched_context_unbind_tcb sc_ptr;
     set_sched_context sc_ptr (sc\<lparr>sc_tcb := Some tcb_ptr\<rparr>);
     thread_set (\<lambda>tcb. tcb\<lparr>tcb_sched_context := Some sc_ptr\<rparr>) tcb_ptr
   od"
@@ -344,6 +374,7 @@ where
    od"
 
 
+
 text {* Cancel all message operations on threads queued in a notification endpoint. *}
 
 definition
@@ -390,7 +421,7 @@ definition
 where
   "sched_context_unbind_all_tcbs sc_ptr = do
     sc \<leftarrow> get_sched_context sc_ptr;
-    when (sc_tcb sc \<noteq> None) $ sched_context_unbind sc_ptr
+    when (sc_tcb sc \<noteq> None) $ sched_context_unbind_tcb sc_ptr
   od"
 
 text {* Finalise a capability if the capability is known to be of the kind
@@ -406,12 +437,14 @@ where
       (when final $ cancel_all_ipc r)"
 | "fast_finalise (NotificationCap r b R) final =
       (when final $ do
+          sched_context_maybe_unbind_ntfn r;
           unbind_maybe_notification r;
           cancel_all_signals r
        od)"
 | "fast_finalise (SchedContextCap sc)    final =
       (when final $ do
           sched_context_unbind_all_tcbs sc;
+          sched_context_unbind_ntfn sc;
           sched_context_clear_replies sc
       od)"
 | "fast_finalise _ _ = fail"

@@ -431,21 +431,33 @@ where
       whenE (length excaps = 0) $ throwError TruncatedMessage;
       cap \<leftarrow> returnOk $ hd excaps;
       sc \<leftarrow> liftE $ get_sched_context sc_ptr;
-      whenE (sc_tcb sc \<noteq> None) $ throwError IllegalOperation;
-      whenE (\<not>is_thread_cap cap) $ throwError (InvalidCapability 1);
-      tcb_ptr \<leftarrow> returnOk $ obj_ref_of cap;
-      sc_ptr_opt \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
-      whenE (sc_ptr_opt \<noteq> None) $ throwError IllegalOperation;
-      returnOk $ InvokeSchedContextBind sc_ptr tcb_ptr
+      whenE (sc_tcb sc \<noteq> None \<or> sc_ntfn sc \<noteq> None) $ throwError IllegalOperation;
+      case cap of
+        ThreadCap tcb_ptr \<Rightarrow> doE
+          sc_ptr_opt \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
+          whenE (sc_ptr_opt \<noteq> None) $ throwError IllegalOperation
+        odE
+      | NotificationCap ntfn_ptr _ _ \<Rightarrow> doE
+          sc_ptr_opt \<leftarrow> liftE $ liftM ntfn_sc $ get_notification ntfn_ptr;
+          whenE (sc_ptr_opt \<noteq> None) $ throwError IllegalOperation
+        odE
+      | _ \<Rightarrow> throwError (InvalidCapability 1);
+      returnOk $ InvokeSchedContextBind sc_ptr cap
     odE
   | SchedContextUnbindObject \<Rightarrow> doE
       whenE (length excaps = 0) $ throwError TruncatedMessage;
       cap \<leftarrow> returnOk $ hd excaps;
-      whenE (\<not>is_thread_cap cap) $ throwError (InvalidCapability 1);
-      tcb_ptr \<leftarrow> returnOk $ obj_ref_of cap;
-      sc_ptr_opt \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
-      whenE (Some sc_ptr \<noteq> sc_ptr_opt) $ throwError IllegalOperation;
-      returnOk $ InvokeSchedContextUnbindObject sc_ptr
+      case cap of
+        ThreadCap tcb_ptr \<Rightarrow> doE
+          sc_ptr_opt \<leftarrow> liftE $ thread_get tcb_sched_context tcb_ptr;
+          whenE (sc_ptr_opt \<noteq> Some sc_ptr) $ throwError IllegalOperation
+        odE
+      | NotificationCap ntfn_ptr _ _ \<Rightarrow> doE
+          sc_ptr_opt \<leftarrow> liftE $ liftM ntfn_sc $ get_notification ntfn_ptr;
+          whenE (sc_ptr_opt \<noteq> Some sc_ptr) $ throwError IllegalOperation
+        odE
+      | _ \<Rightarrow> throwError (InvalidCapability 1);
+      returnOk $ InvokeSchedContextUnbindObject sc_ptr cap
     odE
   | SchedContextUnbind \<Rightarrow> returnOk $ InvokeSchedContextUnbind sc_ptr
   | _ \<Rightarrow> throwError $ IllegalOperation"

@@ -444,19 +444,20 @@ section {* Asynchronous Message Transfers *}
 text {* Helper function to handle a signal operation in the case
 where a receiver is waiting. *}
 definition
-  update_waiting_ntfn :: "obj_ref \<Rightarrow> obj_ref list \<Rightarrow> obj_ref option \<Rightarrow> badge \<Rightarrow>
-                         (unit,'z::state_ext) s_monad"
+  update_waiting_ntfn :: "obj_ref \<Rightarrow> obj_ref list \<Rightarrow> obj_ref option \<Rightarrow> obj_ref option \<Rightarrow> badge \<Rightarrow>
+                         unit det_ext_monad"
 where
-  "update_waiting_ntfn ntfnptr queue bound_tcb badge \<equiv> do
+  "update_waiting_ntfn ntfnptr queue bound_tcb sc_ptr badge \<equiv> do
      assert (queue \<noteq> []);
      (dest,rest) \<leftarrow> return $ (hd queue, tl queue);
      set_notification ntfnptr $ \<lparr>
          ntfn_obj = (case rest of [] \<Rightarrow> IdleNtfn | _ \<Rightarrow> WaitingNtfn rest),
-         ntfn_bound_tcb = bound_tcb \<rparr>;
+         ntfn_bound_tcb = bound_tcb,
+         ntfn_sc = sc_ptr \<rparr>;
+     maybe_donate_sc dest ntfnptr;
      set_thread_state dest Running;
      as_user dest $ set_register badge_register badge;
      do_extended_op (possible_switch_to dest)
-
    od"
 
 text {* Handle a message send operation performed on a notification object.
@@ -482,13 +483,15 @@ where
                   if (receive_blocked st)
                   then do
                       cancel_ipc tcb;
+                      maybe_donate_sc tcb ntfnptr;
                       set_thread_state tcb Running;
-                      as_user tcb $ set_register badge_register badge
+                      as_user tcb $ set_register badge_register badge;
+                      switch_if_required_to tcb
                     od
                   else set_notification ntfnptr $ ntfn_set_obj ntfn (ActiveNtfn badge)
             od
        | (IdleNtfn, None) \<Rightarrow> set_notification ntfnptr $ ntfn_set_obj ntfn (ActiveNtfn badge)
-       | (WaitingNtfn queue, bound_tcb) \<Rightarrow> update_waiting_ntfn ntfnptr queue bound_tcb badge
+       | (WaitingNtfn queue, bound_tcb) \<Rightarrow> update_waiting_ntfn ntfnptr queue bound_tcb (ntfn_sc ntfn) badge
        | (ActiveNtfn badge', _) \<Rightarrow>
            set_notification ntfnptr $ ntfn_set_obj ntfn $
              ActiveNtfn (combine_ntfn_badges badge badge')
@@ -512,7 +515,9 @@ where
                    (case is_blocking of
                      True \<Rightarrow> do
                           set_thread_state thread (BlockedOnNotification ntfnptr);
-                          set_notification ntfnptr $ ntfn_set_obj ntfn $ WaitingNtfn [thread]
+                          set_notification ntfnptr $ ntfn_set_obj ntfn $ WaitingNtfn [thread];
+                          maybe_return_sc ntfnptr thread;
+                          schedule_tcb thread
                         od
                    | False \<Rightarrow> do_nbrecv_failed_transfer thread)
        | WaitingNtfn queue \<Rightarrow>
@@ -520,12 +525,15 @@ where
                      True \<Rightarrow> do
                           set_thread_state thread (BlockedOnNotification ntfnptr);
                           qs' \<leftarrow> sort_queue (queue @ [thread]);
-                          set_notification ntfnptr $ ntfn_set_obj ntfn $ WaitingNtfn qs'
+                          set_notification ntfnptr $ ntfn_set_obj ntfn $ WaitingNtfn qs';
+                          maybe_return_sc ntfnptr thread;
+                          schedule_tcb thread
                         od
                    | False \<Rightarrow> do_nbrecv_failed_transfer thread)
        | ActiveNtfn badge \<Rightarrow> do
                      as_user thread $ set_register badge_register badge;
-                     set_notification ntfnptr $ ntfn_set_obj ntfn IdleNtfn
+                     set_notification ntfnptr $ ntfn_set_obj ntfn IdleNtfn;
+                     maybe_donate_sc thread ntfnptr
                    od
     od"
 

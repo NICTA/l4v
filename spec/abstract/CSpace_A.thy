@@ -455,6 +455,7 @@ where
       (liftM (K (NullCap, NullCap)) $ when final $ cancel_all_ipc r)"
 | "finalise_cap (NotificationCap r b R) final =
       (liftM (K (NullCap, NullCap)) $ when final $ do
+          sched_context_maybe_unbind_ntfn r;
           unbind_maybe_notification r;
           cancel_all_signals r
         od)"
@@ -472,6 +473,7 @@ where
 | "finalise_cap (SchedContextCap sc)     final =
       do
          when final $ sched_context_unbind_all_tcbs sc;
+         when final $ sched_context_unbind_ntfn sc;
          when final $ sched_context_clear_replies sc;
          return (NullCap, NullCap)
       od"

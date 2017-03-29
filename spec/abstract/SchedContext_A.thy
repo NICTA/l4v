@@ -21,11 +21,11 @@ definition "MIN_BUDGET_US = 2 * kernelWCET_us"
 
 
 definition
-  get_tcb_sc :: "obj_ref \<Rightarrow> (sched_context,'z::state_ext) s_monad" (* FIXME: RT - use this everywhere *)
+  get_tcb_sc :: "obj_ref \<Rightarrow> (sched_context,'z::state_ext) s_monad"
 where
   "get_tcb_sc tcb_ptr = do
-    tcb \<leftarrow> gets_the $ get_tcb tcb_ptr;
-    sc_ptr \<leftarrow> assert_opt $ tcb_sched_context tcb;
+    sc_opt \<leftarrow> thread_get tcb_sched_context tcb_ptr;
+    sc_ptr \<leftarrow> assert_opt sc_opt;
     get_sched_context sc_ptr
   od"
 
@@ -315,9 +315,9 @@ where
 
 text \<open>  Bind a TCB to a scheduling context. \<close>
 definition
-  sched_context_bind :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
+  sched_context_bind_tcb :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
 where
-  "sched_context_bind sc_ptr tcb_ptr = do
+  "sched_context_bind_tcb sc_ptr tcb_ptr = do
     sc \<leftarrow> get_sched_context sc_ptr;
     set_sched_context sc_ptr (sc\<lparr>sc_tcb := Some tcb_ptr\<rparr>);
     thread_set (\<lambda>tcb. tcb\<lparr>tcb_sched_context := Some sc_ptr\<rparr>) tcb_ptr; 
@@ -333,7 +333,33 @@ definition
 where
   "unbind_from_sc tcb_ptr = do
     sc_ptr_opt \<leftarrow> thread_get tcb_sched_context tcb_ptr;
-    when (sc_ptr_opt \<noteq> None) $ sched_context_unbind (the sc_ptr_opt)
+    maybeM sched_context_unbind_tcb sc_ptr_opt
+  od"
+
+definition
+  maybe_donate_sc :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
+where
+  "maybe_donate_sc tcb_ptr ntfn_ptr = do
+     sc_opt \<leftarrow> thread_get tcb_sched_context tcb_ptr;
+     when (sc_opt = None) $ 
+       liftM ntfn_sc (get_notification ntfn_ptr) >>= maybeM (\<lambda>sc_ptr. do
+         sc_tcb \<leftarrow> liftM sc_tcb $ get_sched_context sc_ptr;
+         when (sc_tcb = None) $ sched_context_donate sc_ptr tcb_ptr
+       od)
+   od"
+
+definition
+  maybe_return_sc :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
+where
+  "maybe_return_sc ntfn_ptr tcb_ptr = do
+    nsc_opt \<leftarrow> liftM ntfn_sc $ get_notification ntfn_ptr;
+    tsc_opt \<leftarrow> thread_get tcb_sched_context tcb_ptr;
+    when (nsc_opt = tsc_opt \<and> nsc_opt \<noteq> None) $ do
+      sc_ptr \<leftarrow> assert_opt nsc_opt;
+      thread_set (tcb_sched_context_update $ K None) tcb_ptr;
+      sc \<leftarrow> get_sched_context sc_ptr;
+      set_sched_context sc_ptr (sc\<lparr>sc_tcb:= None\<rparr>)
+    od
   od"
 
 text \<open> User-level scheduling context invocations. \<close>
@@ -341,10 +367,18 @@ definition
   invoke_sched_context :: "sched_context_invocation \<Rightarrow> (unit, det_ext) se_monad"
 where
   "invoke_sched_context iv \<equiv> liftE $ case iv of
-    InvokeSchedContextBind sc_ptr tcb_ptr \<Rightarrow> sched_context_bind sc_ptr tcb_ptr 
-  | InvokeSchedContextUnbindObject sc_ptr \<Rightarrow> sched_context_unbind sc_ptr
-  | InvokeSchedContextUnbind sc_ptr \<Rightarrow> sched_context_unbind_all_tcbs sc_ptr"
-
+    InvokeSchedContextBind sc_ptr cap \<Rightarrow> (case cap of
+      ThreadCap tcb_ptr \<Rightarrow> sched_context_bind_tcb sc_ptr tcb_ptr
+    | NotificationCap ntfn _ _ \<Rightarrow> sched_context_bind_ntfn sc_ptr ntfn
+    | _ \<Rightarrow> fail)
+  | InvokeSchedContextUnbindObject sc_ptr cap \<Rightarrow> (case cap of
+      ThreadCap _ \<Rightarrow> sched_context_unbind_tcb sc_ptr
+    | NotificationCap _ _ _ \<Rightarrow> sched_context_unbind_ntfn sc_ptr
+    | _ \<Rightarrow> fail)
+  | InvokeSchedContextUnbind sc_ptr \<Rightarrow> do
+      sched_context_unbind_all_tcbs sc_ptr;
+      sched_context_unbind_ntfn sc_ptr
+    od"
 
 text \<open> The Scheduling Control invocation configures the budget of a scheduling context. \<close>
 definition

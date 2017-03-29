@@ -61,8 +61,8 @@ datatype tcb_invocation =
   | NotificationControl "obj_ref" "obj_ref option"
 
 datatype sched_context_invocation =
-    InvokeSchedContextBind obj_ref obj_ref
-  | InvokeSchedContextUnbindObject obj_ref
+    InvokeSchedContextBind obj_ref cap
+  | InvokeSchedContextUnbindObject obj_ref cap
   | InvokeSchedContextUnbind obj_ref
 
 datatype sched_control_invocation =

@@ -295,10 +295,9 @@ text \<open>
   is runnable and add it to the scheduling queue if required
 \<close> 
 definition
-  sched_context_resume :: "obj_ref option \<Rightarrow> (unit, 'z::state_ext) s_monad"
+  sched_context_resume :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
 where
-  "sched_context_resume sc_ptr_opt \<equiv> case sc_ptr_opt of None \<Rightarrow> return ()
-  | Some sc_ptr \<Rightarrow> do
+  "sched_context_resume sc_ptr \<equiv> do
      sc \<leftarrow> get_sched_context sc_ptr;
      tptr \<leftarrow> assert_opt $ sc_tcb sc;
      in_release_q \<leftarrow> select_ext (in_release_queue tptr) {True,False};
@@ -309,8 +308,8 @@ where
        ready \<leftarrow> refill_ready sc_ptr;
        sufficient \<leftarrow> refill_sufficient sc_ptr 0;
        when (runnable ts \<and> 0 < sc_refill_max sc \<and> \<not>(ready \<and> sufficient)) $ postpone sc_ptr
-    od
-  od"
+     od
+   od"
 
 
 text \<open>  Bind a TCB to a scheduling context. \<close>
@@ -321,7 +320,7 @@ where
     sc \<leftarrow> get_sched_context sc_ptr;
     set_sched_context sc_ptr (sc\<lparr>sc_tcb := Some tcb_ptr\<rparr>);
     thread_set (\<lambda>tcb. tcb\<lparr>tcb_sched_context := Some sc_ptr\<rparr>) tcb_ptr; 
-    sched_context_resume (Some sc_ptr);
+    sched_context_resume sc_ptr;
     inq \<leftarrow> gets $ in_release_queue tcb_ptr;
     sched \<leftarrow> is_schedulable tcb_ptr inq;
     when sched $ switch_if_required_to tcb_ptr
@@ -394,7 +393,7 @@ where
       st \<leftarrow> get_thread_state tcb_ptr;
       if 0 < sc_refill_max sc \<and> runnable st then do
         refill_update sc_ptr period budget mrefills;
-        sched_context_resume (Some sc_ptr);
+        sched_context_resume sc_ptr;
         switch_if_required_to tcb_ptr
       od
       else
@@ -412,7 +411,7 @@ where
     ct \<leftarrow> gets cur_thread;
     it \<leftarrow> gets idle_thread;
     when (0 < consumed \<and> ct \<noteq> it) $ do
-      csc \<leftarrow> gets_the cur_sc;
+      csc \<leftarrow> gets cur_sc;
       refill_split_check csc consumed
     od;
     do_extended_op $ commit_domain_time;

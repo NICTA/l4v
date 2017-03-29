@@ -272,7 +272,7 @@ where
 definition
   handle_yield :: "unit det_ext_monad" where
   "handle_yield \<equiv> do
-     cur_sc \<leftarrow> gets_the cur_sc;
+     cur_sc \<leftarrow> gets cur_sc;
      consumed \<leftarrow> gets consumed_time;
      refill_budget_check cur_sc consumed;
      modify $ consumed_time_update $ K 0;

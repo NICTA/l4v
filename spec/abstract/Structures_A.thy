@@ -546,7 +546,7 @@ record abstract_state =
   idle_thread        :: obj_ref
   consumed_time      :: time     -- "amount of time since kernel time was last updated"
   cur_time           :: time     -- "current time at kernel entry"
-  cur_sc             :: "obj_ref option" -- "current scheduling context"
+  cur_sc             :: obj_ref  -- "current scheduling context"
   reprogram_timer    :: bool     -- "whether we need to reprogram the timer on exit"
   machine_state      :: machine_state
   interrupt_irq_node :: "irq \<Rightarrow> obj_ref"

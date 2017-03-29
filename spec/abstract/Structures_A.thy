@@ -309,6 +309,7 @@ datatype ntfn
 record notification = 
   ntfn_obj :: ntfn
   ntfn_bound_tcb :: "obj_ref option"
+  ntfn_sc        :: "obj_ref option"
 
 
 definition
@@ -323,7 +324,8 @@ definition
   default_notification :: notification where
   "default_notification \<equiv> \<lparr> 
      ntfn_obj = default_ntfn,
-     ntfn_bound_tcb = None \<rparr>"
+     ntfn_bound_tcb = None,
+     ntfn_sc = None \<rparr>"
 
 
 text {* Thread Control Blocks are the in-kernel representation of a thread.
@@ -418,6 +420,7 @@ record refill =
 record sched_context =
   sc_period     :: ticks
   sc_tcb        :: "obj_ref option"
+  sc_ntfn       :: "obj_ref option"
   sc_refills    :: "refill list"
   sc_refill_max :: nat
   sc_replies    :: "obj_ref list"
@@ -428,11 +431,12 @@ definition "MAX_REFILLS = 12"
 definition
   default_sched_context :: sched_context where
   "default_sched_context \<equiv> \<lparr>
-    sc_period = 0,
-    sc_tcb = None,
-    sc_refills = [\<lparr>r_time=0, r_amount=0\<rparr>],
+    sc_period     = 0,
+    sc_tcb        = None,
+    sc_ntfn       = None,
+    sc_refills    = [\<lparr>r_time=0, r_amount=0\<rparr>],
     sc_refill_max = 0,
-    sc_replies = []
+    sc_replies    = []
   \<rparr>"
 
 record reply =
@@ -479,7 +483,7 @@ where
   "obj_bits (CNode sz cs) = cte_level_bits + sz"
 | "obj_bits (TCB t) = 9"
 | "obj_bits (Endpoint ep) = 4"
-| "obj_bits (Notification ntfn) = 4"
+| "obj_bits (Notification ntfn) = 5"
 | "obj_bits (SchedContext sc) = 8"
 | "obj_bits (Reply r) = 4"
 | "obj_bits (ArchObj ao) = arch_kobj_size ao"

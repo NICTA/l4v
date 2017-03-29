@@ -152,11 +152,11 @@ where
     liftE $ case sc of None \<Rightarrow> return ()
      | Some None \<Rightarrow> do
        sc_ptr_opt \<leftarrow> thread_get tcb_sched_context target;
-       when (sc_ptr_opt \<noteq> None) $ sched_context_unbind (the sc_ptr_opt)
+       maybeM sched_context_unbind_tcb sc_ptr_opt
      od
      | Some (Some sc_ptr) \<Rightarrow> do
         sc' \<leftarrow> thread_get tcb_sched_context target;
-        when (sc' \<noteq> Some sc_ptr) $ sched_context_bind sc_ptr target
+        when (sc' \<noteq> Some sc_ptr) $ sched_context_bind_tcb sc_ptr target
      od;
     (case croot of None \<Rightarrow> returnOk ()
      | Some (new_cap, src_slot) \<Rightarrow> doE

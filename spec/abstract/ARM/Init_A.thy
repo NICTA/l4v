@@ -31,6 +31,9 @@ definition
   "init_tcb_ptr = kernel_base + 0x2000"
 
 definition
+  "idle_sc_ptr = kernel_base + 0x3000"
+
+definition
   init_irq_node_ptr :: word32 where
   "init_irq_node_ptr = kernel_base + 0x8000"
 
@@ -76,12 +79,13 @@ definition
     tcb_fault = None,
     tcb_bound_notification = None,
     tcb_mcpriority = minBound,
-    tcb_sched_context = None,
+    tcb_sched_context = Some idle_sc_ptr,
     tcb_reply = None,
     tcb_arch = init_arch_tcb
   \<rparr>, 
   init_globals_frame \<mapsto> ArchObj (DataPage False ARMSmallPage), (* FIXME: same reason as why we kept the definition of init_globals_frame *)
-  init_global_pd \<mapsto> ArchObj (PageDirectory global_pd)
+  init_global_pd \<mapsto> ArchObj (PageDirectory global_pd),
+  idle_sc_ptr \<mapsto> SchedContext (default_sched_context\<lparr>sc_tcb := Some idle_thread_ptr\<rparr>)
   )"
 
 definition
@@ -101,7 +105,7 @@ definition
     idle_thread = idle_thread_ptr,
     consumed_time = 0,
     cur_time = 0,
-    cur_sc = None,
+    cur_sc = idle_sc_ptr,
     reprogram_timer = False,
     machine_state = init_machine_state,
     interrupt_irq_node = \<lambda>irq. init_irq_node_ptr + (ucast irq << cte_level_bits),

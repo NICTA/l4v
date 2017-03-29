@@ -79,7 +79,7 @@ definition
   end_timeslice :: "(unit,'z::state_ext) s_monad"
 where
   "end_timeslice = do
-     sc_ptr \<leftarrow> gets_the cur_sc;
+     sc_ptr \<leftarrow> gets cur_sc;
      ready \<leftarrow> refill_ready sc_ptr;
      sufficient \<leftarrow> refill_sufficient sc_ptr 0;
      if ready \<and> sufficient then do
@@ -117,7 +117,7 @@ where
     ct \<leftarrow> gets cur_thread;
     it \<leftarrow> gets idle_thread;
     if ct = it then return True else do
-      csc \<leftarrow> gets_the cur_sc;
+      csc \<leftarrow> gets cur_sc;
       consumed \<leftarrow> gets consumed_time;
       capacity \<leftarrow> refill_capacity csc consumed;
       if capacity < MIN_BUDGET then do
@@ -165,16 +165,17 @@ where
   "switch_sched_context = do
     cur_sc \<leftarrow> gets cur_sc;
     cur_th \<leftarrow> gets cur_thread;
-    tcb \<leftarrow> gets_the $ get_tcb cur_th;
-    if cur_sc \<noteq> tcb_sched_context tcb
+    sc_opt \<leftarrow> thread_get tcb_sched_context cur_th;
+    sc \<leftarrow> assert_opt sc_opt;
+    if sc \<noteq> cur_sc 
     then do
       modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>);
       commit_time;
-      refill_unblock_check (the (tcb_sched_context tcb))
+      refill_unblock_check sc
     od
     else
       rollback_time;
-    modify (\<lambda>s. s\<lparr> cur_sc:= tcb_sched_context tcb \<rparr>)
+    modify (\<lambda>s. s\<lparr> cur_sc:= sc \<rparr>)
   od"
 
 definition

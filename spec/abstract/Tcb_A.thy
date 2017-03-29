@@ -39,7 +39,7 @@ definition
       cancel_ipc thread;
       set_thread_state thread Restart;
       sc_ptr \<leftarrow> assert_opt sc_opt;
-      do_extended_op (sched_context_resume (Some sc_ptr));
+      do_extended_op (sched_context_resume sc_ptr);
       switch_if_required_to thread
     od
   od"

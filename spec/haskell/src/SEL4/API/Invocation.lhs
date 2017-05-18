@@ -43,6 +43,8 @@ The following type can specify any kernel object invocation. It contains physica
 >         | InvokeReply (PPtr TCB) (PPtr CTE)
 >         | InvokeDomain (PPtr TCB) Domain
 >         | InvokeTCB TCBInvocation
+>         | InvokeSchedContext SchedContextInvocation
+>         | InvokeSchedControl SchedControlInvocation
 >         | InvokeCNode CNodeInvocation
 >         | InvokeIRQControl IRQControlInvocation
 >         | InvokeIRQHandler IRQHandlerInvocation
@@ -63,8 +65,9 @@ The following data type defines the set of possible TCB invocation operations. T
 >             tcNewMCPriority :: Maybe Priority,
 >             tcNewPriority :: Maybe Priority,
 >             tcNewCRoot, tcNewVRoot :: Maybe (Capability, PPtr CTE),
->             tcNewIPCBuffer :: Maybe (VPtr, Maybe (Capability, PPtr CTE)) }
->         | NotificationControl {
+>             tcNewIPCBuffer :: Maybe (VPtr, Maybe (Capability, PPtr CTE)),
+>             tcNewSc :: Maybe (Maybe (PPtr SchedContext)) }
+>         | NotificationControl { 
 >             notificationTCB :: PPtr TCB,
 >             notificationPtr :: Maybe (PPtr Notification) }
 >         | WriteRegisters {
@@ -83,6 +86,20 @@ The following data type defines the set of possible TCB invocation operations. T
 >             copyRegsSuspendSource, copyRegsResumeTarget :: Bool,
 >             copyRegsTransferFrame, copyRegsTransferInteger :: Bool,
 >             copyRegsTransferArch :: Arch.CopyRegisterSets }
+>         deriving Show
+
+> data SchedContextInvocation
+>         = InvokeSchedContextBind {
+>             bindScPtr :: PPtr SchedContext,
+>             tcbPtr :: PPtr TCB }
+>         | InvokeSchedContextUnbindObject { unbindObjectScPtr :: PPtr SchedContext }       
+>         | InvokeSchedContextUnbind { unbindScPtr :: PPtr SchedContext }
+>         deriving Show
+
+> data SchedControlInvocation
+>         = InvokeSchedControlConfigure {
+>             configureScPtr :: PPtr SchedContext,
+>             ticks :: Ticks }
 >         deriving Show
 
 \subsubsection{CNode Invocations}

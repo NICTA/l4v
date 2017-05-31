@@ -23,7 +23,7 @@ We use the C preprocessor to select a target architecture.
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.Model SEL4.Machine SEL4.Object.Structures SEL4.Object.Instances() SEL4.API.Types #-}
-% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired timerTick scheduleTcb isSchedulable #-}
+% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired timerTick scheduleTcb isSchedulable endTimeSlice #-}
 
 > import SEL4.Config
 > import SEL4.API.Types
@@ -332,6 +332,7 @@ If the current thread is no longer runnable, has used its entire timeslice, an I
 >                 when (domainTime == 0) $ nextDomain
 >                 chooseThread
 >                 setSchedulerAction ResumeCurrentThread
+>         scAndTimer
 
 Threads are scheduled using a simple multiple-priority round robin algorithm.
 It checks the priority bitmaps to find the highest priority with a non-empty
@@ -480,13 +481,15 @@ This function is called when the system state has changed sufficiently that the 
 > rescheduleRequired = do
 >     action <- getSchedulerAction
 >     case action of
+
+TODO: This bit of code will be changed in the future.
+
 >         SwitchToThread target -> do
-
-TODO: Fix me later
-
 >              tcbSchedEnqueue target 
 >         _ -> return ()
+
 >     setSchedulerAction ChooseNewThread
+>     modify (\ks -> ks { ksReprogramTimer = True })
 
 \subsubsection{Scheduling Parameters}
 
@@ -636,6 +639,15 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 
 > initTCB = (makeObject::TCB){ tcbPriority=maxBound }
 
+> endTimeSlice :: Kernel ()
+> endTimeSlice = do
+>     cur <- getCurThread
+>     tcb <- getObject cur
+>     scPtr <- return $! (fromJust (tcbSchedContext tcb))
+>     recharge scPtr
+>     st <- getThreadState cur
+>     when (st == Running) (tcbSchedAppend cur)
+>     rescheduleRequired
 
 %
 

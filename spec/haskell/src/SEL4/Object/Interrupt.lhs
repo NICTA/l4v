@@ -23,7 +23,7 @@ We use the C preprocessor to select a target architecture.
 >     performIRQControl, invokeIRQHandler,
 >     deletingIRQHandler, deletedIRQHandler,
 >     initInterruptController, handleInterrupt,
->     setIRQState, isIRQActive
+>     setIRQState, isIRQActive, setNextInterrupt
 >   ) where
 
 > {-# BOOT-IMPORTS: SEL4.Machine SEL4.Model SEL4.Object.Structures #-}
@@ -41,16 +41,19 @@ The architecture-specific definitions are imported qualified with the "Arch" pre
 > import SEL4.API.Invocation
 > import SEL4.API.InvocationLabels
 > import SEL4.API.Types
+> import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Object.Notification
 > import {-# SOURCE #-} SEL4.Object.CNode
+> import {-# SOURCE #-} SEL4.Object.TCB
 > import {-# SOURCE #-} SEL4.Kernel.CSpace
-> import {-# SOURCE #-} SEL4.Kernel.Thread
 > import {-# SOURCE #-} SEL4.Kernel.Init
 
 > import Data.Bits
 > import Data.Array
 > import Data.Helpers
+> import Data.Maybe
+> import Data.Word(Word64)
 
 \end{impdetails}
 
@@ -154,8 +157,8 @@ This function is called during bootstrap to set up the initial state of the inte
 >         doMachineOp $ mapM_ (maskInterrupt True) [minBound .. maxBound]
 >         let irqTable = funArray $ const IRQInactive
 >         setInterruptState $ InterruptState (ptrFromPAddr frame) irqTable
->         timerIRQ <- doMachineOp configureTimer
->         setIRQState IRQTimer timerIRQ
+>         doMachineOp $ setDeadline (maxBound :: Word64)
+>         setIRQState IRQTimer deadlineIRQ
 >         Arch.initInterruptController
 >         slot <- locateSlotCap rootCNCap biCapIRQC
 >         insertInitCap slot IRQControlCap
@@ -180,6 +183,7 @@ is set to an incorrect value.
 >       st <- getIRQState irq
 >       case st of
 >           IRQSignal -> do
+>               updateTimeStamp
 >               slot <- getIRQSlot irq
 >               cap <- getSlotCap slot
 >               case cap of
@@ -188,9 +192,16 @@ is set to an incorrect value.
 >                   _ -> doMachineOp $ debugPrint $
 >                       "Undelivered interrupt: " ++ show irq
 >               doMachineOp $ maskInterrupt True irq
+>               curSc <- getCurSc
+>               commitTime curSc
+>               checkReschedule
 >           IRQTimer -> do
->               timerTick
->               doMachineOp resetTimer
+>               updateTimeStamp
+>               doMachineOp ackDeadlineIRQ
+>               curSc <- getCurSc
+>               commitTime curSc
+>               checkBudget
+>               return ()
 >           IRQReserved -> Arch.handleReservedIRQ irq
 >           IRQInactive -> fail $ "Received disabled IRQ " ++ show irq
 >       doMachineOp $ ackInterrupt irq
@@ -217,4 +228,19 @@ The following functions are used within this module to access the global interru
 >     node <- liftM intStateIRQNode getInterruptState
 >     locateSlotBasic node (fromIntegral $ fromEnum irq)
 
+> setNextTimerInterrupt :: Time -> Kernel ()
+> setNextTimerInterrupt threadTime = do
+>     curTm <- getCurTime
+>     domainTm <- getDomainTime
+>     newDomainTm <- return $! curTm + domainTm
+>     doMachineOp $ setDeadline (min threadTime newDomainTm - timerPrecision)
+
+> setNextInterrupt :: Kernel ()
+> setNextInterrupt = do
+>     curTm <- getCurTime
+>     curTh <- getCurThread
+>     tcb <- getObject curTh
+>     sc <- getSchedContext $ (fromJust (tcbSchedContext tcb))
+>     newThreadTime <- return (curTm + scRemaining sc)
+>     setNextTimerInterrupt newThreadTime
 

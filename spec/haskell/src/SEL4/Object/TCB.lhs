@@ -30,13 +30,15 @@ This module uses the C preprocessor to select a target architecture.
 >         getExtraCPtrs, getExtraCPtr, lookupExtraCaps, setExtraBadge,
 >         decodeDomainInvocation,
 >         archThreadSet, archThreadGet,
->         decodeSchedContextInvocation, decodeSchedControlInvocation
+>         decodeSchedContextInvocation, decodeSchedControlInvocation,
+>         checkReschedule, checkBudget, scAndTimer,
+>         checkBudgetRestart, commitTime
 >     ) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.API.Types SEL4.API.Failures SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Invocation #-}
-% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB setupCallerCap getThreadCallerSlot getThreadReplySlot getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation #-}
+% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB setupCallerCap getThreadCallerSlot getThreadReplySlot getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkReschedule checkBudget #-}
 
 > import SEL4.Config (numDomains, timeArgSize)
 > import SEL4.API.Types
@@ -44,9 +46,11 @@ This module uses the C preprocessor to select a target architecture.
 > import SEL4.API.Invocation
 > import SEL4.API.InvocationLabels
 > import SEL4.Machine
+> import SEL4.Machine.Hardware.TARGET (usToTicks)
 > import SEL4.Model
 > import SEL4.Object.Structures
 > import SEL4.Object.Instances()
+> import SEL4.Object.Interrupt
 > import SEL4.Object.CNode
 > import SEL4.Object.ObjectType
 > import SEL4.Object.Notification
@@ -58,7 +62,7 @@ This module uses the C preprocessor to select a target architecture.
 > import Data.Bits
 > import Data.Helpers (mapMaybe)
 > import Data.List(genericTake, genericLength)
-> import Data.Maybe()
+> import Data.Maybe(fromJust)
 > import Data.WordLib
 > import Control.Monad.State(runState)
 
@@ -636,11 +640,13 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >     unless (invocationType label == SchedControlConfigure) $ throw IllegalOperation
 >     when (length excaps == 0) $ throw TruncatedMessage
 >     when (length args < timeArgSize) $ throw TruncatedMessage
->     budget <- return $! parseTimeArg 0 args
+>     budgetUs <- return $! parseTimeArg 0 args
 >     targetCap <- return $! head excaps
 >     when (not (isSchedContextCap targetCap)) $ throw (InvalidCapability 1)
->     scPtr <- return $ capSchedContextPtr targetCap 
->     return $! InvokeSchedControlConfigure scPtr budget
+>     scPtr <- return $ capSchedContextPtr targetCap
+>     when (budgetUs > maxTimerUs || budgetUs < kernelWCETUs) $
+>         throw (RangeError (fromIntegral kernelWCETUs) (fromIntegral maxTimerUs)) -- FIXME: RT - range type too small 
+>     return $! InvokeSchedControlConfigure scPtr (usToTicks budgetUs)
 
 \subsection{Checks}
 
@@ -903,4 +909,63 @@ On some architectures, the thread context may include registers that may be modi
 
 > getSanitiseRegisterInfo :: PPtr TCB -> Kernel Bool
 > getSanitiseRegisterInfo t = Arch.getSanitiseRegisterInfo t
+
+> checkBudget :: Kernel Bool
+> checkBudget = do
+>     curExp <- isCurThreadExpired
+>     curSc <- getCurSc
+>     if curExp
+>         then do
+>             commitTime curSc
+>             endTimeSlice
+>             return False
+>         else do
+
+TODO: this bit of code will be changed in a later version
+
+>             commitTime curSc
+>             rescheduleRequired
+>             return False
+
+> checkBudgetRestart :: Kernel Bool
+> checkBudgetRestart = do
+>     cont <- checkBudget
+>     when (not cont) $ do
+>         cur <- getCurThread
+
+NB: the argument order is different from the abstract spec.
+
+>         setThreadState Restart cur
+
+>     return cont
+
+TODO: Just a placeholder. Not needed in the future
+
+> checkReschedule :: Kernel ()
+> checkReschedule = do
+>     expired <- isCurThreadExpired
+>     if expired
+>         then endTimeSlice
+>         else do
+>             when True rescheduleRequired
+
+> switchSchedContext :: Kernel ()
+> switchSchedContext = do
+>     curSc <- getCurSc
+>     curTh <- getCurThread
+>     tcb <- getObject curTh
+>     if (curSc /= fromJust (tcbSchedContext tcb))
+>         then do
+>             setReprogramTimer True
+>             commitTime curSc
+>         else rollbackTime
+>     setCurSc (fromJust (tcbSchedContext tcb))
+
+> scAndTimer :: Kernel ()
+> scAndTimer = do
+>     switchSchedContext
+>     reprogram <- getReprogramTimer
+>     when reprogram $ do
+>         setNextInterrupt
+>         setReprogramTimer False
 

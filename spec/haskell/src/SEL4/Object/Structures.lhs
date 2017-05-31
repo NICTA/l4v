@@ -191,7 +191,10 @@ list of pointers to waiting threads;
 
 \subsubsection{SchedContext Objects}
 
+TODO: Word or Word64
+
 > type Ticks = Word64
+> type Time = Word64
 
 > data SchedContext = SchedContext {
 >     scBudget :: Ticks,
@@ -451,10 +454,10 @@ The interrupt controller state consists of an array with one entry for each of t
 
 Each entry in the domain schedule specifies a domain and a length (a number of time slices).
 
-> type DomainSchedule = (Domain, Word)
-> dschDomain :: (Domain, Word) -> Domain
+> type DomainSchedule = (Domain, Word64)
+> dschDomain :: (Domain, Word64) -> Domain
 > dschDomain = fst
-> dschLength :: (Domain, Word) -> Word
+> dschLength :: (Domain, Word64) -> Word64
 > dschLength = snd
 
 > isReceive :: ThreadState -> Bool

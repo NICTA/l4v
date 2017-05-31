@@ -14,22 +14,23 @@ This module specifies the behavior of schedule context objects.
 >         schedContextUnbindAllTcbs, unbindFromSc, invokeSchedContext,
 >         invokeSchedControlConfigure, getSchedContext,
 >         schedContextUnbind, schedContextBind, schedContextResume,
->         setSchedContext, recharge
+>         setSchedContext, recharge, updateTimeStamp, commitTime,
+>         isCurThreadExpired, rollbackTime
 >     ) where
 
 \begin{impdetails}
 
+> import SEL4.Machine.Hardware
 > import SEL4.Machine.RegisterSet(PPtr)
 > import SEL4.API.Failures(SyscallError)
 > import SEL4.Model.Failures(KernelF, withoutFailure)
 > import SEL4.Model.PSpace(getObject, setObject)
-> import SEL4.Model.StateData(assert, Kernel, getCurThread)
+> import SEL4.Model.StateData
 > import SEL4.Object.Structures
 > import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet)
 > import {-# SOURCE #-} SEL4.Kernel.Thread
 > import SEL4.API.Invocation(SchedContextInvocation(..), SchedControlInvocation(..))
 
-> import Control.Monad
 > import Data.Maybe
 
 \end{impdetails}
@@ -116,3 +117,51 @@ TODO: Define schedControlInvocation, switchIfRequiredTo
 >             if not schedulable
 >                 then tcbSchedDequeue tcbPtr
 >                 else switchIfRequiredTo tcbPtr
+
+> isCurDomainExpired :: Kernel Bool
+> isCurDomainExpired = do
+>     domainTime <- getDomainTime
+>     consumedTime <- getConsumedTime
+>     return $! domainTime < consumedTime + kernelWCETTicks
+
+> commitDomainTime :: Kernel ()
+> commitDomainTime = do
+>     domainTime <- getDomainTime
+>     consumed <- getConsumedTime
+>     time' <- return (if domainTime < consumed then 0 else domainTime - consumed)
+>     setDomainTime time'
+
+> commitTime :: PPtr SchedContext -> Kernel ()
+> commitTime scPtr = do
+>     sc <- getSchedContext scPtr
+>     consumed <- getConsumedTime
+>     rem' <- return $! (if scRemaining sc < consumed then 0 else scRemaining sc - consumed)
+>     setSchedContext scPtr (sc{ scRemaining = rem' })
+>     commitDomainTime
+>     curTime <- getCurTime
+>     setCurTime (curTime + consumed)
+>     setConsumedTime 0
+
+> isCurThreadExpired :: Kernel Bool
+> isCurThreadExpired = do
+>     cur <- getCurThread
+>     tcb <- getObject cur
+>     scPtr <- return $! (fromJust (tcbSchedContext tcb))
+>     sc <- getSchedContext scPtr
+>     consumed <- getConsumedTime
+>     return $! (scRemaining sc < consumed + kernelWCETTicks)
+
+> rollbackTime :: Kernel ()
+> rollbackTime = do
+>     consumed <- getConsumedTime
+>     curTime <- getCurTime
+>     setCurTime (curTime - consumed)
+>     setConsumedTime 0
+
+> updateTimeStamp :: Kernel ()
+> updateTimeStamp = do
+>     prevTime <- getCurTime
+>     curTime' <- doMachineOp getCurrentTime
+>     setCurTime curTime'
+>     setConsumedTime (curTime' - prevTime)
+

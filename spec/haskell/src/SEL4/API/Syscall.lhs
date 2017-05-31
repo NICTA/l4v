@@ -30,6 +30,7 @@ modules.
 > import SEL4.Kernel.FaultHandler
 > import SEL4.Kernel.Hypervisor
 > import SEL4.Object
+> import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Model
 > import SEL4.Machine
@@ -81,7 +82,10 @@ functions to perform the appropriate actions. The parameter is the event being h
 
 System call events are dispatched here to the appropriate system call handlers, defined in the next section.
 
-> handleEvent (SyscallEvent call) = case call of
+> handleEvent (SyscallEvent call) = do
+>     withoutPreemption $ updateTimeStamp
+>     restart <- withoutPreemption $ checkBudgetRestart
+>     when restart (case call of
 >         SysSend -> handleSend True
 >         SysNBSend -> handleSend False
 >         SysCall -> handleCall
@@ -91,7 +95,7 @@ System call events are dispatched here to the appropriate system call handlers, 
 >             handleReply
 >             handleRecv True
 >         SysYield -> withoutPreemption handleYield
->         SysNBRecv -> withoutPreemption $ handleRecv False
+>         SysNBRecv -> withoutPreemption $ handleRecv False )
 
 \subsubsection{Interrupts}
 
@@ -108,10 +112,11 @@ Interrupt handling is performed by "handleInterrupt", defined in \autoref{sec:ob
 An unknown system call raises an "UnknownSyscallException", which reports the system call number to the thread's fault handler. This may allow the fault handler to emulate system call interfaces other than seL4.
 
 > handleEvent (UnknownSyscall n) = withoutPreemption $ do
->     thread <- getCurThread
->     handleFault thread $
->         UnknownSyscallException $ fromIntegral n
->     return ()
+>     updateTimeStamp
+>     restart <- checkBudgetRestart
+>     when restart $ do
+>         thread <- getCurThread
+>         handleFault thread $ UnknownSyscallException $ fromIntegral n
 
 \subsubsection{Miscellaneous User-level Faults}
 
@@ -124,18 +129,22 @@ to each architecture. In the second word, only the bottom 29 bits will
 be communicated to the fault handler.
 
 > handleEvent (UserLevelFault w1 w2) = withoutPreemption $ do
->     thread <- getCurThread
->     handleFault thread $ UserException w1 (w2 .&. mask 29)
->     return ()
+>     updateTimeStamp
+>     restart <- checkBudgetRestart
+>     when restart $ do
+>         thread <- getCurThread
+>         handleFault thread $ UserException w1 (w2 .&. mask 29)
 
 \subsubsection{Virtual Memory Faults}
 
 If the simulator reports a VM fault, the appropriate action depends on whether the architecture has a software-loaded TLB. If so, we look up the address, and then insert it into the TLB; otherwise we simply send a fault IPC.
 
 > handleEvent (VMFaultEvent faultType) = withoutPreemption $ do
->     thread <- getCurThread
->     handleVMFault thread faultType `catchFailure` handleFault thread
->     return ()
+>     updateTimeStamp
+>     restart <- checkBudgetRestart
+>     when restart $ do
+>         thread <- getCurThread
+>         handleVMFault thread faultType `catchFailure` handleFault thread
 
 \subsubsection{Hypervisor Faults}
 

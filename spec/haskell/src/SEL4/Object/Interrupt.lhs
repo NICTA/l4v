@@ -176,35 +176,35 @@ is set to an incorrect value.
 
 > handleInterrupt :: IRQ -> Kernel ()
 > handleInterrupt irq = do
->     if (irq > maxIRQ) then doMachineOp $ (do
->          maskInterrupt True irq
->          ackInterrupt irq)
->      else do
->       st <- getIRQState irq
->       case st of
->           IRQSignal -> do
->               updateTimeStamp
->               slot <- getIRQSlot irq
->               cap <- getSlotCap slot
->               case cap of
->                   NotificationCap { capNtfnCanSend = True } ->
->                       sendSignal (capNtfnPtr cap) (capNtfnBadge cap)
->                   _ -> doMachineOp $ debugPrint $
->                       "Undelivered interrupt: " ++ show irq
->               doMachineOp $ maskInterrupt True irq
->               curSc <- getCurSc
->               commitTime curSc
->               checkReschedule
->           IRQTimer -> do
->               updateTimeStamp
->               doMachineOp ackDeadlineIRQ
->               curSc <- getCurSc
->               commitTime curSc
->               checkBudget
->               return ()
->           IRQReserved -> Arch.handleReservedIRQ irq
->           IRQInactive -> fail $ "Received disabled IRQ " ++ show irq
->       doMachineOp $ ackInterrupt irq
+>     if (irq > maxIRQ)
+>         then doMachineOp $ (do
+>             maskInterrupt True irq
+>             ackInterrupt irq)
+>         else do
+>             st <- getIRQState irq
+>             case st of
+>                 IRQSignal -> do
+>                     updateTimeStamp
+>                     slot <- getIRQSlot irq
+>                     cap <- getSlotCap slot
+>                     case cap of
+>                         NotificationCap { capNtfnCanSend = True } ->
+>                             sendSignal (capNtfnPtr cap) (capNtfnBadge cap)
+>                         _ -> doMachineOp $ debugPrint $
+>                             "Undelivered interrupt: " ++ show irq
+>                     doMachineOp $ maskInterrupt True irq
+>                     commit <- checkBudget
+>                     when commit commitTime
+>                 IRQTimer -> do
+>                     updateTimeStamp
+>                     doMachineOp ackDeadlineIRQ
+>                     commit <- checkBudget
+>                     when commit commitTime
+>                     setReprogramTimer True
+
+>                 IRQReserved -> Arch.handleReservedIRQ irq
+>                 IRQInactive -> fail $ "Received disabled IRQ " ++ show irq
+>             doMachineOp $ ackInterrupt irq
 
 \subsection{Accessing the Global State}
 
@@ -239,8 +239,17 @@ The following functions are used within this module to access the global interru
 > setNextInterrupt = do
 >     curTm <- getCurTime
 >     curTh <- getCurThread
->     tcb <- getObject curTh
->     sc <- getSchedContext $ (fromJust (tcbSchedContext tcb))
->     newThreadTime <- return (curTm + scRemaining sc)
+>     scOpt <- threadGet tcbSchedContext curTh
+>     assert (scOpt /= Nothing) "setNextInterrupt: scOpt must not be Nothing"
+>     scPtr <- return $ fromJust scOpt
+>     sc <- getSchedContext scPtr
+>     newThreadTime <- return $ curTm + rAmount (refillHd sc)
+>     rq <- getReleaseQueue
+>     newThreadTime <- if rq == [] then return newThreadTime else do
+>         scOpt <- threadGet tcbSchedContext (head rq)
+>         assert (scOpt /= Nothing) "setNextInterrupt: scOpt must not be Nothing"
+>         scPtr <- return $ fromJust scOpt
+>         sc <- getSchedContext scPtr
+>         return $ min (rTime (refillHd sc)) newThreadTime
 >     setNextTimerInterrupt newThreadTime
 

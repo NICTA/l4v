@@ -31,14 +31,14 @@ This module uses the C preprocessor to select a target architecture.
 >         decodeDomainInvocation,
 >         archThreadSet, archThreadGet,
 >         decodeSchedContextInvocation, decodeSchedControlInvocation,
->         checkReschedule, checkBudget, scAndTimer,
->         checkBudgetRestart, commitTime
+>         checkBudget, scAndTimer,
+>         checkBudgetRestart, commitTime, awaken
 >     ) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.API.Types SEL4.API.Failures SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Invocation #-}
-% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB setupCallerCap getThreadCallerSlot getThreadReplySlot getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkReschedule checkBudget #-}
+% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB setupCallerCap getThreadCallerSlot getThreadReplySlot getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget #-}
 
 > import SEL4.Config (numDomains, timeArgSize)
 > import SEL4.API.Types
@@ -639,14 +639,23 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 > decodeSchedControlInvocation label args excaps = do
 >     unless (invocationType label == SchedControlConfigure) $ throw IllegalOperation
 >     when (length excaps == 0) $ throw TruncatedMessage
->     when (length args < timeArgSize) $ throw TruncatedMessage
+>     when (length args < timeArgSize * 2 + 1) $ throw TruncatedMessage
 >     budgetUs <- return $! parseTimeArg 0 args
+>     periodUs <- return $! parseTimeArg timeArgSize args
+>     mRefills <- return $! args !! (2 * timeArgSize)
 >     targetCap <- return $! head excaps
 >     when (not (isSchedContextCap targetCap)) $ throw (InvalidCapability 1)
 >     scPtr <- return $ capSchedContextPtr targetCap
->     when (budgetUs > maxTimerUs || budgetUs < kernelWCETUs) $
->         throw (RangeError (fromIntegral kernelWCETUs) (fromIntegral maxTimerUs)) -- FIXME: RT - range type too small 
->     return $! InvokeSchedControlConfigure scPtr (usToTicks budgetUs)
+>     when (budgetUs > maxTimerUs || budgetUs < minBudgetUs) $
+>         throw (RangeError (fromIntegral minBudgetUs) (fromIntegral maxTimerUs))
+>     when (periodUs > maxTimerUs || periodUs < minBudgetUs) $
+>         throw (RangeError (fromIntegral minBudgetUs) (fromIntegral maxTimerUs))
+>     when (periodUs < budgetUs) $
+>         throw (RangeError (fromIntegral minBudgetUs) (fromIntegral periodUs))
+>     when (maxRefills < fromIntegral mRefills) $
+>         throw (RangeError 0 (fromIntegral (maxRefills - minRefills - 1)))
+>     return $! InvokeSchedControlConfigure scPtr
+>         (usToTicks budgetUs) (usToTicks periodUs) (fromIntegral mRefills + minRefills)
 
 \subsection{Checks}
 
@@ -694,7 +703,7 @@ The "setMRs" function returns the number of words of message data successfully t
 >                 Just bufferPtr ->
 >                     map (\x -> bufferPtr +
 >                             PPtr (x*intSize))
->                         [fromIntegral $ length hardwareMRs+1 .. msgMaxLength]
+>                         [fromIntegral $ length hardwareMRs + 1 .. msgMaxLength]
 >                 Nothing -> []
 >         let msgLength = min
 >                 (length messageData)
@@ -714,7 +723,7 @@ The "setMRs" function returns the number of words of message data successfully t
 >             Just bufferPtr -> do
 >                 let bufferMRs = map (\x -> bufferPtr +
 >                             PPtr (x*intSize))
->                         [fromIntegral $ length hardwareMRs+1.. msgMaxLength]
+>                         [fromIntegral $ length hardwareMRs + 1 .. msgMaxLength]
 >                 mapM loadWordUser bufferMRs
 >             Nothing -> return []
 >         let values = hardwareMRValues ++ bufferMRValues
@@ -738,7 +747,7 @@ This function's first argument is the maximum number of message registers to cop
 >                 mapM (\x -> do
 >                     v <- loadWordUser (sbPtr + PPtr (x*intSize))
 >                     storeWordUser (rbPtr + PPtr (x*intSize)) v
->                 ) [fromIntegral $ length msgRegisters+1 .. n]
+>                 ) [fromIntegral $ length msgRegisters + 1 .. n]
 >             _ -> return []
 >         return $ min n $ fromIntegral $ length hardwareMRs + length bufferMRs
 
@@ -752,7 +761,7 @@ The following functions read and set the extra capability fields of the IPC buff
 >         let intSize = fromIntegral wordSize
 >         case buffer of
 >             Just bufferPtr -> do
->                 let offset = msgMaxLength+1
+>                 let offset = msgMaxLength + 1
 >                 let bufferPtrs = map (\x -> bufferPtr +
 >                         PPtr ((x+offset)*intSize)) [1, 2 .. count]
 >                 mapM (liftM CPtr . loadWordUser) bufferPtrs
@@ -912,20 +921,35 @@ On some architectures, the thread context may include registers that may be modi
 
 > checkBudget :: Kernel Bool
 > checkBudget = do
->     curExp <- isCurThreadExpired
->     curSc <- getCurSc
->     if curExp
->         then do
->             commitTime curSc
->             endTimeSlice
->             return False
+>     ct <- getCurThread
+>     it <- getIdleThread
+>     if ct == it
+>         then return True
 >         else do
-
-TODO: this bit of code will be changed in a later version
-
->             commitTime curSc
->             rescheduleRequired
->             return False
+>             csc <- getCurSc
+>             consumed <- getConsumedTime
+>             capacity <- refillCapacity csc consumed
+>             if capacity < minBudget
+>                 then do
+>                     when (capacity == 0) $ do
+>                         cs' <- refillBudgetCheck csc consumed
+>                         setConsumedTime cs'
+>                     consumed <- getConsumedTime
+>                     when (0 < consumed) $ refillSplitCheck csc consumed
+>                     setConsumedTime 0
+>                     runnable <- isRunnable ct
+>                     when runnable $ do
+>                         endTimeSlice
+>                         rescheduleRequired
+>                     return False
+>                 else do
+>                     domExp <- isCurDomainExpired
+>                     if domExp
+>                         then do
+>                             commitTime
+>                             rescheduleRequired
+>                             return False
+>                         else return True               
 
 > checkBudgetRestart :: Kernel Bool
 > checkBudgetRestart = do
@@ -939,16 +963,6 @@ NB: the argument order is different from the abstract spec.
 
 >     return cont
 
-TODO: Just a placeholder. Not needed in the future
-
-> checkReschedule :: Kernel ()
-> checkReschedule = do
->     expired <- isCurThreadExpired
->     if expired
->         then endTimeSlice
->         else do
->             when True rescheduleRequired
-
 > switchSchedContext :: Kernel ()
 > switchSchedContext = do
 >     curSc <- getCurSc
@@ -957,7 +971,8 @@ TODO: Just a placeholder. Not needed in the future
 >     if (curSc /= fromJust (tcbSchedContext tcb))
 >         then do
 >             setReprogramTimer True
->             commitTime curSc
+>             commitTime
+>             refillUnblockCheck (fromJust (tcbSchedContext tcb))
 >         else rollbackTime
 >     setCurSc (fromJust (tcbSchedContext tcb))
 
@@ -968,4 +983,61 @@ TODO: Just a placeholder. Not needed in the future
 >     when reprogram $ do
 >         setNextInterrupt
 >         setReprogramTimer False
+
+> possibleSwitchTo :: PPtr TCB -> Bool -> Kernel ()
+> possibleSwitchTo target onSamePrio = do
+>     scOpt <- threadGet tcbSchedContext target
+>     inq <- inReleaseQueue target
+>     when (scOpt /= Nothing && not inq) $ do
+>         currTcbPtr <- getCurThread
+>         currTcb <- getObject currTcbPtr
+>         curDom <- curDomain
+>         curPrio <- return $ tcbPriority currTcb
+>         targetTcb <- getObject target
+>         targetDom <- return $ tcbDomain targetTcb
+>         targetPrio <- return $ tcbPriority targetTcb
+>         action <- getSchedulerAction
+>         if (targetDom /= curDom)
+>             then tcbSchedEnqueue target
+>             else do
+>                 if (targetPrio > curPrio || (targetPrio == curPrio && onSamePrio)) && action == ResumeCurrentThread
+>                     then setSchedulerAction $ SwitchToThread target
+>                     else tcbSchedEnqueue target
+>                 case action of
+>                     SwitchToThread _ -> rescheduleRequired
+>                     _ -> return ()
+
+> attemptSwitchTo :: PPtr TCB -> Kernel ()
+> attemptSwitchTo target = possibleSwitchTo target True
+
+> takeWhileM :: Monad m => (a -> m Bool) -> [a] -> m [a]
+> takeWhileM _ [] = return []
+> takeWhileM p (x:xs) = do
+>     r <- p x
+>     if r
+>         then liftM (x:) (takeWhileM p xs)
+>         else return []
+
+> sequenceX :: [Kernel ()] -> Kernel ()
+> sequenceX xs = foldr (\x y -> x >>= (\_ -> y)) (return ()) xs
+
+> mapMX :: (a -> Kernel ()) -> [a] -> Kernel ()
+> mapMX f xs = sequenceX (map f xs)
+
+> awaken :: Kernel ()
+> awaken = do
+>     rq <- getReleaseQueue
+>     rq1 <- takeWhileM refillReadyTcb rq
+>     setReleaseQueue rq
+>     mapMX (\t -> do
+>         scOpt <- threadGet tcbSchedContext t
+>         assert (scOpt /= Nothing) "awaken: scOpt must not be Nothing"
+>         scPtr <- return $ fromJust scOpt
+>         refillUnblockCheck scPtr
+>         ready <- refillReady scPtr
+>         if not ready
+>             then tcbReleaseEnqueue t
+>             else do
+>                 tcbSchedAppend t
+>                 switchIfRequiredTo t) rq1
 

@@ -228,8 +228,6 @@ The constant "nullPointer" is a physical pointer guaranteed to be invalid.
 > kernelWCETUs :: Word64
 > kernelWCETTicks :: Word64
 
-TODO: Define it later
-
 > kernelWCETUs = 10
 > kernelWCETTicks = Arch.usToTicks kernelWCETUs
 
@@ -240,5 +238,5 @@ TODO: Define it later
 > maxTimerUs = undefined
 
 > getCurrentTime :: MachineMonad Word64
-> getCurrentTime = undefined
+> getCurrentTime = Arch.getCurrentTime
 

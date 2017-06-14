@@ -132,8 +132,6 @@ Threads are treated as special capability nodes; they also become zombies when t
 >     Arch.prepareThreadDelete tcb
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)
 
-TODO: Define schedContextUnbindAllTcbs
-
 > finaliseCap (SchedContextCap { capSchedContextPtr = sc }) final _ = do
 >     when final $ do
 >         schedContextUnbindAllTcbs sc
@@ -325,11 +323,7 @@ The "maskCapRights" function restricts the operations that can be performed on a
 
 > maskCapRights _ c@(IRQHandlerCap {}) = c
 
-TODO: Is it correct?
-
 > maskCapRights _ c@(SchedContextCap {}) = c
-
-TODO: Is it correct?
 
 > maskCapRights _ c@SchedControlCap = c
 

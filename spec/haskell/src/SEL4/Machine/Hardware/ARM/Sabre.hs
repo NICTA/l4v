@@ -103,6 +103,9 @@ getActiveIRQ env = do
         gicDistBase = gicDistributorBase,
         gicIFBase = gicInterfaceBase }
 
+getCurrentTime :: Ptr CallbackData -> IO Word64
+getCurrentTime = undefined
+
 setDeadline :: Ptr CallbackData -> Word64 -> IO ()
 setDeadline _ _ = undefined
 

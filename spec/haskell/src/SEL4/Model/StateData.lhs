@@ -81,6 +81,8 @@ The top-level kernel state structure is called "KernelState". It contains:
 
 >         ksReadyQueues :: Array (Domain, Priority) ReadyQueue,
 
+>         ksReleaseQueue :: ReleaseQueue,
+
 \item a bitmap for each domain; each bit represents the presence of a runnable thread for a specific priority
 
 >         ksReadyQueuesL1Bitmap :: Array (Domain) Word,
@@ -142,6 +144,7 @@ The ready queue is simply a list of threads that are ready to
 run. Each thread in this list is at the same priority level.
 
 > type ReadyQueue = [PPtr TCB]
+> type ReleaseQueue = [PPtr TCB]
 
 This is a standard Haskell singly-linked list independent of the
 thread control block structures. However, in a real implementation, it
@@ -182,6 +185,12 @@ Similarly, these functions access the idle thread pointer, the ready queue for a
 
 > setQueue :: Domain -> Priority -> ReadyQueue -> Kernel ()
 > setQueue qdom prio q = modify (\ks -> ks { ksReadyQueues = (ksReadyQueues ks)//[((qdom, prio),q)] })
+
+> getReleaseQueue :: Kernel ReleaseQueue
+> getReleaseQueue = gets ksReleaseQueue
+
+> setReleaseQueue :: ReleaseQueue -> Kernel ()
+> setReleaseQueue releaseQueue = modify (\ks -> ks { ksReleaseQueue = releaseQueue })
 
 > getConsumedTime :: Kernel Time
 > getConsumedTime = gets ksConsumedTime
@@ -284,6 +293,7 @@ A new kernel state structure contains an empty physical address space, a set of 
 >         ksReadyQueuesL2Bitmap =
 >             funPartialArray (const 0)
 >                 ((0, 0), (fromIntegral numDomains, l2BitmapSize)),
+>         ksReleaseQueue = [],
 >         ksCurThread = error "No initial thread",
 >         ksIdleThread = error "Idle thread has not been created",
 >         ksReprogramTimer = False,

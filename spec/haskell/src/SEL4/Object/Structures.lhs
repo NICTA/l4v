@@ -160,7 +160,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 > objBitsKO (KOUserDataDevice) = pageBits
 > objBitsKO (KOKernelData) = pageBits
 > objBitsKO (KOArch a) = archObjSize a
-> objBitsKO (KOSchedContext _) = 4 -- FIXME LATER
+> objBitsKO (KOSchedContext _) = 8
 
 \subsubsection{Synchronous Endpoint}
 
@@ -191,15 +191,24 @@ list of pointers to waiting threads;
 
 \subsubsection{SchedContext Objects}
 
-TODO: Word or Word64
-
 > type Ticks = Word64
 > type Time = Word64
 
+> data Refill = Refill {
+>     rTime :: Time,
+>     rAmount :: Time }
+
 > data SchedContext = SchedContext {
->     scBudget :: Ticks,
->     scRemaining :: Ticks,
->     scTcb :: Maybe (PPtr TCB) }
+>     scPeriod :: Ticks,
+>     scTcb :: Maybe (PPtr TCB),
+>     scRefills :: [Refill],
+>     scRefillMax :: Int }
+
+> minRefills :: Int
+> minRefills = 2
+
+> maxRefills :: Int
+> maxRefills = 12
 
 \subsubsection{Notification Objects}
 

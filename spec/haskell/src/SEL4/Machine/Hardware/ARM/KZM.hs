@@ -101,6 +101,9 @@ timerFreq = 100
 timerLimit :: Word
 timerLimit = 1000000 `div` timerFreq
 
+getCurrentTime :: Ptr CallbackData -> IO Word64
+getCurrentTime = undefined
+
 setDeadline :: Ptr CallbackData -> Word64 -> IO ()
 setDeadline _ _ = undefined
 

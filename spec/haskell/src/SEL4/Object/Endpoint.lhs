@@ -13,7 +13,7 @@ This module specifies the contents and behaviour of a synchronous IPC endpoint.
 > module SEL4.Object.Endpoint (
 >         sendIPC, receiveIPC,
 >         replyFromKernel,
->         cancelIPC, cancelAllIPC, cancelBadgedSends
+>         cancelIPC, cancelAllIPC, cancelBadgedSends, epBlocked, reorderEp
 >     ) where
 
 \begin{impdetails}
@@ -68,7 +68,8 @@ If the endpoint is already in the sending state, and this is a blocking IPC oper
 >                     blockingIPCBadge = badge,
 >                     blockingIPCCanGrant = canGrant,
 >                     blockingIPCIsCall = call }) thread
->                 setEndpoint epptr $ SendEP $ queue ++ [thread]
+>                 qs' <- sortQueue $ queue ++ [thread]
+>                 setEndpoint epptr $ SendEP qs'
 
 A non-blocking IPC to an idle or sending endpoint will be silently dropped.
 
@@ -132,8 +133,9 @@ The IPC receive operation is essentially the same as the send operation, but wit
 >               True -> do
 >                   setThreadState (BlockedOnReceive {
 >                       blockingObject = epptr }) thread
->                   setEndpoint epptr $ RecvEP $ queue ++ [thread]
->               False -> doNBRecvFailedTransfer thread
+>                   qs' <- sortQueue $ queue ++ [thread]
+>                   setEndpoint epptr $ RecvEP $ qs'
+>               False -> doNBRecvFailedTransfer thread 
 >             SendEP (sender:queue) -> do
 >                 setEndpoint epptr $ case queue of
 >                     [] -> IdleEP
@@ -273,4 +275,28 @@ The following two functions are specialisations of "getObject" and
 > setEndpoint :: PPtr Endpoint -> Endpoint -> Kernel ()
 > setEndpoint = setObject
 
+> epBlocked :: ThreadState -> Maybe (PPtr Endpoint)
+> epBlocked ts = case ts of
+>     BlockedOnReceive r -> Just r
+>     BlockedOnSend r _ _ _ -> Just r
+>     _ -> Nothing
+
+> getEpQueue :: Endpoint -> Kernel [PPtr TCB]
+> getEpQueue ep =
+>     case ep of
+>         SendEP q -> return q
+>         RecvEP q -> return q
+>         _ -> fail "getEpQueue: endpoint must not be idle"
+
+> updateEpQueue :: Endpoint -> [PPtr TCB] -> Endpoint
+> updateEpQueue (RecvEP _) q' = RecvEP q'
+> updateEpQueue (SendEP _) q' = SendEP q'
+> updateEpQueue _ _ = IdleEP
+
+> reorderEp :: PPtr Endpoint -> Kernel ()
+> reorderEp epPtr = do
+>     ep <- getEndpoint epPtr
+>     qs <- getEpQueue ep
+>     qs' <- sortQueue qs
+>     setEndpoint epPtr (updateEpQueue ep qs')
 

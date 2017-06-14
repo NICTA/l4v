@@ -41,7 +41,7 @@ The following is the definition of the five object types that are always availab
 > ntfnSizeBits = wordSizeCase 4 5
 
 > scSizeBits :: Int
-> scSizeBits = 4 -- FIXME
+> scSizeBits = 8
 
 > cteSizeBits :: Int
 > cteSizeBits = wordSizeCase 4 5

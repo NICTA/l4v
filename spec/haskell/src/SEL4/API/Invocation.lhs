@@ -99,7 +99,9 @@ The following data type defines the set of possible TCB invocation operations. T
 > data SchedControlInvocation
 >         = InvokeSchedControlConfigure {
 >             configureScPtr :: PPtr SchedContext,
->             ticks :: Ticks }
+>             ticks1 :: Ticks,
+>             ticks2 :: Ticks,
+>             n :: Int }
 >         deriving Show
 
 \subsubsection{CNode Invocations}

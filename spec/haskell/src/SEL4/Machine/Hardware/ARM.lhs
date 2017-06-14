@@ -898,3 +898,8 @@ TODO: Check the value later. Maybe it is 1
 > usToTicks :: Word64 -> Word64
 > usToTicks _ = undefined
 
+> getCurrentTime :: MachineMonad Word64
+> getCurrentTime = do
+>     cbptr <- ask
+>     liftIO $ Platform.getCurrentTime cbptr
+

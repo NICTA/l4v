@@ -107,6 +107,9 @@ timerLimit = 1000000 `div` timerFreq
 setDeadline :: Ptr CallbackData -> Word64 -> IO ()
 setDeadline _ _ = undefined
 
+getCurrentTime :: Ptr CallbackData -> IO Word64
+getCurrentTime = undefined
+
 initIRQController :: Ptr CallbackData -> IO ()
 initIRQController env = callGICApi gicdata $ GIC.initIRQController
   where gicdata = GicState { env = env,

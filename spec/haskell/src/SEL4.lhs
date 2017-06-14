@@ -26,10 +26,10 @@ This is the top-level module; it defines the interface between the kernel and th
 > import SEL4.API.Types
 > import SEL4.Kernel.CSpace(lookupCap)
 > import SEL4.Kernel.Thread(schedule, activateThread)
-> import SEL4.Model.StateData(KernelState, Kernel, getCurThread, doMachineOp, getCurSc)
+> import SEL4.Model.StateData(KernelState, Kernel, getCurThread, doMachineOp)
 > import SEL4.Model.Preemption(withoutPreemption)
 > import SEL4.Object.Structures
-> import SEL4.Object.TCB(asUser, commitTime, checkReschedule)
+> import SEL4.Object.TCB(asUser, commitTime, checkBudget)
 > import SEL4.Object.Interrupt(handleInterrupt)
 > import Control.Monad.Error
 > import Data.Maybe
@@ -47,9 +47,8 @@ faults, and system calls; the set of possible events is defined in
 >         `catchError` (\_ -> withoutPreemption $ do 
 >                       irq <- doMachineOp (getActiveIRQ True)
 >                       when (isJust irq) $ do
->                           sc <- getCurSc
->                           commitTime sc
->                           checkReschedule
+>                           commit <- checkBudget
+>                           when commit commitTime
 >                           handleInterrupt (fromJust irq))
 >     schedule
 >     activateThread

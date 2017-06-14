@@ -226,9 +226,9 @@ There are three possible states for a notification:
 
 >         | ActiveNtfn { ntfnMsgIdentifier :: Word }
 
-\item or waiting for one or more send operations to complete, with a list of  pointers to the waiting threads;
+\item or waiting for one or more send operations to complete, with a list of pointers to the waiting threads;
 
->         | WaitingNtfn { ntfnQueue :: [PPtr TCB] }
+>         | WaitingNtfn { waitingNtfnQueue :: [PPtr TCB] }
 >     deriving Show
 
 > data Notification = NTFN {
@@ -505,5 +505,6 @@ Various operations on the free index of an Untyped cap.
 >         startPtr = getFreeRef (capPtr cap) (capFreeIndex cap)
 >         endPtr = capPtr cap + PPtr (2 ^ capBlockSize cap) - 1
 > untypedZeroRange _ = Nothing
+
 
 

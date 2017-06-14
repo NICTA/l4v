@@ -409,29 +409,27 @@ The following function is used to alter a thread's domain.
 
 \subsubsection{Changing a Thread's Priority}
 
+> threadSetPriority :: PPtr TCB -> Priority -> Kernel ()
+> threadSetPriority tptr prio = threadSet (\tcb -> tcb { tcbPriority = prio }) tptr
+
 The following function is used to alter the priority of a thread.
 
 > setPriority :: PPtr TCB -> Priority -> Kernel ()
 > setPriority tptr prio = do
-
-The thread must be removed from the old priority's queue, if it is queued.
-
->         tcbSchedDequeue tptr
-
-Then, the new priority can be set.
-
->         threadSet (\t -> t { tcbPriority = prio }) tptr
-
-If the thread is runnable, it is enqueued at the new priority.
-
->         runnable <- isRunnable tptr
->         when runnable $ tcbSchedEnqueue tptr
-
-Finally, if the thread is the current one, we run the scheduler to choose a new thread.
-
->         curThread <- getCurThread
->         when (tptr == curThread) $ rescheduleRequired
-
+>     tcbSchedDequeue tptr
+>     threadSetPriority tptr prio
+>     ts <- getThreadState tptr
+>     runnable <- isRunnable tptr
+>     when runnable $ do
+>         tcbSchedEnqueue tptr
+>         cur <- getCurThread
+>         when (tptr == cur) rescheduleRequired
+>         case (epBlocked ts) of
+>             Just ep -> reorderEp ep
+>             _ -> return ()
+>         case (ntfnBlocked ts) of
+>             Just ntfn -> reorderNtfn ntfn
+>             _ -> return ()
 
 \subsubsection{Switching to Woken Threads}
 

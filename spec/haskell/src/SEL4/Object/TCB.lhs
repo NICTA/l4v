@@ -32,13 +32,13 @@ This module uses the C preprocessor to select a target architecture.
 >         archThreadSet, archThreadGet,
 >         decodeSchedContextInvocation, decodeSchedControlInvocation,
 >         checkBudget, scAndTimer,
->         checkBudgetRestart, commitTime, awaken
+>         checkBudgetRestart, commitTime, awaken, sortQueue
 >     ) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.API.Types SEL4.API.Failures SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Invocation #-}
-% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB setupCallerCap getThreadCallerSlot getThreadReplySlot getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget #-}
+% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB setupCallerCap getThreadCallerSlot getThreadReplySlot getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget sortQueue #-}
 
 > import SEL4.Config (numDomains, timeArgSize)
 > import SEL4.API.Types
@@ -60,7 +60,8 @@ This module uses the C preprocessor to select a target architecture.
 > import {-# SOURCE #-} SEL4.Kernel.VSpace
 
 > import Data.Bits
-> import Data.List(genericTake, genericLength)
+> import Data.Function(on)
+> import Data.List(genericTake, genericLength, sortBy)
 > import Data.Maybe
 > import Data.WordLib
 > import Control.Monad.State(runState)
@@ -1009,4 +1010,9 @@ NB: the argument order is different from the abstract spec.
 >             else do
 >                 tcbSchedAppend t
 >                 switchIfRequiredTo t) rq1
+
+> sortQueue :: [PPtr TCB] -> Kernel [PPtr TCB]
+> sortQueue qs = do
+>     prios <- mapM (threadGet tcbPriority) qs
+>     return $ map snd $ sortBy (compare `on` fst) (zip prios qs)
 

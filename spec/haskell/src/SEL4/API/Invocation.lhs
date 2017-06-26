@@ -39,8 +39,8 @@ The following type can specify any kernel object invocation. It contains physica
 > data Invocation
 >         = InvokeUntyped UntypedInvocation
 >         | InvokeEndpoint (PPtr Endpoint) Word Bool
->         | InvokeNotification (PPtr Notification) Word
->         | InvokeReply (PPtr TCB) (PPtr CTE)
+>         | InvokeNotification (PPtr Notification) Word 
+>         | InvokeReply (PPtr Reply)
 >         | InvokeDomain (PPtr TCB) Domain
 >         | InvokeTCB TCBInvocation
 >         | InvokeSchedContext SchedContextInvocation
@@ -120,8 +120,6 @@ The following data type defines the set of possible CNode invocation operations.
 >             moveCap :: Capability,
 >             sourceSlot, targetSlot :: PPtr CTE }
 >         | CancelBadgedSends { epCap :: Capability }
->         | SaveCaller {
->             targetSlot :: PPtr CTE }
 >         | Delete { targetSlot :: PPtr CTE }
 >         deriving Show
 

@@ -56,7 +56,6 @@ The following type enumerates all the kinds of invocations that clients can requ
 >         | CNodeMove
 >         | CNodeMutate
 >         | CNodeRotate
->         | CNodeSaveCaller
 >         | IRQIssueIRQHandler
 >         | IRQAckIRQ
 >         | IRQSetIRQHandler
@@ -98,19 +97,18 @@ The following type enumerates all the kinds of invocations that clients can requ
 >          CNodeMove -> 20
 >          CNodeMutate -> 21
 >          CNodeRotate -> 22
->          CNodeSaveCaller -> 23
->          IRQIssueIRQHandler -> 24
->          IRQAckIRQ -> 25
->          IRQSetIRQHandler -> 26
->          IRQClearIRQHandler -> 27
->          TCBSetSchedContext -> 28
->          SchedControlConfigure -> 29
->          SchedContextBind -> 30
->          SchedContextUnbind -> 31
->          SchedContextUnbindObject -> 32
+>          IRQIssueIRQHandler -> 23
+>          IRQAckIRQ -> 24
+>          IRQSetIRQHandler -> 25
+>          IRQClearIRQHandler -> 26
+>          TCBSetSchedContext -> 27
+>          SchedControlConfigure -> 28
+>          SchedContextBind -> 29
+>          SchedContextUnbind -> 30
+>          SchedContextUnbindObject -> 31
 >          DomainSetSet -> apiMax
 >          ArchInvocationLabel a -> apiMax + 1 + fromEnum a
->          where apiMax = 33
+>          where apiMax = 32
 >     toEnum n
 >         | n == 0 = InvalidInvocation
 >         | n == 1 = UntypedRetype
@@ -135,20 +133,19 @@ The following type enumerates all the kinds of invocations that clients can requ
 >         | n == 20 = CNodeMove
 >         | n == 21 = CNodeMutate
 >         | n == 22 = CNodeRotate
->         | n == 23 = CNodeSaveCaller
->         | n == 24 = IRQIssueIRQHandler
->         | n == 25 = IRQAckIRQ
->         | n == 26 = IRQSetIRQHandler
->         | n == 27 = IRQClearIRQHandler
->         | n == 28 = TCBSetSchedContext
->         | n == 29 = SchedControlConfigure
->         | n == 30 = SchedContextBind
->         | n == 31 = SchedContextUnbind
->         | n == 32 = SchedContextUnbindObject
->         | n == 33 = DomainSetSet
+>         | n == 23 = IRQIssueIRQHandler
+>         | n == 24 = IRQAckIRQ
+>         | n == 25 = IRQSetIRQHandler
+>         | n == 26 = IRQClearIRQHandler
+>         | n == 27 = TCBSetSchedContext
+>         | n == 28 = SchedControlConfigure
+>         | n == 29 = SchedContextBind
+>         | n == 30 = SchedContextUnbind
+>         | n == 31 = SchedContextUnbindObject
+>         | n == 32 = DomainSetSet
 >         | n > apiMax = ArchInvocationLabel $ toEnum (n - 1 - apiMax)
 >         | otherwise = error "toEnum out of range for InvocationLabel"
->         where apiMax = 33
+>         where apiMax = 32
 
 Decode the invocation type requested by a particular message label.
 

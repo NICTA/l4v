@@ -70,8 +70,7 @@ This is the type used to represent a capability.
 >         | ArchObjectCap {
 >             capCap :: ArchCapability }
 >         | ReplyCap {
->             capTCBPtr :: PPtr TCB,
->             capReplyMaster :: Bool }
+>             capReplyPtr :: PPtr Reply }
 >         | UntypedCap {
 >             capIsDevice :: Bool,
 >             capPtr :: PPtr (),
@@ -137,9 +136,10 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 >     | KOCTE       CTE
 >     | KOArch      ArchKernelObject
 >     | KOSchedContext SchedContext
+>     | KOReply Reply
 
 > kernelObjectTypeName :: KernelObject -> String
-> kernelObjectTypeName o =
+> kernelObjectTypeName o = 
 >     case o of
 >         KOEndpoint   _ -> "Endpoint"
 >         KONotification  _ -> "Notification"
@@ -150,6 +150,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 >         KOCTE        _ -> "CTE"
 >         KOArch       _ -> "Arch Specific"
 >         KOSchedContext _ -> "SchedContext"
+>         KOReply _ -> "Reply"
 
 > objBitsKO :: KernelObject -> Int
 > objBitsKO (KOEndpoint _) = epSizeBits
@@ -161,6 +162,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 > objBitsKO (KOKernelData) = pageBits
 > objBitsKO (KOArch a) = archObjSize a
 > objBitsKO (KOSchedContext _) = 8
+> objBitsKO (KOReply _) = 4
 
 \subsubsection{Synchronous Endpoint}
 
@@ -202,7 +204,12 @@ list of pointers to waiting threads;
 >     scPeriod :: Ticks,
 >     scTcb :: Maybe (PPtr TCB),
 >     scRefills :: [Refill],
->     scRefillMax :: Int }
+>     scRefillMax :: Int,
+>     scReplies :: [PPtr Reply] }
+
+> data Reply = Reply {
+>     replyCaller :: Maybe (PPtr TCB),
+>     replySc :: Maybe (PPtr SchedContext) }
 
 > minRefills :: Int
 > minRefills = 2
@@ -265,14 +272,6 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbVTable :: CTE,
 
-\item a slot containing the thread's reply capability, which is never accessed directly in this slot but is used as the MDB parent of the capability generated when this thread performs a "Call";
-
->         tcbReply :: CTE,
-
-\item a slot that may contain the reply capability of the thread that sent the most recent IPC received by this thread, and is otherwise always empty;
-
->         tcbCaller :: CTE,
-
 \item a slot that may contain a capability to the frame used for the thread's IPC buffer;
 
 >         tcbIPCBufferFrame :: CTE,
@@ -304,13 +303,15 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbBoundNotification :: Maybe (PPtr Notification),
 
-\item any arch-specific TCB contents;
-
->         tcbArch :: ArchTCB,
-
 \item and the thread's schedule context object
 
->         tcbSchedContext :: Maybe (PPtr SchedContext) }
+>         tcbSchedContext :: Maybe (PPtr SchedContext),
+
+>         tcbReply :: Maybe (PPtr Reply),
+
+\item any arch-specific TCB contents;
+
+>         tcbArch :: ArchTCB }
 
 >     deriving Show
 
@@ -388,7 +389,8 @@ A user thread may be in the following states:
 \item blocked on a synchronous IPC send or receive (which require the presence of additional data about the operation);
 
 >     = BlockedOnReceive {
->         blockingObject :: PPtr Endpoint }
+>         blockingObject :: PPtr Endpoint,
+>         replyObject :: Maybe (PPtr Reply) }
 
 \item blocked waiting for a reply to a previously sent message;
 
@@ -470,11 +472,11 @@ Each entry in the domain schedule specifies a domain and a length (a number of t
 > dschLength = snd
 
 > isReceive :: ThreadState -> Bool
-> isReceive (BlockedOnReceive _) = True
+> isReceive (BlockedOnReceive {}) = True
 > isReceive _ = False
 
 > isSend :: ThreadState -> Bool
-> isSend (BlockedOnSend _ _ _ _) = True
+> isSend (BlockedOnSend {}) = True
 > isSend _ = False
 
 > isReply :: ThreadState -> Bool

@@ -37,6 +37,7 @@ We use the C preprocessor to select a target architecture.
 > import SEL4.Object.Endpoint
 > import SEL4.Object.Notification
 > import SEL4.Object.Interrupt
+> import SEL4.Object.Reply
 > import {-# SOURCE #-} SEL4.Object.CNode
 > import {-# SOURCE #-} SEL4.Object.TCB
 > import {-# SOURCE #-} SEL4.Kernel.Thread
@@ -70,10 +71,6 @@ Untyped capabilities cannot be copied if they have children.
 >     ensureNoChildren slot
 >     return cap
 
-Reply capabilities cannot be copied; to ensure that the "Reply" system call is fast, there can never be more than one reply capability for a given thread.
-
-> deriveCap _ (ReplyCap {}) = return NullCap
-
 Architecture-specific capability types are handled in the relevant module.
 
 > deriveCap slot (ArchObjectCap cap) =
@@ -106,7 +103,9 @@ When the last capability to an endpoint is deleted, any IPC operations currently
 >         cancelAllSignals ptr
 >     return (NullCap, NullCap)
 
-> finaliseCap (ReplyCap {}) _ _ = return (NullCap, NullCap)
+> finaliseCap (ReplyCap { capReplyPtr = ptr }) final _ = do
+>     when final $ replyRemove ptr
+>     return (NullCap, NullCap)
 
 No action need be taken for Null or Domain capabilities.
 
@@ -135,6 +134,8 @@ Threads are treated as special capability nodes; they also become zombies when t
 > finaliseCap (SchedContextCap { capSchedContextPtr = sc }) final _ = do
 >     when final $ do
 >         schedContextUnbindAllTcbs sc
+>     when final $ do
+>         schedContextClearReplies sc
 >     return (NullCap, Nothing)
 
 > finaliseCap SchedControlCap _ _ = return (NullCap, Nothing)
@@ -216,7 +217,7 @@ This function assumes that its arguments are in MDB order.
 > sameRegionAs SchedControlCap SchedControlCap = True
 
 > sameRegionAs (a@ReplyCap {}) (b@ReplyCap {}) =
->     capTCBPtr a == capTCBPtr b
+>     capReplyPtr a == capReplyPtr b
 
 > sameRegionAs DomainCap     DomainCap     = True
 
@@ -238,7 +239,6 @@ This helper function to "sameRegionAs" checks that we have a physical capability
 > isPhysicalCap IRQControlCap = False
 > isPhysicalCap DomainCap = False
 > isPhysicalCap (IRQHandlerCap {}) = False
-> isPhysicalCap (ReplyCap {}) = False
 > isPhysicalCap SchedControlCap = False
 > isPhysicalCap (ArchObjectCap a) = Arch.isPhysicalCap a
 > isPhysicalCap _ = True
@@ -360,6 +360,9 @@ New threads are placed in the current security domain, which must be the domain 
 >         Just SchedContextObject -> do
 >             placeNewObject regionBase (makeObject :: SchedContext) 0
 >             return $! SchedContextCap (PPtr $ fromPPtr regionBase)
+>         Just ReplyObject -> do
+>             placeNewObject regionBase (makeObject :: Reply) 0
+>             return $! ReplyCap (PPtr $ fromPPtr regionBase)
 >         Just CapTableObject -> do
 >             placeNewObject (PPtr $ fromPPtr regionBase) (makeObject :: CTE) userSize
 >             modify (\ks -> ks { gsCNodes =
@@ -388,8 +391,8 @@ The "decodeInvocation" function parses the message, determines the operation tha
 > decodeInvocation _ _ _ _ cap@(NotificationCap {capNtfnCanSend=True}) _ = do
 >     return $ InvokeNotification (capNtfnPtr cap) (capNtfnBadge cap)
 >
-> decodeInvocation _ _ _ slot cap@(ReplyCap {capReplyMaster=False}) _ = do
->     return $ InvokeReply (capTCBPtr cap) slot
+> decodeInvocation _ _ _ _ (ReplyCap reply) _ = do
+>     return $ InvokeReply reply
 >
 > decodeInvocation
 >         label args _ slot cap@(ThreadCap {}) extraCaps =
@@ -433,54 +436,56 @@ The "invoke" function performs the operation itself. It cannot throw faults, but
 
 This function just dispatches invocations to the type-specific invocation functions.
 
-> performInvocation :: Bool -> Bool -> Invocation -> KernelP [Word]
->
-> performInvocation _ _ (InvokeUntyped invok) = do
+> performInvocation :: Bool -> Bool -> Bool -> Invocation -> KernelP [Word]
+> 
+> performInvocation _ _ _ (InvokeUntyped invok) = do
 >     invokeUntyped invok
 >     return $! []
->
-> performInvocation block call (InvokeEndpoint ep badge canGrant) =
+> 
+> performInvocation block call canDonate (InvokeEndpoint ep badge canGrant) =
 >   withoutPreemption $ do
 >     thread <- getCurThread
->     sendIPC block call badge canGrant thread ep
+>     sendIPC block call badge canGrant canDonate thread ep
+>     return $! []
+> 
+> performInvocation _ _ _ (InvokeNotification ep badge) = do
+>     withoutPreemption $ sendSignal ep badge 
 >     return $! []
 >
-> performInvocation _ _ (InvokeNotification ep badge) = do
->     withoutPreemption $ sendSignal ep badge
->     return $! []
->
-> performInvocation _ _ (InvokeReply thread slot) = withoutPreemption $ do
+> performInvocation _ _ _ (InvokeReply reply) = withoutPreemption $ do
 >     sender <- getCurThread
->     doReplyTransfer sender thread slot
+>     doReplyTransfer sender reply
 >     return $! []
 >
-> performInvocation _ _ (InvokeTCB invok) = invokeTCB invok
+> performInvocation _ _ _ (InvokeTCB invok) = invokeTCB invok
 >
-> performInvocation _ _ (InvokeDomain thread domain) = withoutPreemption $ do
+> performInvocation _ _ _ (InvokeDomain thread domain) = withoutPreemption $ do
 >     setDomain thread domain
 >     return $! []
->
-> performInvocation _ _ (InvokeCNode invok) = do
+> 
+> performInvocation _ _ _ (InvokeCNode invok) = do
 >     invokeCNode invok
 >     return $! []
->
-> performInvocation _ _ (InvokeIRQControl invok) = do
+> 
+> performInvocation _ _ _ (InvokeIRQControl invok) = do
 >     performIRQControl invok
 >     return $! []
->
-> performInvocation _ _ (InvokeIRQHandler invok) = do
+> 
+> performInvocation _ _ _ (InvokeIRQHandler invok) = do
 >     withoutPreemption $ invokeIRQHandler invok
 >     return $! []
 > 
-> performInvocation _ _ (InvokeSchedContext invok) = do
+
+> performInvocation _ _ _ (InvokeSchedContext invok) = do
 >     withoutPreemption $ ignoreFailure (invokeSchedContext invok)
 >     return $! []
 >
-> performInvocation _ _ (InvokeSchedControl invok) = do
+
+> performInvocation _ _ _ (InvokeSchedControl invok) = do
 >     withoutPreemption $ ignoreFailure (invokeSchedControlConfigure invok)
 >     return $! []
 >
-> performInvocation _ _ (InvokeArchObject invok) = Arch.performInvocation invok
+> performInvocation _ _ _ (InvokeArchObject invok) = Arch.performInvocation invok
 
 \subsection{Helper Functions}
 
@@ -491,7 +496,7 @@ The following two functions returns the base and size of the object a capability
 > capUntypedPtr (UntypedCap { capPtr = p }) = p
 > capUntypedPtr (EndpointCap { capEPPtr = PPtr p }) = PPtr p
 > capUntypedPtr (NotificationCap { capNtfnPtr = PPtr p }) = PPtr p
-> capUntypedPtr (ReplyCap { capTCBPtr = PPtr p }) = PPtr p
+> capUntypedPtr (ReplyCap { capReplyPtr = PPtr p }) = PPtr p
 > capUntypedPtr (CNodeCap { capCNodePtr = PPtr p }) = PPtr p
 > capUntypedPtr (ThreadCap { capTCBPtr = PPtr p }) = PPtr p
 > capUntypedPtr (SchedContextCap { capSchedContextPtr = PPtr p }) = PPtr p
@@ -515,7 +520,7 @@ The following two functions returns the base and size of the object a capability
 >     = 1 `shiftL` objBits (undefined::TCB)
 > capUntypedSize (SchedContextCap {})
 >     = 1 `shiftL` objBits (undefined::SchedContext)
-> capUntypedSize SchedControlCap = 1
+> capUntypedSize SchedControlCap = 1 -- error in haskell
 > capUntypedSize (DomainCap {})
 >     = 1 -- error in haskell
 > capUntypedSize (ArchObjectCap a)
@@ -525,7 +530,7 @@ The following two functions returns the base and size of the object a capability
 > capUntypedSize (Zombie { capZombieType = ZombieCNode sz })
 >     = 1 `shiftL` (objBits (undefined::CTE) + sz)
 > capUntypedSize (ReplyCap {})
->     = 1 `shiftL` objBits (undefined::TCB) -- error in haskell
+>     = 1 `shiftL` objBits (undefined::Reply)
 > capUntypedSize (IRQControlCap {})
 >     = 1 -- error in haskell
 > capUntypedSize (IRQHandlerCap {})

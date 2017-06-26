@@ -27,6 +27,7 @@ The following is the definition of the five object types that are always availab
 >         | NotificationObject
 >         | CapTableObject
 >         | SchedContextObject
+>         | ReplyObject
 >         deriving (Enum, Bounded, Eq, Show)
 
 %FIXME: TCB size is now possibly arch-dependent
@@ -46,6 +47,9 @@ The following is the definition of the five object types that are always availab
 > cteSizeBits :: Int
 > cteSizeBits = wordSizeCase 4 5
 
+> replySizeBits :: Int
+> replySizeBits = 4
+
 > apiGetObjectSize :: APIObjectType -> Int -> Int
 > apiGetObjectSize Untyped size = size
 > apiGetObjectSize TCBObject _ = tcbBlockSizeBits
@@ -53,6 +57,7 @@ The following is the definition of the five object types that are always availab
 > apiGetObjectSize NotificationObject _ = ntfnSizeBits
 > apiGetObjectSize CapTableObject size = cteSizeBits + size
 > apiGetObjectSize SchedContextObject _ = scSizeBits
+> apiGetObjectSize ReplyObject _ = replySizeBits
 
 
 

@@ -18,7 +18,8 @@ This module specifies the behavior of schedule context objects.
 >         refillHd, minBudget, minBudgetUs, refillCapacity, refillBudgetCheck,
 >         refillSplitCheck, isCurDomainExpired, refillUnblockCheck,
 >         refillReadyTcb, refillReady, tcbReleaseEnqueue,
->         guardedSwitchTo, refillSufficient, postpone
+>         guardedSwitchTo, refillSufficient, postpone, replyUnbindSc,
+>         schedContextDonate, schedContextClearReplies
 >     ) where
 
 \begin{impdetails}
@@ -29,11 +30,13 @@ This module specifies the behavior of schedule context objects.
 > import SEL4.Model.Failures(KernelF, withoutFailure)
 > import SEL4.Model.PSpace(getObject, setObject)
 > import SEL4.Model.StateData
+> import {-# SOURCE #-} SEL4.Object.Reply
 > import SEL4.Object.Structures
 > import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet)
 > import {-# SOURCE #-} SEL4.Kernel.Thread
 > import SEL4.API.Invocation(SchedContextInvocation(..), SchedControlInvocation(..))
 
+> import Data.List(delete)
 > import Data.Word(Word64)
 > import Data.Maybe
 > import qualified Data.Foldable as Foldable
@@ -272,6 +275,9 @@ TODO: refills'' or refills'?
 >     setSchedContext scPtr $ sc { scTcb = Just tcbPtr }
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
 >     schedContextResume (Just scPtr)
+>     inq <- inReleaseQueue tcbPtr
+>     sched <- isSchedulable tcbPtr inq
+>     when sched $ switchIfRequiredTo tcbPtr
 
 > schedContextUnbind :: PPtr SchedContext -> Kernel ()
 > schedContextUnbind scPtr = do
@@ -284,6 +290,26 @@ TODO: refills'' or refills'?
 >     threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) tptr
 >     cur <- getCurThread
 >     when (tptr == cur) $ rescheduleRequired
+
+> schedContextDonate :: PPtr SchedContext -> PPtr TCB -> Kernel ()
+> schedContextDonate scPtr tcbPtr = do
+>     sc <- getSchedContext scPtr
+>     fromOpt <- return $ scTcb sc
+>     when (fromOpt /= Nothing) $ schedContextUnbind scPtr
+>     setSchedContext scPtr (sc { scTcb = Just tcbPtr })
+>     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
+
+> replyUnbindSc :: PPtr SchedContext -> PPtr Reply -> Kernel ()
+> replyUnbindSc scPtr replyPtr = do
+>     sc <- getSchedContext scPtr
+>     reply <- getReply replyPtr
+>     setReply replyPtr (reply { replySc = Nothing })
+>     setSchedContext scPtr (sc { scReplies = delete replyPtr (scReplies sc) })
+
+> schedContextClearReplies :: PPtr SchedContext -> Kernel ()
+> schedContextClearReplies scPtr = do
+>     replies <- liftM scReplies $ getSchedContext scPtr
+>     mapM_ (replyUnbindSc scPtr) replies
 
 > schedContextUnbindAllTcbs :: PPtr SchedContext -> Kernel ()
 > schedContextUnbindAllTcbs scPtr = do
@@ -316,6 +342,7 @@ TODO: refills'' or refills'?
 >                 then do
 >                     refillUpdate scPtr period budget mRefills
 >                     schedContextResume (Just scPtr)
+>                     switchIfRequiredTo tptr
 >                 else
 >                     refillNew scPtr mRefills budget period
 
@@ -375,4 +402,3 @@ TODO: refills'' or refills'?
 >     sched <- isSchedulable tptr inq
 >     assert sched "guardedSwitchTo: thread must be schedulable"
 >     switchToThread tptr
-

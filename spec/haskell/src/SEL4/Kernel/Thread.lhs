@@ -23,7 +23,7 @@ We use the C preprocessor to select a target architecture.
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.Model SEL4.Machine SEL4.Object.Structures SEL4.Object.Instances() SEL4.API.Types #-}
-% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired scheduleTcb isSchedulable endTimeSlice inReleaseQueue tcbReleaseRemove tcbSchedAppend switchToThread #-}
+% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired scheduleTcb isSchedulable endTimeSlice inReleaseQueue tcbReleaseRemove tcbSchedAppend switchToThread possibleSwitchTo #-}
 
 > import SEL4.Config
 > import SEL4.API.Types
@@ -31,6 +31,7 @@ We use the C preprocessor to select a target architecture.
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object
+> import SEL4.Object.Reply
 > import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Kernel.VSpace
@@ -68,7 +69,6 @@ The initial user-level thread has the right to change the security domains of ot
 > activateInitialThread threadPtr entry infoPtr = do
 >         asUser threadPtr $ setRegister capRegister $ fromVPtr infoPtr
 >         asUser threadPtr $ setNextPC $ fromVPtr entry
->         setupReplyMaster threadPtr
 >         setThreadState Running threadPtr
 >         setSchedulerAction ResumeCurrentThread
 >         idle <- getIdleThread
@@ -146,9 +146,10 @@ The invoked thread will return to the instruction that caused it to enter the ke
 >     scOpt <- threadGet tcbSchedContext target
 >     when blocked $ do
 >         cancelIPC target
->         setupReplyMaster target
 >         setThreadState Restart target
->         when (scOpt /= Nothing) $ schedContextResume scOpt
+>         assert (scOpt /= Nothing) "restart: scOpt must not be Nothing"
+>         schedContextResume scOpt
+>         switchIfRequiredTo target
 
 \subsection{IPC Transfers}
 
@@ -180,37 +181,29 @@ If the sent message is a fault IPC, the stored fault is transferred.
 
 Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IPC replies, or fault replies. In the former case, the transfer is the same as for an IPC send, but there is never a fault, capability grants are always allowed, the badge is always 0, and capabilities are never received with diminished rights (diminished rights are now removed).
 
-> doReplyTransfer :: PPtr TCB -> PPtr TCB -> PPtr CTE -> Kernel ()
-> doReplyTransfer sender receiver slot = do
->     state <- getThreadState receiver
->     assert (isReply state)
->         "Reply transfer to a thread that isn't listening"
->     mdbNode <- liftM cteMDBNode $ getCTE slot
->     assert (mdbPrev mdbNode /= nullPointer
->                 && mdbNext mdbNode == nullPointer)
->         "doReplyTransfer: ReplyCap not at end of MDB chain"
->     parentCap <- getSlotCap (mdbPrev mdbNode)
->     assert (isReplyCap parentCap && capReplyMaster parentCap)
->         "doReplyTransfer: ReplyCap parent not reply master"
->     fault <- threadGet tcbFault receiver
->     case fault of
->         Nothing -> do
->             doIPCTransfer sender Nothing 0 True receiver
->             cteDeleteOne slot
->             setThreadState Running receiver
->             attemptSwitchTo receiver
->         Just f -> do
->             cteDeleteOne slot
->             tag <- getMessageInfo sender
->             sendBuffer <- lookupIPCBuffer False sender
->             mrs <- getMRs sender sendBuffer tag
->             restart <- handleFaultReply f receiver (msgLabel tag) mrs
->             threadSet (\tcb -> tcb {tcbFault = Nothing}) receiver
->             if restart
->               then do
->                 setThreadState Restart receiver
->                 attemptSwitchTo receiver
->               else setThreadState Inactive receiver
+> doReplyTransfer :: PPtr TCB -> PPtr Reply -> Kernel ()
+> doReplyTransfer sender reply = do
+>     recvOpt <- getReplyCaller reply
+>     case recvOpt of
+>         Nothing -> return ()
+>         Just receiver -> do
+>             state <- getThreadState receiver
+>             assert (state == BlockedOnReply) "doReplyTransfer: thread state must be BlockedOnReply"
+>             replyRemove reply
+>             fault <- threadGet tcbFault receiver
+>             case fault of
+>                 Nothing -> do
+>                     doIPCTransfer sender Nothing 0 True receiver
+>                     setThreadState Running receiver
+>                     attemptSwitchTo receiver
+>                 Just f -> do
+>                     mi <- getMessageInfo sender
+>                     buf <- lookupIPCBuffer False sender
+>                     mrs <- getMRs sender buf mi
+>                     restart <- handleFaultReply f receiver (msgLabel mi) mrs
+>                     threadSet (\tcb -> tcb { tcbFault = Nothing }) receiver
+>                     setThreadState (if restart then Restart else Inactive) receiver
+>                     when restart $ attemptSwitchTo receiver
 
 \subsubsection{Ordinary IPC}
 
@@ -501,14 +494,10 @@ When setting the scheduler state, we check for blocking of the current thread; i
 TODO: Just a placeholder. It'll be changed in a later version.
 
 > setThreadState :: ThreadState -> PPtr TCB -> Kernel ()
-> setThreadState st tptr = do
->         threadSet (\t -> t { tcbState = st }) tptr
->         inq <- inReleaseQueue tptr
->         schedulable <- isSchedulable tptr inq
->         curThread <- getCurThread
->         action <- getSchedulerAction
->         when (not schedulable && curThread == tptr && action == ResumeCurrentThread) $
->             rescheduleRequired
+> setThreadState ts tptr = do
+>         tcb <- getObject tptr
+>         setObject tptr $ tcb { tcbState = ts }
+>         scheduleTcb tptr
 
 \subsubsection{Bound Notificaion objects}
 
@@ -617,7 +606,6 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 >             cur <- getCurThread
 >             tcbSchedAppend cur
 >         else postpone scPtr
->     rescheduleRequired
 
 > inReleaseQueue :: PPtr TCB -> Kernel Bool
 > inReleaseQueue tcbPtr = do

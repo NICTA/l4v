@@ -40,7 +40,7 @@ This module specifies the behavior of notification objects.
 > -- helper function
 > receiveBlocked :: ThreadState -> Bool
 > receiveBlocked st = case st of
->     BlockedOnReceive _ -> True
+>     BlockedOnReceive _ _ -> True
 >     _ -> False
 
 This function performs an signal operation, given a capability to a notification object, and a single machine word of message data (the badge). This operation will never block the signalling thread.
@@ -64,7 +64,6 @@ mark the notification object as active.
 >                         cancelIPC tcb
 >                         setThreadState Running tcb
 >                         asUser tcb $ setRegister badgeRegister badge
->                         switchIfRequiredTo tcb
 >                       else
 >                         setNotification ntfnPtr $ nTFN { ntfnObj = ActiveNtfn badge }
 >             (IdleNtfn, Nothing) -> setNotification ntfnPtr $ nTFN { ntfnObj = ActiveNtfn badge }
@@ -141,9 +140,9 @@ If a notification object is deleted, then pending receive operations must be can
 >         case ntfnObj ntfn of
 >             WaitingNtfn queue -> do
 >                 setNotification ntfnPtr (ntfn { ntfnObj = IdleNtfn })
->                 forM_ queue (\t -> do
+>                 mapM_ (\t -> do
 >                     setThreadState Restart t
->                     tcbSchedEnqueue t)
+>                     switchIfRequiredTo t) queue
 >                 rescheduleRequired
 >             _ -> return ()
 

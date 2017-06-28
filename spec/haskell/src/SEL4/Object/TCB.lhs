@@ -947,14 +947,16 @@ NB: the argument order is different from the abstract spec.
 > switchSchedContext = do
 >     curSc <- getCurSc
 >     curTh <- getCurThread
->     tcb <- getObject curTh
->     if (curSc /= fromJust (tcbSchedContext tcb))
+>     scOpt <- threadGet tcbSchedContext curTh
+>     assert (scOpt /= Nothing) "switchSchedContext: schedule context must not be Nothing"
+>     sc <- return $ fromJust scOpt
+>     if (sc /= curSc)
 >         then do
 >             setReprogramTimer True
 >             commitTime
->             refillUnblockCheck (fromJust (tcbSchedContext tcb))
+>             refillUnblockCheck sc
 >         else rollbackTime
->     setCurSc (fromJust (tcbSchedContext tcb))
+>     setCurSc sc
 
 > scAndTimer :: Kernel ()
 > scAndTimer = do

@@ -40,7 +40,7 @@ We use the C preprocessor to select a target architecture.
 > import Data.Bits
 > import Data.Array
 > import Data.WordLib
-
+> import Data.Maybe(fromJust)
 > import Data.Set(fromList, member)
 
 \end{impdetails}
@@ -148,7 +148,7 @@ The invoked thread will return to the instruction that caused it to enter the ke
 >         cancelIPC target
 >         setThreadState Restart target
 >         assert (scOpt /= Nothing) "restart: scOpt must not be Nothing"
->         schedContextResume scOpt
+>         schedContextResume (fromJust scOpt)
 >         switchIfRequiredTo target
 
 \subsection{IPC Transfers}

@@ -541,7 +541,7 @@ TODO: Just a placeholder. It'll be changed in a later version.
 > setThreadState ts tptr = do
 >         tcb <- getObject tptr
 >         setObject tptr $ tcb { tcbState = ts }
->         scheduleTcb tptr
+>         scheduleTCB tptr
 
 \subsubsection{Bound Notificaion objects}
 

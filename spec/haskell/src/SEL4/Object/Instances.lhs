@@ -48,8 +48,8 @@ The following are the instances of "Storable" for the four main types of kernel 
 
 \subsubsection{Notification objects}
 
-> instance PSpaceStorable Notification where
->     makeObject = NTFN IdleNtfn Nothing
+> instance PSpaceStorable Notification where 
+>     makeObject = NTFN IdleNtfn Nothing Nothing
 >     injectKO   = KONotification
 >     projectKO o = case o of
 >         KONotification e -> return e
@@ -58,7 +58,7 @@ The following are the instances of "Storable" for the four main types of kernel 
 \subsubsection{SchedContext objects}
 
 > instance PSpaceStorable SchedContext where
->     makeObject = SchedContext 0 Nothing [Refill 0 0] 0 []
+>     makeObject = SchedContext 0 Nothing Nothing [Refill 0 0] 0 []
 >     injectKO   = KOSchedContext
 >     projectKO o = case o of
 >         KOSchedContext e -> return e

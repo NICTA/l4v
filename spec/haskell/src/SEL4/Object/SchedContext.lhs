@@ -11,15 +11,17 @@
 This module specifies the behavior of schedule context objects.
 
 > module SEL4.Object.SchedContext (
->         schedContextUnbindAllTcbs, unbindFromSc, invokeSchedContext,
+>         schedContextUnbindAllTCBs, unbindFromSc, invokeSchedContext,
 >         invokeSchedControlConfigure, getSchedContext,
->         schedContextUnbind, schedContextBind, schedContextResume,
+>         schedContextUnbindTCB, schedContextBindTCB, schedContextResume,
 >         setSchedContext, updateTimeStamp, commitTime, rollbackTime,
 >         refillHd, minBudget, minBudgetUs, refillCapacity, refillBudgetCheck,
 >         refillSplitCheck, isCurDomainExpired, refillUnblockCheck,
->         refillReadyTcb, refillReady, tcbReleaseEnqueue,
+>         refillReadyTCB, refillReady, tcbReleaseEnqueue,
 >         guardedSwitchTo, refillSufficient, postpone, replyUnbindSc,
->         schedContextDonate, schedContextClearReplies
+>         schedContextDonate, schedContextClearReplies,
+>         maybeDonateSc, maybeReturnSc,
+>         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn
 >     ) where
 
 \begin{impdetails}
@@ -30,6 +32,7 @@ This module specifies the behavior of schedule context objects.
 > import SEL4.Model.Failures(KernelF, withoutFailure)
 > import SEL4.Model.PSpace(getObject, setObject)
 > import SEL4.Model.StateData
+> import {-# SOURCE #-} SEL4.Object.Notification
 > import {-# SOURCE #-} SEL4.Object.Reply
 > import SEL4.Object.Structures
 > import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet)
@@ -50,11 +53,10 @@ This module specifies the behavior of schedule context objects.
 > minBudgetUs :: Word64
 > minBudgetUs = 2 * kernelWCETUs
 
-> getTcbSc :: PPtr TCB -> Kernel SchedContext
-> getTcbSc tcbPtr = do
->     tcb <- getObject tcbPtr
->     scOpt <- return $ tcbSchedContext tcb
->     assert (scOpt /= Nothing) "SchedContext pointer must not be Nothing"
+> getTCBSc :: PPtr TCB -> Kernel SchedContext
+> getTCBSc tcbPtr = do
+>     scOpt <- threadGet tcbSchedContext tcbPtr
+>     assert (scOpt /= Nothing) "getTCBSc: SchedContext pointer must not be Nothing" 
 >     getSchedContext $ fromJust scOpt
 
 > refillHd :: SchedContext -> Refill
@@ -62,7 +64,7 @@ This module specifies the behavior of schedule context objects.
 
 > getScTime :: PPtr TCB -> Kernel Time
 > getScTime tcbPtr = do
->     sc <- getTcbSc tcbPtr
+>     sc <- getTCBSc tcbPtr
 >     return $ rTime (refillHd sc)
 
 > tcbReleaseEnqueue :: PPtr TCB -> Kernel ()
@@ -245,8 +247,8 @@ TODO: refills'' or refills'?
 > postpone :: PPtr SchedContext -> Kernel ()
 > postpone scPtr = do
 >     sc <- getSchedContext scPtr
->     tptrOpt <- return $ scTcb sc
->     assert (tptrOpt /= Nothing) "postpone: scTcb must not be Nothing"
+>     tptrOpt <- return $ scTCB sc
+>     assert (tptrOpt /= Nothing) "postpone: scTCB must not be Nothing"
 >     tptr <- return $ fromJust tptrOpt
 >     tcbSchedDequeue tptr
 >     tcbReleaseEnqueue tptr
@@ -257,8 +259,8 @@ TODO: refills'' or refills'?
 >     Nothing -> return ()
 >     Just scPtr -> do
 >         sc <- getSchedContext scPtr
->         tptrOpt <- return $ scTcb sc
->         assert (tptrOpt /= Nothing) "schedContextResume: scTcb must not be Nothing"
+>         tptrOpt <- return $ scTCB sc
+>         assert (tptrOpt /= Nothing) "schedContextResume: scTCB must not be Nothing"
 >         tptr <- return $ fromJust tptrOpt
 >         inRlsQueue <- inReleaseQueue tptr
 >         sched <- isSchedulable tptr inRlsQueue
@@ -269,21 +271,21 @@ TODO: refills'' or refills'?
 >             runnable <- isRunnable tptr
 >             when (runnable && 0 < scRefillMax sc && not (ready && sufficient)) $ postpone scPtr
 
-> schedContextBind :: PPtr SchedContext -> PPtr TCB -> Kernel ()
-> schedContextBind scPtr tcbPtr = do
+> schedContextBindTCB :: PPtr SchedContext -> PPtr TCB -> Kernel ()
+> schedContextBindTCB scPtr tcbPtr = do
 >     sc <- getSchedContext scPtr
->     setSchedContext scPtr $ sc { scTcb = Just tcbPtr }
+>     setSchedContext scPtr $ sc { scTCB = Just tcbPtr }
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
 >     schedContextResume (Just scPtr)
 >     inq <- inReleaseQueue tcbPtr
 >     sched <- isSchedulable tcbPtr inq
 >     when sched $ switchIfRequiredTo tcbPtr
 
-> schedContextUnbind :: PPtr SchedContext -> Kernel ()
-> schedContextUnbind scPtr = do
+> schedContextUnbindTCB :: PPtr SchedContext -> Kernel ()
+> schedContextUnbindTCB scPtr = do
 >     sc <- getSchedContext scPtr
->     tptrOpt <- return $ scTcb sc
->     assert (tptrOpt /= Nothing) "schedContextUnbind: scTcb must not be Nothing"
+>     tptrOpt <- return $ scTCB sc
+>     assert (tptrOpt /= Nothing) "schedContextUnbind: scTCB must not be Nothing"
 >     tptr <- return $ fromJust tptrOpt
 >     tcbSchedDequeue tptr
 >     tcbReleaseRemove tptr
@@ -294,9 +296,9 @@ TODO: refills'' or refills'?
 > schedContextDonate :: PPtr SchedContext -> PPtr TCB -> Kernel ()
 > schedContextDonate scPtr tcbPtr = do
 >     sc <- getSchedContext scPtr
->     fromOpt <- return $ scTcb sc
->     when (fromOpt /= Nothing) $ schedContextUnbind scPtr
->     setSchedContext scPtr (sc { scTcb = Just tcbPtr })
+>     fromOpt <- return $ scTCB sc
+>     when (fromOpt /= Nothing) $ schedContextUnbindTCB scPtr
+>     setSchedContext scPtr (sc { scTCB = Just tcbPtr })
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
 
 > replyUnbindSc :: PPtr SchedContext -> PPtr Reply -> Kernel ()
@@ -311,30 +313,40 @@ TODO: refills'' or refills'?
 >     replies <- liftM scReplies $ getSchedContext scPtr
 >     mapM_ (replyUnbindSc scPtr) replies
 
-> schedContextUnbindAllTcbs :: PPtr SchedContext -> Kernel ()
-> schedContextUnbindAllTcbs scPtr = do
+> schedContextUnbindAllTCBs :: PPtr SchedContext -> Kernel ()
+> schedContextUnbindAllTCBs scPtr = do
 >     sc <- getSchedContext scPtr
->     when (scTcb sc /= Nothing) $ schedContextUnbind scPtr
+>     when (scTCB sc /= Nothing) $ schedContextUnbindTCB scPtr
 
 > unbindFromSc :: PPtr TCB -> Kernel ()
 > unbindFromSc tcbPtr = do
 >     scPtrOpt <- threadGet tcbSchedContext tcbPtr
->     when (scPtrOpt /= Nothing) $ schedContextUnbind (fromJust scPtrOpt)
+>     case scPtrOpt of
+>         Nothing -> return ()
+>         Just scPtr -> schedContextUnbindTCB scPtr
 
 > invokeSchedContext :: SchedContextInvocation -> KernelF SyscallError ()
 > invokeSchedContext iv = withoutFailure $ case iv of
->     InvokeSchedContextBind scPtr tcbPtr -> schedContextBind scPtr tcbPtr
->     InvokeSchedContextUnbindObject scPtr -> schedContextUnbind scPtr
->     InvokeSchedContextUnbind scPtr -> schedContextUnbindAllTcbs scPtr
+>     InvokeSchedContextBind scPtr cap -> case cap of
+>         ThreadCap tcbPtr -> schedContextBindTCB scPtr tcbPtr
+>         NotificationCap ntfn _ _ _ -> schedContextBindNtfn scPtr ntfn
+>         _ -> fail "invokeSchedContext: cap must be ThreadCap or NotificationCap"
+>     InvokeSchedContextUnbindObject scPtr cap -> case cap of
+>         ThreadCap _ -> schedContextUnbindTCB scPtr
+>         NotificationCap _ _ _ _ -> schedContextUnbindNtfn scPtr
+>         _ -> fail "invokeSchedContext: cap must be ThreadCap or NotificationCap"
+>     InvokeSchedContextUnbind scPtr -> do
+>         schedContextUnbindAllTCBs scPtr
+>         schedContextUnbindNtfn scPtr
 
 > invokeSchedControlConfigure :: SchedControlInvocation -> KernelF SyscallError ()
 > invokeSchedControlConfigure iv = case iv of
 >     InvokeSchedControlConfigure scPtr budget period mRefills -> withoutFailure $ do
 >         sc <- getSchedContext scPtr
 >         period <- return (if budget == period then 0 else period)
->         tptrOpt <- return $ scTcb sc
+>         tptrOpt <- return $ scTCB sc
 >         when (tptrOpt /= Nothing) $ do
->             assert (tptrOpt /= Nothing) "invokeSchedControlConfigure: scTcb must not be Nothing"
+>             assert (tptrOpt /= Nothing) "invokeSchedControlConfigure: scTCB must not be Nothing"
 >             tptr <- return $ fromJust tptrOpt
 >             tcbReleaseRemove tptr
 >             runnable <- isRunnable tptr
@@ -389,10 +401,10 @@ TODO: refills'' or refills'?
 >     refills <- getRefills scPtr
 >     return $ refillsCapacity usage refills
 
-> refillReadyTcb :: PPtr TCB -> Kernel Bool
-> refillReadyTcb tptr = do
+> refillReadyTCB :: PPtr TCB -> Kernel Bool
+> refillReadyTCB tptr = do
 >     scOpt <- threadGet tcbSchedContext tptr
->     assert (scOpt /= Nothing) "refillReadyTcb: scOpt must not be Nothing"
+>     assert (scOpt /= Nothing) "refillReadyTCB: scOpt must not be Nothing"
 >     scPtr <- return (fromJust scOpt)
 >     refillReady scPtr
 
@@ -402,3 +414,61 @@ TODO: refills'' or refills'?
 >     sched <- isSchedulable tptr inq
 >     assert sched "guardedSwitchTo: thread must be schedulable"
 >     switchToThread tptr
+
+> replyUnbindSc :: PPtr SchedContext -> PPtr Reply -> Kernel ()
+> replyUnbindSc scPtr replyPtr = do
+>     sc <- getSchedContext scPtr
+>     reply <- getReply replyPtr
+>     setReply replyPtr (reply { replySc = Nothing })
+>     setSchedContext scPtr (sc { scReplies = delete replyPtr (scReplies sc) })
+
+> schedContextClearReplies :: PPtr SchedContext -> Kernel ()
+> schedContextClearReplies scPtr = do
+>     replies <- liftM scReplies $ getSchedContext scPtr
+>     mapM_ (replyUnbindSc scPtr) replies
+
+> schedContextBindNtfn :: PPtr SchedContext -> PPtr Notification -> Kernel ()
+> schedContextBindNtfn sc ntfn = do
+>     n <- getNotification ntfn
+>     setNotification ntfn (n { ntfnSc = Just sc })
+>     s <- getSchedContext sc
+>     setSchedContext sc (s { scNtfn = Just ntfn })
+
+> schedContextUnbindNtfn :: PPtr SchedContext -> Kernel ()
+> schedContextUnbindNtfn scPtr = do
+>     sc <- getSchedContext scPtr
+>     case scNtfn sc of
+>         Nothing -> return ()
+>         Just ntfnPtr -> (\ntfn -> do
+>             setSchedContext scPtr (sc { scNtfn = Nothing })
+>             n <- getNotification ntfn
+>             setNotification ntfn (n { ntfnSc = Nothing })) ntfnPtr
+
+> schedContextMaybeUnbindNtfn :: PPtr Notification -> Kernel ()
+> schedContextMaybeUnbindNtfn ntfnPtr = do
+>     scOpt <- liftM ntfnSc $ getNotification ntfnPtr
+>     case scOpt of
+>         Nothing -> return ()
+>         Just sc -> schedContextUnbindNtfn sc
+
+> maybeDonateSc :: PPtr TCB -> PPtr Notification -> Kernel ()
+> maybeDonateSc tcbPtr ntfnPtr = do
+>     scOpt <- threadGet tcbSchedContext tcbPtr
+>     when (scOpt == Nothing) $ do
+>         scPtrOpt <- liftM ntfnSc (getNotification ntfnPtr)
+>         case scPtrOpt of
+>             Nothing -> return ()
+>             Just scPtr -> (\scPtr -> do
+>                 scTCB <- liftM scTCB $ getSchedContext scPtr
+>                 when (scTCB == Nothing) $ schedContextDonate scPtr tcbPtr) scPtr
+
+> maybeReturnSc :: PPtr Notification -> PPtr TCB -> Kernel ()
+> maybeReturnSc ntfnPtr tcbPtr = do
+>     nscOpt <- liftM ntfnSc $ getNotification ntfnPtr
+>     tscOpt <- threadGet tcbSchedContext tcbPtr
+>     when (nscOpt == tscOpt && nscOpt /= Nothing) $ do
+>         assert (nscOpt /= Nothing) "maybeReturnSc: nscOpt must not be Nothing"
+>         scPtr <- return $ fromJust nscOpt
+>         threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) tcbPtr
+>         sc <- getSchedContext scPtr
+>         setSchedContext scPtr (sc { scTCB = Nothing })

@@ -20,11 +20,15 @@ This module specifies the behavior of notification objects.
 
 \begin{impdetails}
 
+% {-# BOOT-IMPORTS: SEL4.Machine SEL4.Model SEL4.Object.Structures #-}
+% {-# BOOT-EXPORTS: getNotification setNotification #-}
+
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object.Structures
 > import {-# SOURCE #-} SEL4.Object.Endpoint(cancelIPC)
-> import {-# SOURCE #-} SEL4.Object.TCB(asUser, sortQueue) 
+> import SEL4.Object.SchedContext
+> import {-# SOURCE #-} SEL4.Object.TCB
 > import SEL4.Object.Instances()
 
 > import {-# SOURCE #-} SEL4.Kernel.Thread
@@ -62,8 +66,10 @@ mark the notification object as active.
 >                     if (receiveBlocked state)
 >                       then do
 >                         cancelIPC tcb
+>                         maybeDonateSc tcb ntfnPtr
 >                         setThreadState Running tcb
 >                         asUser tcb $ setRegister badgeRegister badge
+>                         switchIfRequiredTo tcb
 >                       else
 >                         setNotification ntfnPtr $ nTFN { ntfnObj = ActiveNtfn badge }
 >             (IdleNtfn, Nothing) -> setNotification ntfnPtr $ nTFN { ntfnObj = ActiveNtfn badge }
@@ -74,8 +80,10 @@ If the notification object is waiting, a thread is removed from its queue and th
 >                 setNotification ntfnPtr $ nTFN {
 >                   ntfnObj = case queue of
 >                     [] -> IdleNtfn
->                     _  -> WaitingNtfn queue
+>                     _  -> WaitingNtfn queue,
+>                   ntfnSc = ntfnSc nTFN
 >                   }
+>                 maybeDonateSc dest ntfnPtr
 >                 setThreadState Running dest
 >                 asUser dest $ setRegister badgeRegister badge
 >                 possibleSwitchTo dest
@@ -112,6 +120,8 @@ If the notification object is idle, then it becomes a waiting notification objec
 >                       setThreadState (BlockedOnNotification {
 >                                          waitingOnNotification = ntfnPtr } ) thread
 >                       setNotification ntfnPtr $ ntfn {ntfnObj = WaitingNtfn ([thread]) }
+>                       maybeReturnSc ntfnPtr thread
+>                       scheduleTCB thread
 >                 False -> doNBRecvFailedTransfer thread
 
 If the notification object is already waiting, the current thread is blocked and added to the queue. Note that this case cannot occur when the notification object is bound, as only the associated thread can wait on it.
@@ -122,6 +132,8 @@ If the notification object is already waiting, the current thread is blocked and
 >                                          waitingOnNotification = ntfnPtr } ) thread
 >                       qs' <- sortQueue $ queue ++ [thread]
 >                       setNotification ntfnPtr $ ntfn {ntfnObj = WaitingNtfn qs' }
+>                       maybeReturnSc ntfnPtr thread
+>                       scheduleTCB thread
 >                 False -> doNBRecvFailedTransfer thread
 
 If the notification object is active, the badge of the invoked notification object capability will be loaded to the badge of the receiving thread and the notification object will be marked as idle.
@@ -129,6 +141,7 @@ If the notification object is active, the badge of the invoked notification obje
 >             ActiveNtfn badge -> do
 >                 asUser thread $ setRegister badgeRegister badge
 >                 setNotification ntfnPtr $ ntfn {ntfnObj = IdleNtfn }
+>                 maybeDonateSc thread ntfnPtr
 
 \subsection{Delete Operation}
 

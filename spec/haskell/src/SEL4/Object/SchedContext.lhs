@@ -254,29 +254,27 @@ TODO: refills'' or refills'?
 >     tcbReleaseEnqueue tptr
 >     setReprogramTimer True
 
-> schedContextResume :: Maybe (PPtr SchedContext) -> Kernel ()
-> schedContextResume scPtrOpt = case scPtrOpt of 
->     Nothing -> return ()
->     Just scPtr -> do
->         sc <- getSchedContext scPtr
->         tptrOpt <- return $ scTCB sc
->         assert (tptrOpt /= Nothing) "schedContextResume: scTCB must not be Nothing"
->         tptr <- return $ fromJust tptrOpt
->         inRlsQueue <- inReleaseQueue tptr
->         sched <- isSchedulable tptr inRlsQueue
->         when sched $ do
->             refillUnblockCheck scPtr
->             ready <- refillReady scPtr
->             sufficient <- refillSufficient scPtr 0
->             runnable <- isRunnable tptr
->             when (runnable && 0 < scRefillMax sc && not (ready && sufficient)) $ postpone scPtr
+> schedContextResume :: PPtr SchedContext -> Kernel ()
+> schedContextResume scPtr = do
+>     sc <- getSchedContext scPtr
+>     tptrOpt <- return $ scTCB sc
+>     assert (tptrOpt /= Nothing) "schedContextResume: scTCB must not be Nothing"
+>     tptr <- return $ fromJust tptrOpt
+>     inRlsQueue <- inReleaseQueue tptr
+>     sched <- isSchedulable tptr inRlsQueue
+>     when sched $ do
+>     refillUnblockCheck scPtr
+>     ready <- refillReady scPtr
+>     sufficient <- refillSufficient scPtr 0
+>     runnable <- isRunnable tptr
+>     when (runnable && 0 < scRefillMax sc && not (ready && sufficient)) $ postpone scPtr
 
 > schedContextBindTCB :: PPtr SchedContext -> PPtr TCB -> Kernel ()
 > schedContextBindTCB scPtr tcbPtr = do
 >     sc <- getSchedContext scPtr
 >     setSchedContext scPtr $ sc { scTCB = Just tcbPtr }
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
->     schedContextResume (Just scPtr)
+>     schedContextResume scPtr
 >     inq <- inReleaseQueue tcbPtr
 >     sched <- isSchedulable tcbPtr inq
 >     when sched $ switchIfRequiredTo tcbPtr
@@ -300,18 +298,6 @@ TODO: refills'' or refills'?
 >     when (fromOpt /= Nothing) $ schedContextUnbindTCB scPtr
 >     setSchedContext scPtr (sc { scTCB = Just tcbPtr })
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
-
-> replyUnbindSc :: PPtr SchedContext -> PPtr Reply -> Kernel ()
-> replyUnbindSc scPtr replyPtr = do
->     sc <- getSchedContext scPtr
->     reply <- getReply replyPtr
->     setReply replyPtr (reply { replySc = Nothing })
->     setSchedContext scPtr (sc { scReplies = delete replyPtr (scReplies sc) })
-
-> schedContextClearReplies :: PPtr SchedContext -> Kernel ()
-> schedContextClearReplies scPtr = do
->     replies <- liftM scReplies $ getSchedContext scPtr
->     mapM_ (replyUnbindSc scPtr) replies
 
 > schedContextUnbindAllTCBs :: PPtr SchedContext -> Kernel ()
 > schedContextUnbindAllTCBs scPtr = do
@@ -353,7 +339,7 @@ TODO: refills'' or refills'?
 >             if 0 < scRefillMax sc && runnable
 >                 then do
 >                     refillUpdate scPtr period budget mRefills
->                     schedContextResume (Just scPtr)
+>                     schedContextResume scPtr
 >                     switchIfRequiredTo tptr
 >                 else
 >                     refillNew scPtr mRefills budget period
@@ -472,3 +458,4 @@ TODO: refills'' or refills'?
 >         threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) tcbPtr
 >         sc <- getSchedContext scPtr
 >         setSchedContext scPtr (sc { scTCB = Nothing })
+

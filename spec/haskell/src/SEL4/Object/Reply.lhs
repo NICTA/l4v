@@ -74,3 +74,4 @@ This module specifies the behavior of reply objects.
 
 > getReplyCaller :: PPtr Reply -> Kernel (Maybe (PPtr TCB))
 > getReplyCaller r = liftM replyCaller (getReply r)
+

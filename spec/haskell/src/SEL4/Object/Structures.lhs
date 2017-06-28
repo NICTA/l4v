@@ -201,7 +201,8 @@ list of pointers to waiting threads;
 
 > data SchedContext = SchedContext {
 >     scPeriod :: Ticks,
->     scTcb :: Maybe (PPtr TCB),
+>     scTCB :: Maybe (PPtr TCB),
+>     scNtfn :: Maybe (PPtr Notification),
 >     scRefills :: [Refill],
 >     scRefillMax :: Int,
 >     scReplies :: [PPtr Reply] }
@@ -240,7 +241,8 @@ There are three possible states for a notification:
 
 > data Notification = NTFN {
 >     ntfnObj :: NTFN,
->     ntfnBoundTCB :: Maybe (PPtr TCB) }
+>     ntfnBoundTCB :: Maybe (PPtr TCB),
+>     ntfnSc :: Maybe (PPtr SchedContext) }
 
 \end{itemize}
 

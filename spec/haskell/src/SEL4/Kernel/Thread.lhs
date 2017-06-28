@@ -23,7 +23,7 @@ We use the C preprocessor to select a target architecture.
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.Model SEL4.Machine SEL4.Object.Structures SEL4.Object.Instances() SEL4.API.Types #-}
-% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired scheduleTcb isSchedulable endTimeSlice inReleaseQueue tcbReleaseRemove tcbSchedAppend switchToThread possibleSwitchTo #-}
+% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired scheduleTCB isSchedulable endTimeSlice inReleaseQueue tcbReleaseRemove tcbSchedAppend switchToThread possibleSwitchTo #-}
 
 > import SEL4.Config
 > import SEL4.API.Types
@@ -458,8 +458,8 @@ In most cases, the current thread has just sent a message to the woken thread, s
 The exception is when waking a thread that has just completed a "Send" system call. In this case, we switch only if the woken thread has a strictly higher priority; that is, when the priorities require the switch. This is done on the assumption that the recipient of a one-way message transfer is more likely to need to take action afterwards than the sender is.
 % FIXME: is this a sensible behaviour?
 
-> scheduleTcb :: PPtr TCB -> Kernel ()
-> scheduleTcb tcbPtr = do
+> scheduleTCB :: PPtr TCB -> Kernel ()
+> scheduleTCB tcbPtr = do
 >     curThread <- getCurThread
 >     action <- getSchedulerAction
 >     inReleaseQ <- inReleaseQueue curThread
@@ -497,7 +497,7 @@ TODO: Just a placeholder. It'll be changed in a later version.
 > setThreadState ts tptr = do
 >         tcb <- getObject tptr
 >         setObject tptr $ tcb { tcbState = ts }
->         scheduleTcb tptr
+>         scheduleTCB tptr
 
 \subsubsection{Bound Notificaion objects}
 

@@ -99,6 +99,7 @@ When the last capability to an endpoint is deleted, any IPC operations currently
 
 > finaliseCap (NotificationCap { capNtfnPtr = ptr }) final _ = do
 >     when final $ do
+>         schedContextMaybeUnbindNtfn ptr
 >         unbindMaybeNotification ptr
 >         cancelAllSignals ptr
 >     return (NullCap, Nothing)
@@ -133,7 +134,9 @@ Threads are treated as special capability nodes; they also become zombies when t
 
 > finaliseCap (SchedContextCap { capSchedContextPtr = sc }) final _ = do
 >     when final $ do
->         schedContextUnbindAllTcbs sc
+>         schedContextUnbindAllTCBs sc
+>     when final $ do
+>         schedContextUnbindNtfn sc
 >     when final $ do
 >         schedContextClearReplies sc
 >     return (NullCap, Nothing)

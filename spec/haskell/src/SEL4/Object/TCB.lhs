@@ -341,7 +341,7 @@ This is to ensure that the source capability is not made invalid by the deletion
 >             scPtr' <- withoutFailure $ threadGet tcbSchedContext tcbPtr
 >             when (scPtr' /= Nothing && scPtr' /= Just scPtr) $ throw IllegalOperation
 >             sc <- withoutFailure $ getSchedContext scPtr
->             when (scTcb sc /= Nothing && scTcb sc /= Just tcbPtr) $ throw IllegalOperation
+>             when (scTCB sc /= Nothing && scTCB sc /= Just tcbPtr) $ throw IllegalOperation
 >             return $! ThreadControl {
 >                 tcThread = tcbPtr,
 >                 tcThreadCapSlot = slot,
@@ -429,10 +429,12 @@ The use of "checkCapAt" addresses a corner case in which the only capability to 
 >             Nothing -> return ()
 >             Just Nothing -> do
 >                 scPtrOpt <- threadGet tcbSchedContext target
->                 when (scPtrOpt /= Nothing) $ schedContextUnbind (fromJust scPtrOpt)
+>                 case scPtrOpt of
+>                     Nothing -> return ()
+>                     Just scPtr -> schedContextUnbindTCB scPtr
 >             Just (Just scPtr) -> do
 >                 sc' <- threadGet tcbSchedContext target
->                 when (sc' /= Just scPtr) $ schedContextBind scPtr target
+>                 when (sc' /= Just scPtr) $ schedContextBindTCB scPtr target
 >         maybe (return ()) (\(newCap, srcSlot) -> do
 >             rootSlot <- withoutPreemption $ getThreadCSpaceRoot target
 >             cteDelete rootSlot True
@@ -584,20 +586,28 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >             when (length excaps == 0) $ throw TruncatedMessage
 >             cap <- return $! head excaps
 >             sc <- withoutFailure $ getSchedContext scPtr
->             when (scTcb sc /= Nothing) $ throw IllegalOperation
->             when (not (isThreadCap cap)) $ throw (InvalidCapability 1)
->             tcbPtr <- return $! capTCBPtr cap
->             scPtrOpt <- withoutFailure $ threadGet tcbSchedContext tcbPtr
->             when (scPtrOpt /= Nothing) $ throw IllegalOperation
->             return $! InvokeSchedContextBind scPtr tcbPtr
+>             when (scTCB sc /= Nothing || scNtfn sc /= Nothing) $ throw IllegalOperation
+>             case cap of
+>                 ThreadCap tcbPtr -> do
+>                     scPtrOpt <- withoutFailure $ threadGet tcbSchedContext tcbPtr
+>                     when (scPtrOpt /= Nothing) $ throw IllegalOperation
+>                 NotificationCap ntfnPtr _ _ _ -> do
+>                     scPtrOpt <- withoutFailure $ liftM ntfnSc $ getNotification ntfnPtr
+>                     when (scPtrOpt /= Nothing) $ throw IllegalOperation
+>                 _ -> throw (InvalidCapability 1)
+>             return $ InvokeSchedContextBind scPtr cap
 >         SchedContextUnbindObject -> do
 >             when (length excaps == 0) $ throw TruncatedMessage
 >             cap <- return $! head excaps
->             when (not (isThreadCap cap)) $ throw (InvalidCapability 1)
->             tcbPtr <- return $! capTCBPtr cap
->             scPtrOpt <- withoutFailure $ threadGet tcbSchedContext tcbPtr
->             when (Just scPtr /= scPtrOpt) $ throw IllegalOperation
->             return $! InvokeSchedContextUnbindObject scPtr
+>             case cap of
+>                 ThreadCap tcbPtr -> do
+>                     scPtrOpt <- withoutFailure $ threadGet tcbSchedContext tcbPtr
+>                     when (scPtrOpt /= Just scPtr) $ throw IllegalOperation
+>                 NotificationCap ntfnPtr _ _ _ -> do
+>                     scPtrOpt <- withoutFailure $ liftM ntfnSc $ getNotification ntfnPtr
+>                     when (scPtrOpt /= Just scPtr) $ throw IllegalOperation
+>                 _ -> throw (InvalidCapability 1)
+>             return $ InvokeSchedContextUnbindObject scPtr cap
 >         SchedContextUnbind -> return $! InvokeSchedContextUnbind scPtr
 >         _ -> throw IllegalOperation
 
@@ -937,7 +947,7 @@ NB: the argument order is different from the abstract spec.
 > awaken :: Kernel ()
 > awaken = do
 >     rq <- getReleaseQueue
->     rq1 <- takeWhileM refillReadyTcb rq
+>     rq1 <- takeWhileM refillReadyTCB rq
 >     setReleaseQueue rq
 >     mapM_ (\t -> do
 >         scOpt <- threadGet tcbSchedContext t

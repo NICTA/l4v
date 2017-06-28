@@ -39,7 +39,9 @@ The following is the definition of the five object types that are always availab
 > epSizeBits = wordSizeCase 4 5
 
 > ntfnSizeBits :: Int
-> ntfnSizeBits = wordSizeCase 4 5
+> ntfnSizeBits = wordSizeCase 5 5
+
+(ntfnSizeBits should maybe 5 6 if we are doing rt for x64)
 
 > scSizeBits :: Int
 > scSizeBits = 8

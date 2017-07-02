@@ -433,7 +433,8 @@ record sched_context =
   sc_replies    :: "obj_ref list"
 
 definition "MIN_REFILLS = 2"
-definition "MAX_REFILLS = 12"
+definition "MAX_REFILLS = 12" (* MIN_REFILLS + seL4_MaxRefills? *)
+(* what is the difference between MIN_REFILLS (=2) and seL4_MinRefills (=0) ? *)
 
 definition
   default_sched_context :: sched_context where

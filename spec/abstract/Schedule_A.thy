@@ -35,7 +35,7 @@ definition
 where
   "getActiveTCB tcb_ref s \<equiv>
    case get_tcb tcb_ref s
-     of None     \<Rightarrow> None
+     of None     \<Rightarrow> None  (* FIXME is_schedulable_opt *)
       | Some tcb \<Rightarrow> if is_schedulable_opt tcb_ref False s = Some True then Some tcb else None"
 
 text {* Gets all schedulable threads in the system. *}
@@ -79,15 +79,19 @@ definition
   end_timeslice :: "(unit,'z::state_ext) s_monad"
 where
   "end_timeslice = do
-     sc_ptr \<leftarrow> gets cur_sc;
-     ready \<leftarrow> refill_ready sc_ptr;
-     sufficient \<leftarrow> refill_sufficient sc_ptr 0;
-     if ready \<and> sufficient then do
-       cur \<leftarrow> gets cur_thread;
-       do_extended_op $ tcb_sched_action tcb_sched_append cur
-     od
-     else
-       postpone sc_ptr
+     ct \<leftarrow> gets cur_thread;
+     it \<leftarrow> gets idle_thread;
+     when (ct \<noteq> it) $ do
+       sc_ptr \<leftarrow> gets cur_sc;
+       ready \<leftarrow> refill_ready sc_ptr;
+       sufficient \<leftarrow> refill_sufficient sc_ptr 0;
+       if ready \<and> sufficient then do
+         cur \<leftarrow> gets cur_thread;
+         do_extended_op $ tcb_sched_action tcb_sched_append cur
+       od
+       else
+         postpone sc_ptr
+    od
   od"
 
 definition
@@ -111,39 +115,49 @@ where
   od"
 
 definition
+  charge_budget :: "ticks \<Rightarrow> ticks \<Rightarrow> unit det_ext_monad"
+where
+  "charge_budget capacity consumed = do
+    csc \<leftarrow> gets cur_sc;
+    robin \<leftarrow> is_round_robin csc;
+    if robin then do
+      refills \<leftarrow> get_refills csc;
+      let rfhd = hd refills; rftl = last refills; rf_body = butlast (tl refills) in
+        set_refills csc
+          (rfhd \<lparr> r_amount := r_amount rfhd + r_amount rftl \<rparr> # rf_body @ [rftl \<lparr> r_amount := 0 \<rparr>])
+    od
+    else refill_budget_check csc consumed capacity;
+    modify $ consumed_time_update (K 0);
+    ct \<leftarrow> gets cur_thread;
+    st \<leftarrow> get_thread_state ct;
+    when (runnable st) $ do
+      end_timeslice;
+      reschedule_required
+    od
+  od"
+
+definition
   check_budget :: "bool det_ext_monad"
 where
   "check_budget = do
-    ct \<leftarrow> gets cur_thread;
-    it \<leftarrow> gets idle_thread;
-    if ct = it then return True else do
-      csc \<leftarrow> gets cur_sc;
+     csc \<leftarrow> gets cur_sc;
+     consumed \<leftarrow> gets consumed_time;
+     capacity \<leftarrow> refill_capacity csc consumed;
+     full \<leftarrow> refill_full csc;
+     robin \<leftarrow> is_round_robin csc;
+     if (capacity \<ge> MIN_BUDGET \<and> (robin \<or> \<not>full)) then do
+       dom_exp \<leftarrow> gets is_cur_domain_expired;
+       if dom_exp then do
+         commit_time;
+         reschedule_required;
+         return False
+      od
+      else return True
+    od
+    else do
       consumed \<leftarrow> gets consumed_time;
-      capacity \<leftarrow> refill_capacity csc consumed;
-      if capacity < MIN_BUDGET then do
-        when (capacity = 0) $ do
-          cs' \<leftarrow> refill_budget_check csc consumed;
-          modify $ consumed_time_update (K cs')
-        od;
-        consumed \<leftarrow> gets consumed_time;
-        when (0 < consumed) $ refill_split_check csc consumed;
-        modify $ consumed_time_update (K 0);
-        st \<leftarrow> get_thread_state ct;
-        when (runnable st) $ do
-          end_timeslice;
-          reschedule_required
-        od;
-        return False
-      od
-      else do
-        dom_exp \<leftarrow> gets is_cur_domain_expired;
-        if dom_exp then do
-          commit_time;
-          reschedule_required;
-          return False
-        od
-        else return True
-      od
+      charge_budget capacity consumed;
+      return True
     od
   od"
 
@@ -151,12 +165,12 @@ definition
   check_budget_restart :: "bool det_ext_monad"
 where
   "check_budget_restart = do
-     cont \<leftarrow> check_budget;
-     when (\<not>cont) $ do
+     result \<leftarrow> check_budget;
+     when (\<not>result) $ do
        cur \<leftarrow> gets cur_thread;
        set_thread_state cur Restart
      od;
-     return cont
+     return result
   od"
 
 definition
@@ -170,7 +184,7 @@ where
     if sc \<noteq> cur_sc 
     then do
       modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>);
-      commit_time;
+      do_extended_op $ commit_time;
       refill_unblock_check sc
     od
     else
@@ -216,16 +230,8 @@ where
     rq2 \<leftarrow> return $ drop (length rq1) rq;
     modify $ release_queue_update (K rq);
     mapM_x (\<lambda>t. do
-      sc_opt \<leftarrow> thread_get tcb_sched_context t;
-      sc_ptr \<leftarrow> assert_opt sc_opt;
-      refill_unblock_check sc_ptr;
-      ready \<leftarrow> refill_ready sc_ptr;
-      if \<not>ready then
-        tcb_release_enqueue t
-      else do
-        tcb_sched_action tcb_sched_append t;
-        switch_if_required_to t
-      od
+      switch_if_required_to t;
+      modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)
     od) rq1
   od"
 

@@ -461,28 +461,6 @@ where
       sched_context_unbind_ntfn sc_ptr
     od"
 
-text \<open> The Scheduling Control invocation configures the budget of a scheduling context. \<close>
-definition
-  invoke_sched_control_configure :: "sched_control_invocation \<Rightarrow> (unit, det_ext) se_monad"
-where
-  "invoke_sched_control_configure iv \<equiv>
-  case iv of InvokeSchedControlConfigure sc_ptr budget period mrefills \<Rightarrow> liftE $ do
-    sc \<leftarrow> get_sched_context sc_ptr;
-    period \<leftarrow> return (if budget = period then 0 else period);
-    when (sc_tcb sc \<noteq> None) $ do
-      tcb_ptr \<leftarrow> assert_opt $ sc_tcb sc;
-      do_extended_op $ tcb_release_remove tcb_ptr;
-      st \<leftarrow> get_thread_state tcb_ptr;
-      if 0 < sc_refill_max sc \<and> runnable st then do
-        refill_update sc_ptr period budget mrefills;
-        sched_context_resume sc_ptr;
-        switch_if_required_to tcb_ptr
-      od
-      else
-        refill_new sc_ptr mrefills budget period
-    od
-  od"
-
 text \<open> Update time consumption of current scheduling context and current domain. \<close>
 definition
   commit_time :: "(unit, 'z::state_ext) s_monad"
@@ -504,7 +482,6 @@ where
     do_extended_op $ commit_domain_time; (***)
     modify (\<lambda>s. s\<lparr>consumed_time := 0\<rparr> )
   od"
-
 
 section "Global time"
 

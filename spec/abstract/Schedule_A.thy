@@ -235,6 +235,39 @@ where
     od) rq1
   od"
 
+text \<open> The Scheduling Control invocation configures the budget of a scheduling context. \<close>
+definition
+  invoke_sched_control_configure :: "sched_control_invocation \<Rightarrow> (unit, det_ext) se_monad"
+where
+  "invoke_sched_control_configure iv \<equiv>
+  case iv of InvokeSchedControlConfigure sc_ptr budget period mrefills \<Rightarrow> liftE $ do
+    sc \<leftarrow> get_sched_context sc_ptr;
+    period \<leftarrow> return (if budget = period then 0 else period);
+    mrefills \<leftarrow> return (if budget = period then MIN_REFILLS else mrefills);
+    when (sc_tcb sc \<noteq> None) $ do
+      tcb_ptr \<leftarrow> assert_opt $ sc_tcb sc;
+      do_extended_op $ tcb_release_remove tcb_ptr;
+      do_extended_op $ tcb_sched_action tcb_sched_dequeue tcb_ptr;
+      cur_sc \<leftarrow> gets cur_sc;
+      when (cur_sc = sc_ptr) $ do
+        consumed \<leftarrow> gets consumed_time;
+        capacity \<leftarrow> refill_capacity sc_ptr consumed;
+        result \<leftarrow> check_budget;
+        if result then commit_time else charge_budget capacity consumed
+      od;
+      st \<leftarrow> get_thread_state tcb_ptr;
+      if 0 < sc_refill_max sc then do
+        when (runnable st) $ refill_update sc_ptr period budget mrefills;
+        sched_context_resume sc_ptr;
+        ct \<leftarrow> gets cur_thread;
+        if (tcb_ptr = ct) then reschedule_required
+        else when (runnable st) $ switch_if_required_to tcb_ptr
+      od
+      else
+        refill_new sc_ptr mrefills budget period
+    od
+  od"
+
 class state_ext_sched = state_ext +
   fixes schedule :: "(unit,'a) s_monad"
 
@@ -246,6 +279,7 @@ definition choose_thread :: "det_ext state \<Rightarrow> (unit \<times> det_ext 
         if (\<forall>prio. queues prio = []) then (switch_to_idle_thread)
         else (guarded_switch_to (hd (max_non_empty_queue queues)))
       od"
+
 
 instantiation  det_ext_ext :: (type) state_ext_sched
 begin

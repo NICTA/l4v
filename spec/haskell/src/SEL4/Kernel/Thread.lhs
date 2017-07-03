@@ -524,6 +524,7 @@ This function is called when the system state has changed sufficiently that the 
 >              when sched $ tcbSchedEnqueue target
 >         _ -> return ()
 >     setSchedulerAction ChooseNewThread
+>     setReprogramTimer True
 
 \subsubsection{Scheduling Parameters}
 

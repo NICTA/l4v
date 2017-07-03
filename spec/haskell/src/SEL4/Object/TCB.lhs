@@ -347,7 +347,7 @@ This is to ensure that the source capability is not made invalid by the deletion
 
 > decodeUpdateSc :: Capability -> PPtr CTE -> Capability -> 
 >     KernelF SyscallError TCBInvocation
-> decodeUpdateSc cap slot scCap = 
+> decodeUpdateSc cap slot scCap =
 >     case scCap of
 >         NullCap -> return $! ThreadControl {
 >             tcThread = capTCBPtr cap,
@@ -929,7 +929,7 @@ On some architectures, the thread context may include registers that may be modi
 >                             commitTime
 >                             rescheduleRequired
 >                             return False
->                         else return True               
+>                         else return True
 
 > checkBudgetRestart :: Kernel Bool
 > checkBudgetRestart = do

@@ -258,16 +258,16 @@ TODO: refills'' or refills'?
 > schedContextResume scPtr = do
 >     sc <- getSchedContext scPtr
 >     tptrOpt <- return $ scTCB sc
->     assert (tptrOpt /= Nothing) "schedContextResume: scTCB must not be Nothing"
+>     assert (tptrOpt /= Nothing) "schedContextResume: option of TCB pointer must not be Nothing"
 >     tptr <- return $ fromJust tptrOpt
 >     inRlsQueue <- inReleaseQueue tptr
 >     sched <- isSchedulable tptr inRlsQueue
 >     when sched $ do
->     refillUnblockCheck scPtr
->     ready <- refillReady scPtr
->     sufficient <- refillSufficient scPtr 0
->     runnable <- isRunnable tptr
->     when (runnable && 0 < scRefillMax sc && not (ready && sufficient)) $ postpone scPtr
+>         refillUnblockCheck scPtr
+>         ready <- refillReady scPtr
+>         sufficient <- refillSufficient scPtr 0
+>         runnable <- isRunnable tptr
+>         when (runnable && 0 < scRefillMax sc && not (ready && sufficient)) $ postpone scPtr
 
 > schedContextBindTCB :: PPtr SchedContext -> PPtr TCB -> Kernel ()
 > schedContextBindTCB scPtr tcbPtr = do
@@ -283,7 +283,7 @@ TODO: refills'' or refills'?
 > schedContextUnbindTCB scPtr = do
 >     sc <- getSchedContext scPtr
 >     tptrOpt <- return $ scTCB sc
->     assert (tptrOpt /= Nothing) "schedContextUnbind: scTCB must not be Nothing"
+>     assert (tptrOpt /= Nothing) "schedContextUnbind: option of TCB pointer must not be Nothing"
 >     tptr <- return $ fromJust tptrOpt
 >     tcbSchedDequeue tptr
 >     tcbReleaseRemove tptr
@@ -332,7 +332,7 @@ TODO: refills'' or refills'?
 >         period <- return (if budget == period then 0 else period)
 >         tptrOpt <- return $ scTCB sc
 >         when (tptrOpt /= Nothing) $ do
->             assert (tptrOpt /= Nothing) "invokeSchedControlConfigure: scTCB must not be Nothing"
+>             assert (tptrOpt /= Nothing) "invokeSchedControlConfigure: option of TCB pointer must not be Nothing"
 >             tptr <- return $ fromJust tptrOpt
 >             tcbReleaseRemove tptr
 >             runnable <- isRunnable tptr

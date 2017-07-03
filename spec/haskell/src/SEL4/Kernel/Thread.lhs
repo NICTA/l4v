@@ -462,7 +462,7 @@ The exception is when waking a thread that has just completed a "Send" system ca
 > scheduleTCB tcbPtr = do
 >     curThread <- getCurThread
 >     action <- getSchedulerAction
->     inReleaseQ <- inReleaseQueue curThread
+>     inReleaseQ <- inReleaseQueue tcbPtr
 >     schedulable <- isSchedulable tcbPtr inReleaseQ
 >     when (tcbPtr == curThread && action == ResumeCurrentThread && not schedulable) $ rescheduleRequired
 
@@ -480,6 +480,7 @@ This function is called when the system state has changed sufficiently that the 
 >              when sched $ tcbSchedEnqueue target
 >         _ -> return ()
 >     setSchedulerAction ChooseNewThread
+>     setReprogramTimer True
 
 \subsubsection{Scheduling Parameters}
 

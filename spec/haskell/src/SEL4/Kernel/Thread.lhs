@@ -651,8 +651,8 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 
 > initTCB = (makeObject::TCB){ tcbPriority=maxBound }
 
-> endTimeSlice :: Kernel ()
-> endTimeSlice = do
+> endTimeslice :: Kernel ()
+> endTimeslice = do
 >     ct <- getCurThread
 >     it <- getIdleThread
 >     when (ct /= it) $ do

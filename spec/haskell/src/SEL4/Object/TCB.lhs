@@ -30,14 +30,14 @@ This module uses the C preprocessor to select a target architecture.
 >         decodeDomainInvocation,
 >         archThreadSet, archThreadGet,
 >         decodeSchedContextInvocation, decodeSchedControlInvocation,
->         checkBudget, scAndTimer,
+>         checkBudget, chargeBudget, scAndTimer,
 >         checkBudgetRestart, commitTime, awaken, sortQueue, replyUnbindCaller
 >     ) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.API.Types SEL4.API.Failures SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Invocation #-}
-% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget sortQueue replyUnbindCaller #-}
+% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget chargeBudget sortQueue replyUnbindCaller #-}
 
 > import SEL4.Config (numDomains, timeArgSize)
 > import SEL4.API.Types
@@ -868,49 +868,60 @@ On some architectures, the thread context may include registers that may be modi
 > getSanitiseRegisterInfo :: PPtr TCB -> Kernel Bool
 > getSanitiseRegisterInfo t = Arch.getSanitiseRegisterInfo t
 
+> chargeBudget :: Ticks -> Ticks -> Kernel ()
+> chargeBudget capacity consumed = do
+>     csc <- getCurSc
+>     robin <- isRoundRobin csc
+>     if robin
+>         then do
+>             refills <- getRefills csc
+
+TODO: head last init - edge condition?
+
+>             rfhd <- return $ head refills
+>             rftl <- return $ last refills
+>             rfBody <- return $ init (tail refills)
+>             setRefills csc (rfhd { rAmount = rAmount rfhd + rAmount rftl } : rfBody ++ [rftl { rAmount = 0 }])
+>         else refillBudgetCheck csc consumed capacity
+>     setConsumedTime 0
+>     ct <- getCurThread
+>     runnable <- isRunnable ct
+>     when runnable $ do
+>         endTimeSlice
+>         rescheduleRequired
+
 > checkBudget :: Kernel Bool
 > checkBudget = do
->     ct <- getCurThread
->     it <- getIdleThread
->     if ct == it
->         then return True
->         else do
->             csc <- getCurSc
->             consumed <- getConsumedTime
->             capacity <- refillCapacity csc consumed
->             if capacity < minBudget
+>     csc <- getCurSc
+>     consumed <- getConsumedTime
+>     capacity <- refillCapacity csc consumed
+>     full <- refillFull csc
+>     robin <- isRoundRobin csc
+>     if (capacity >= minBudget && (robin || not full))
+>         then do
+>             domExp <- isCurDomainExpired
+>             if domExp
 >                 then do
->                     when (capacity == 0) $ do
->                         cs' <- refillBudgetCheck csc consumed
->                         setConsumedTime cs'
->                     consumed <- getConsumedTime
->                     when (0 < consumed) $ refillSplitCheck csc consumed
->                     setConsumedTime 0
->                     runnable <- isRunnable ct
->                     when runnable $ do
->                         endTimeSlice
->                         rescheduleRequired
+>                     commitTime
+>                     rescheduleRequired
 >                     return False
->                 else do
->                     domExp <- isCurDomainExpired
->                     if domExp
->                         then do
->                             commitTime
->                             rescheduleRequired
->                             return False
->                         else return True
+>                 else return True
+>         else do
+>             consumed <- getConsumedTime
+>             chargeBudget capacity consumed
+>             return True
 
 > checkBudgetRestart :: Kernel Bool
 > checkBudgetRestart = do
->     cont <- checkBudget
->     when (not cont) $ do
+>     result <- checkBudget
+>     when (not result) $ do
 >         cur <- getCurThread
 
 NB: the argument order is different from the abstract spec.
 
 >         setThreadState Restart cur
 
->     return cont
+>     return result
 
 > switchSchedContext :: Kernel ()
 > switchSchedContext = do
@@ -952,16 +963,8 @@ NB: the argument order is different from the abstract spec.
 >     rq1 <- takeWhileM refillReadyTCB rq
 >     setReleaseQueue rq
 >     mapM_ (\t -> do
->         scOpt <- threadGet tcbSchedContext t
->         assert (scOpt /= Nothing) "awaken: scOpt must not be Nothing"
->         scPtr <- return $ fromJust scOpt
->         refillUnblockCheck scPtr
->         ready <- refillReady scPtr
->         if not ready
->             then tcbReleaseEnqueue t
->             else do
->                 tcbSchedAppend t
->                 switchIfRequiredTo t) rq1
+>         switchIfRequiredTo t
+>         setReprogramTimer True) rq1
 
 > sortQueue :: [PPtr TCB] -> Kernel [PPtr TCB]
 > sortQueue qs = do

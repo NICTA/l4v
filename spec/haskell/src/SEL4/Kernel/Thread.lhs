@@ -120,9 +120,13 @@ Note that the idle thread is not considered runnable; this is to prevent it bein
 
 > isSchedulable :: PPtr TCB -> Bool -> Kernel Bool
 > isSchedulable tcbPtr inReleaseQ = do
->     runnable <- isRunnable tcbPtr
 >     tcb <- getObject tcbPtr
->     return $! runnable && tcbSchedContext tcb /= Nothing && not inReleaseQ
+>     if tcbSchedContext tcb == Nothing
+>         then return False
+>         else do
+>             sc <- getSchedContext $ fromJust $ tcbSchedContext tcb
+>             runnable <- isRunnable tcbPtr
+>             return $! runnable && scRefillMax sc > 0 && not inReleaseQ
 
 \subsubsection{Suspending a Thread}
 
@@ -149,7 +153,9 @@ The invoked thread will return to the instruction that caused it to enter the ke
 >         setThreadState Restart target
 >         assert (scOpt /= Nothing) "restart: scOpt must not be Nothing"
 >         schedContextResume (fromJust scOpt)
->         switchIfRequiredTo target
+>         inReleaseQ <- inReleaseQueue target
+>         schedulable <- isSchedulable target inReleaseQ
+>         when schedulable $ switchIfRequiredTo target
 
 \subsection{IPC Transfers}
 
@@ -599,14 +605,17 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 
 > endTimeSlice :: Kernel ()
 > endTimeSlice = do
->     scPtr <- getCurSc
->     ready <- refillReady scPtr
->     sufficient <- refillSufficient scPtr 0
->     if ready && sufficient
->         then do
->             cur <- getCurThread
->             tcbSchedAppend cur
->         else postpone scPtr
+>     ct <- getCurThread
+>     it <- getIdleThread
+>     when (ct /= it) $ do
+>         scPtr <- getCurSc
+>         ready <- refillReady scPtr
+>         sufficient <- refillSufficient scPtr 0
+>         if ready && sufficient
+>             then do
+>                 cur <- getCurThread
+>                 tcbSchedAppend cur
+>             else postpone scPtr
 
 > inReleaseQueue :: PPtr TCB -> Kernel Bool
 > inReleaseQueue tcbPtr = do

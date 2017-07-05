@@ -887,7 +887,7 @@ TODO: head last init - edge condition?
 >     ct <- getCurThread
 >     runnable <- isRunnable ct
 >     when runnable $ do
->         endTimeSlice
+>         endTimeslice
 >         rescheduleRequired
 
 > checkBudget :: Kernel Bool

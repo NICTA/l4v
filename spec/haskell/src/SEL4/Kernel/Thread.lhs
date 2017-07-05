@@ -23,7 +23,7 @@ We use the C preprocessor to select a target architecture.
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.Model SEL4.Machine SEL4.Object.Structures SEL4.Object.Instances() SEL4.API.Types #-}
-% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired scheduleTCB isSchedulable endTimeSlice inReleaseQueue tcbReleaseRemove tcbSchedAppend switchToThread possibleSwitchTo #-}
+% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer attemptSwitchTo switchIfRequiredTo tcbSchedEnqueue tcbSchedDequeue rescheduleRequired scheduleTCB isSchedulable endTimeslice inReleaseQueue tcbReleaseRemove tcbSchedAppend switchToThread possibleSwitchTo #-}
 
 > import SEL4.Config
 > import SEL4.API.Types
@@ -603,8 +603,8 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 
 > initTCB = (makeObject::TCB){ tcbPriority=maxBound }
 
-> endTimeSlice :: Kernel ()
-> endTimeSlice = do
+> endTimeslice :: Kernel ()
+> endTimeslice = do
 >     ct <- getCurThread
 >     it <- getIdleThread
 >     when (ct /= it) $ do

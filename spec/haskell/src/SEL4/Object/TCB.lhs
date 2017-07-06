@@ -889,6 +889,7 @@ TODO: head last init - edge condition?
 >     when runnable $ do
 >         endTimeslice
 >         rescheduleRequired
+>         setReprogramTimer True
 
 > checkBudget :: Kernel Bool
 > checkBudget = do
@@ -902,7 +903,7 @@ TODO: head last init - edge condition?
 >             domExp <- isCurDomainExpired
 >             if domExp
 >                 then do
->                     commitTime
+>                     setReprogramTimer True
 >                     rescheduleRequired
 >                     return False
 >                 else return True
@@ -933,8 +934,11 @@ NB: the argument order is different from the abstract spec.
 >     if (sc /= curSc)
 >         then do
 >             setReprogramTimer True
->             commitTime
 >             refillUnblockCheck sc
+>         else return ()
+>     reprogram <- getReprogramTimer
+>     if reprogram
+>         then commitTime
 >         else rollbackTime
 >     setCurSc sc
 

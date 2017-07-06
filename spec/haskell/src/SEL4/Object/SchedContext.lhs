@@ -207,6 +207,7 @@ This module specifies the behavior of schedule context objects.
 > refillUnblockCheck scPtr = do
 >     robin <- isRoundRobin scPtr
 >     when (not robin) $ do
+>         setReprogramTimer True
 >         ct <- getCurTime
 >         refills <- getRefills scPtr
 >         refills' <- return $ refillsMergePrefix ((head refills) { rTime = ct } : tail refills)
@@ -434,7 +435,9 @@ This module specifies the behavior of schedule context objects.
 
 > rollbackTime :: Kernel ()
 > rollbackTime = do
+>     reprogram <- getReprogramTimer
 >     consumed <- getConsumedTime
+>     assert (not reprogram || consumed == 0) "rollbackTime: it is invalid to rollback time if we have already acted on the new time"
 >     curTime <- getCurTime
 >     setCurTime (curTime - consumed)
 >     setConsumedTime 0

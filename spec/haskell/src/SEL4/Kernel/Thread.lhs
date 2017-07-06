@@ -323,8 +323,7 @@ has the highest runnable priority in the system on kernel entry (unless idle).
 
 > schedule :: Kernel ()
 > schedule = do
->         reprogram <- getReprogramTimer
->         when reprogram awaken
+>         awaken
 >         curThread <- getCurThread
 >         inq <- inReleaseQueue curThread
 >         curSched <- isSchedulable curThread inq

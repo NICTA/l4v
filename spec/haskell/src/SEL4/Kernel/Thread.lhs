@@ -306,8 +306,7 @@ The scheduler will perform one of three actions, depending on the scheduler acti
 
 > schedule :: Kernel ()
 > schedule = do
->         reprogram <- getReprogramTimer
->         when reprogram awaken
+>         awaken
 >         curThread <- getCurThread
 >         inq <- inReleaseQueue curThread
 >         curSched <- isSchedulable curThread inq

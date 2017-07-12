@@ -83,7 +83,8 @@ This is the type used to represent a capability.
 >             capCNodeGuardSize :: Int }
 >         | IRQControlCap
 >         | SchedContextCap {
->             capSchedContextPtr :: PPtr SchedContext }
+>             capSchedContextPtr :: PPtr SchedContext,
+>             capSCSize :: Int }
 >         | SchedControlCap
 >         deriving Show
 
@@ -214,9 +215,6 @@ list of pointers to waiting threads;
 
 > minRefills :: Int
 > minRefills = 2
-
-> maxRefills :: Int
-> maxRefills = 12
 
 \subsubsection{Notification Objects}
 

@@ -22,7 +22,7 @@ This module specifies the behavior of schedule context objects.
 >         schedContextDonate, schedContextClearReplies,
 >         maybeDonateSc, maybeReturnSc,
 >         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn,
->         isRoundRobin, getRefills, setRefills, refillFull
+>         isRoundRobin, getRefills, setRefills, refillFull, refillAbsoluteMax
 >     ) where
 
 \begin{impdetails}
@@ -525,4 +525,14 @@ This module specifies the behavior of schedule context objects.
 >         threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) tcbPtr
 >         sc <- getSchedContext scPtr
 >         setSchedContext scPtr (sc { scTCB = Nothing })
+
+> coreSchedContextBytes :: Int
+> coreSchedContextBytes = 72
+
+> refillSizeBytes :: Int
+> refillSizeBytes = 16
+
+> refillAbsoluteMax :: Capability -> Int
+> refillAbsoluteMax (SchedContextCap _ sc) = (sc - coreSchedContextBytes) `div` refillSizeBytes + minRefills
+> refillAbsoluteMax _ = 0
 

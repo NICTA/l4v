@@ -653,7 +653,7 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >     when (length args < timeArgSize * 2 + 1) $ throw TruncatedMessage
 >     budgetUs <- return $! parseTimeArg 0 args
 >     periodUs <- return $! parseTimeArg timeArgSize args
->     mRefills <- return $! args !! (2 * timeArgSize)
+>     extraRefills <- return $! args !! (2 * timeArgSize)
 >     targetCap <- return $! head excaps
 >     when (not (isSchedContextCap targetCap)) $ throw (InvalidCapability 1)
 >     scPtr <- return $ capSchedContextPtr targetCap
@@ -663,10 +663,10 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >         throw (RangeError (fromIntegral minBudgetUs) (fromIntegral maxTimerUs))
 >     when (periodUs < budgetUs) $
 >         throw (RangeError (fromIntegral minBudgetUs) (fromIntegral periodUs))
->     when (maxRefills < fromIntegral mRefills) $
->         throw (RangeError 0 (fromIntegral (maxRefills - minRefills - 1)))
+>     when (fromIntegral extraRefills + minRefills > refillAbsoluteMax(targetCap)) $
+>         throw (RangeError 0 (fromIntegral (refillAbsoluteMax(targetCap) - minRefills)))
 >     return $! InvokeSchedControlConfigure scPtr
->         (usToTicks budgetUs) (usToTicks periodUs) (fromIntegral mRefills + minRefills)
+>         (usToTicks budgetUs) (usToTicks periodUs) (fromIntegral extraRefills + minRefills)
 
 \subsection{Checks}
 

@@ -244,7 +244,7 @@ This module specifies the behavior of schedule context objects.
 >         else (usage, refills))
 
 >     refills'' <- return
->         (if 0 < usage'
+>         (if capacity == 0 && 0 < usage'
 >          then
 >              let r1 = head refills'
 >                  r1' = r1 { rTime = rTime r1 + usage }

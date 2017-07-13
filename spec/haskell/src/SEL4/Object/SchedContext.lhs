@@ -222,12 +222,12 @@ This module specifies the behavior of schedule context objects.
 >              (scheduleUsed rs (r { rTime = rTime r + period }))
 >          else (usage, r:rs))
 
-> minBudgetMerge :: [Refill] -> [Refill]
-> minBudgetMerge [] = []
-> minBudgetMerge [r] = [r]
-> minBudgetMerge (r0:r1:rs) =
->     if rAmount r0 < minBudget
->         then minBudgetMerge (r1 { rAmount = rAmount r1 + rAmount r0 } : rs)
+> minBudgetMerge :: Bool -> [Refill] -> [Refill]
+> minBudgetMerge _ [] = []
+> minBudgetMerge _ [r] = [r]
+> minBudgetMerge full (r0:r1:rs) =
+>     if rAmount r0 < minBudget || full
+>         then minBudgetMerge full (r1 { rAmount = rAmount r1 + rAmount r0 } : rs)
 >         else (r0:r1:rs)
 
 > refillBudgetCheck :: PPtr SchedContext -> Ticks -> Ticks -> Kernel ()
@@ -261,7 +261,8 @@ This module specifies the behavior of schedule context objects.
 >     when (capacity > 0 && ready) $ refillSplitCheck scPtr usage'
 >     cscPtr <- getCurSc
 >     csc <- getSchedContext cscPtr
->     setRefills cscPtr (minBudgetMerge (scRefills csc))
+>     full <- refillFull cscPtr
+>     setRefills cscPtr (minBudgetMerge full (scRefills csc))
 
 > refillSplitCheck :: PPtr SchedContext -> Time -> Kernel ()
 > refillSplitCheck scPtr usage = do

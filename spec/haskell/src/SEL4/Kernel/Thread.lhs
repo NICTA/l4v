@@ -538,10 +538,6 @@ a thread.
 > getThreadState :: PPtr TCB -> Kernel ThreadState
 > getThreadState = threadGet tcbState
 
-When setting the scheduler state, we check for blocking of the current thread; in that case, we tell the scheduler to choose a new thread.
-
-TODO: Just a placeholder. It'll be changed in a later version.
-
 > setThreadState :: ThreadState -> PPtr TCB -> Kernel ()
 > setThreadState ts tptr = do
 >         tcb <- getObject tptr

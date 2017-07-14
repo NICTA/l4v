@@ -43,8 +43,6 @@ This module specifies the behavior of schedule context objects.
 > import Data.List(delete)
 > import Data.Word(Word64)
 > import Data.Maybe
-> import qualified Data.Foldable as Foldable
-> import Data.Set(fromList)
 
 \end{impdetails}
 
@@ -87,7 +85,7 @@ This module specifies the behavior of schedule context objects.
 >         else rAmount (head refills) - usage
 
 > sufficientRefills :: Time -> [Refill] -> Bool
-> sufficientRefills usage refills = minBudget < refillsCapacity usage refills
+> sufficientRefills usage refills = minBudget <= refillsCapacity usage refills
 
 > refillSufficient :: PPtr SchedContext -> Time -> Kernel Bool
 > refillSufficient scPtr usage = do
@@ -131,7 +129,7 @@ This module specifies the behavior of schedule context objects.
 >     return (sz == 1)
 
 > refillsSum :: [Refill] -> Time
-> refillsSum rf = Foldable.sum (fromList (map rAmount rf))
+> refillsSum rf = sum (map rAmount rf)
 
 > refillSum :: PPtr SchedContext -> Kernel Time
 > refillSum scPtr = do

@@ -910,7 +910,7 @@ TODO: head last init - edge condition?
 >         else do
 >             consumed <- getConsumedTime
 >             chargeBudget capacity consumed
->             return True
+>             return False
 
 > checkBudgetRestart :: Kernel Bool
 > checkBudgetRestart = do

@@ -422,12 +422,12 @@ The following function is used to alter the priority of a thread.
 >         tcbSchedEnqueue tptr
 >         cur <- getCurThread
 >         when (tptr == cur) rescheduleRequired
->         case (epBlocked ts) of
->             Just ep -> reorderEp ep
->             _ -> return ()
->         case (ntfnBlocked ts) of
->             Just ntfn -> reorderNtfn ntfn
->             _ -> return ()
+>     case (epBlocked ts) of
+>         Just ep -> reorderEp ep
+>         _ -> return ()
+>     case (ntfnBlocked ts) of
+>         Just ntfn -> reorderNtfn ntfn
+>         _ -> return ()
 
 \subsubsection{Switching to Woken Threads}
 

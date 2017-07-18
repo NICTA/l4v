@@ -157,7 +157,7 @@ where
     else do
       consumed \<leftarrow> gets consumed_time;
       charge_budget capacity consumed;
-      return True
+      return False
     od
   od"
 

@@ -95,7 +95,7 @@ where
 definition
   sufficient_refills :: "time \<Rightarrow> refill list \<Rightarrow> bool"
 where
-  "sufficient_refills usage refills = (MIN_BUDGET < refills_capacity usage refills)"
+  "sufficient_refills usage refills = (MIN_BUDGET \<le> refills_capacity usage refills)"
 
 definition
   refill_sufficient :: "obj_ref \<Rightarrow> time \<Rightarrow> (bool, 'z::state_ext) s_monad"

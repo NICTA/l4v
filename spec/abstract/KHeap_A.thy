@@ -152,8 +152,7 @@ definition reschedule_required :: "unit det_ext_monad" where
          when sched $ tcb_sched_action (tcb_sched_enqueue) t
        od
      | _ \<Rightarrow> return ();
-     set_scheduler_action choose_new_thread;
-     modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)
+     set_scheduler_action choose_new_thread
    od"
 
 definition

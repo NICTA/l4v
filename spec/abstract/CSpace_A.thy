@@ -438,7 +438,7 @@ where
 text {* Actions that must be taken when a capability is deleted. Returns a
 Zombie capability if deletion requires a long-running operation and also a
 possible IRQ to be cleared. *}
-fun                                           
+fun
   finalise_cap :: "cap \<Rightarrow> bool \<Rightarrow> (cap \<times> irq option, det_ext) s_monad"
 where
   "finalise_cap NullCap                  final = return (NullCap, None)"
@@ -464,7 +464,7 @@ where
          return (if final then (Zombie r None 5) else NullCap, None)
       od"
 | "finalise_cap DomainCap                final = return (NullCap, None)"
-| "finalise_cap (SchedContextCap sc)     final =
+| "finalise_cap (SchedContextCap sc bits)     final =
       do
          when final $ sched_context_unbind_all_tcbs sc;
          when final $ sched_context_unbind_ntfn sc;
@@ -490,7 +490,7 @@ definition
     ReplyCap r \<Rightarrow> True
   | EndpointCap r b R \<Rightarrow> True
   | NotificationCap r b R \<Rightarrow> True
-  | SchedContextCap _ \<Rightarrow> True
+  | SchedContextCap _ _ \<Rightarrow> True
   | NullCap \<Rightarrow> True
   | _ \<Rightarrow> False"
 
@@ -694,7 +694,7 @@ where
 | "same_region_as (ReplyCap n) c' = (c' = ReplyCap n)"
 | "same_region_as (ThreadCap r) c' =
     (is_thread_cap c' \<and> obj_ref_of c' = r)"
-| "same_region_as (SchedContextCap sc) c' =
+| "same_region_as (SchedContextCap sc b) c' =
     (is_sched_context_cap c' \<and> obj_ref_of c' = sc)"
 | "same_region_as SchedControlCap c' =
     (c' = SchedControlCap)"

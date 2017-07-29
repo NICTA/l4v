@@ -111,7 +111,7 @@ datatype cap
            -- "CNode ptr, number of bits translated, guard"
          | ThreadCap obj_ref
          | DomainCap
-         | SchedContextCap obj_ref
+         | SchedContextCap obj_ref nat
          | SchedControlCap
          | IRQControlCap
          | IRQHandlerCap irq
@@ -213,7 +213,7 @@ where
 
 fun is_sched_context_cap :: "cap \<Rightarrow> bool"
 where
-  "is_sched_context_cap (SchedContextCap _) = True"
+  "is_sched_context_cap (SchedContextCap _ _) = True"
 | "is_sched_context_cap _ = False"
 
 primrec (nonexhaustive)
@@ -428,7 +428,6 @@ record sched_context =
   sc_replies    :: "obj_ref list"
 
 definition "MIN_REFILLS = 2"
-definition "MAX_REFILLS = 12" (* MIN_REFILLS + seL4_MaxRefills? *)
 (* what is the difference between MIN_REFILLS (=2) and seL4_MinRefills (=0) ? *)
 
 definition
@@ -496,7 +495,7 @@ where
 | "obj_size (NotificationCap r b R) = 1 << obj_bits (Notification undefined)"
 | "obj_size (CNodeCap r bits g) = 1 << (cte_level_bits + bits)"
 | "obj_size (ThreadCap r) = 1 << obj_bits (TCB undefined)"
-| "obj_size (SchedContextCap r) = 1 << obj_bits (SchedContext undefined)"
+| "obj_size (SchedContextCap r bits) = 1 << bits"
 | "obj_size (ReplyCap r) = 1 << obj_bits (Reply undefined)"
 | "obj_size (Zombie r zb n) = (case zb of None \<Rightarrow> 1 << obj_bits (TCB undefined)
                                         | Some n \<Rightarrow> 1 << (cte_level_bits + n))"
@@ -618,7 +617,7 @@ where
 | "obj_refs (NotificationCap r b cr) = {r}"
 | "obj_refs (ThreadCap r) = {r}"
 | "obj_refs DomainCap = {}"
-| "obj_refs (SchedContextCap r) = {r}"
+| "obj_refs (SchedContextCap r bits) = {r}"
 | "obj_refs SchedControlCap = {}"
 | "obj_refs (Zombie ptr b n) = {ptr}"
 | "obj_refs (ArchObjectCap x) = set_option (aobj_ref x)"
@@ -637,7 +636,7 @@ where
 | "obj_ref_of (EndpointCap r b cr) = r"
 | "obj_ref_of (NotificationCap r b cr) = r"
 | "obj_ref_of (ThreadCap r) = r"
-| "obj_ref_of (SchedContextCap r) = r"
+| "obj_ref_of (SchedContextCap r bits) = r"
 | "obj_ref_of (Zombie ptr b n) = ptr"
 | "obj_ref_of (ArchObjectCap x) = the (aobj_ref x)"
 

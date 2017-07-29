@@ -19,6 +19,11 @@ text \<open> This theory contains operations on scheduling contexts and scheduli
 definition "MIN_BUDGET = 2 * kernelWCET_ticks"
 definition "MIN_BUDGET_US = 2 * kernelWCET_us"
 
+definition "min_sched_context_bits = 8"
+definition "core_sched_context_bytes = (8 * 32 + (5 * 8))" (* RT *)
+definition "refill_size_bytes = 2 * 8"
+definition "max_extra_refills sz = return (((1 << sz) - core_sched_context_bytes) / refill_size_bytes)"
+
 definition
   is_cur_domain_expired :: "det_ext state \<Rightarrow> bool"
 where
@@ -152,6 +157,13 @@ where
     refills \<leftarrow> get_refills sc_ptr;
     return $ refills_sum refills
   od"
+
+definition
+  refill_absolute_max :: "cap \<Rightarrow> nat"
+where
+  "refill_absolute_max cap =
+    (case cap of SchedContextCap _ sc \<Rightarrow> (sc - core_sched_context_bytes) div refill_size_bytes
+    | _ \<Rightarrow> 0) "  (* RT: is "sc" correct? *)
 
 definition
   set_refills :: "obj_ref \<Rightarrow> refill list \<Rightarrow> (unit, 'z::state_ext) s_monad"

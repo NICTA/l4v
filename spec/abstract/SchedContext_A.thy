@@ -261,6 +261,7 @@ where
     robin \<leftarrow> is_round_robin sc_ptr;
     when (\<not> robin ) $ do
       ct \<leftarrow> gets cur_time;
+      modify (\<lambda>s. s\<lparr> reprogram_timer := True \<rparr>);
       refills \<leftarrow> get_refills sc_ptr;
       refills' \<leftarrow> return $ refills_merge_prefix ((hd refills)\<lparr>r_time := ct\<rparr> # tl refills);
       assert (sufficient_refills 0 refills'); (* do we need this assert? *)
@@ -490,6 +491,8 @@ definition
 where
   "rollback_time = do
     consumed \<leftarrow> gets consumed_time;
+    reprogram \<leftarrow> gets reprogram_timer;
+    assert (\<not> reprogram \<or> consumed = 0);
     modify (\<lambda>s. s\<lparr>cur_time := cur_time s - consumed \<rparr>);
     modify (\<lambda>s. s\<lparr>consumed_time := 0\<rparr> )
   od"

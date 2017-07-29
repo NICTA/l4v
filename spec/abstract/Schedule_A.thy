@@ -132,7 +132,8 @@ where
     st \<leftarrow> get_thread_state ct;
     when (runnable st) $ do
       end_timeslice;
-      reschedule_required
+      reschedule_required;
+      modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)
     od
   od"
 
@@ -148,7 +149,7 @@ where
      if (capacity \<ge> MIN_BUDGET \<and> (robin \<or> \<not>full)) then do
        dom_exp \<leftarrow> gets is_cur_domain_expired;
        if dom_exp then do
-         commit_time;
+         modify (\<lambda>s. s\<lparr> reprogram_timer := True \<rparr>);
          reschedule_required;
          return False
       od
@@ -181,12 +182,14 @@ where
     cur_th \<leftarrow> gets cur_thread;
     sc_opt \<leftarrow> thread_get tcb_sched_context cur_th;
     sc \<leftarrow> assert_opt sc_opt;
-    if sc \<noteq> cur_sc
-    then do
+    when (sc \<noteq> cur_sc) $ do
       modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>);
-      do_extended_op $ commit_time;
       refill_unblock_check sc
-    od
+    od;
+    reprogram \<leftarrow> gets reprogram_timer;
+    if reprogram
+    then
+      commit_time
     else
       rollback_time;
     modify (\<lambda>s. s\<lparr> cur_sc:= sc \<rparr>)
@@ -309,11 +312,9 @@ definition
 
 definition
   "schedule_det_ext_ext \<equiv> do
-     reprogram \<leftarrow> gets reprogram_timer;
-     when reprogram awaken;
-     ct \<leftarrow> gets cur_thread;
-     inq \<leftarrow> gets $ in_release_queue ct;
-     ct_schedulable \<leftarrow> is_schedulable ct inq;
+     cur \<leftarrow> gets cur_thread;
+     inq \<leftarrow> gets $ in_release_queue cur;
+     cur_sched \<leftarrow> is_schedulable cur inq;
      action \<leftarrow> gets scheduler_action;
      (case action
        of resume_cur_thread \<Rightarrow> do

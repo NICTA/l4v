@@ -456,7 +456,7 @@ where
           unbind_maybe_notification r;
           cancel_all_signals r
        od)"
-| "fast_finalise (SchedContextCap sc)    final =
+| "fast_finalise (SchedContextCap sc b)    final =
       (when final $ do
           sched_context_unbind_all_tcbs sc;
           sched_context_unbind_ntfn sc;

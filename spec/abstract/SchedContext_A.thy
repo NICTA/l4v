@@ -347,7 +347,7 @@ where
        refills_budget_check period usage refills
        else (usage, refills));
 
-    refills'' \<leftarrow> return (if 0 < usage' then
+    refills'' \<leftarrow> return (if capacity = 0 \<and> 0 < usage' then
       let r1 = hd refills'; 
           r1' = r1 \<lparr>r_time := r_time r1 + usage\<rparr>;
           rs = tl refills'

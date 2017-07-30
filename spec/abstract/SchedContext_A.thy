@@ -322,13 +322,13 @@ termination refills_budget_check
   done
 
 fun
-  min_budget_merge :: "refill list \<Rightarrow> refill list"
+  min_budget_merge :: "bool \<Rightarrow> refill list \<Rightarrow> refill list"
 where
-  "min_budget_merge [] = []"
-| "min_budget_merge [r] = [r]"
-| "min_budget_merge (r0#r1#rs) = (if r_amount r0 < MIN_BUDGET
-     then min_budget_merge (r1\<lparr> r_amount := r_amount r1 + r_amount r0 \<rparr> # rs)
-     else (r0#r1#rs))"
+  "min_budget_merge _ [] = []"
+| "min_budget_merge _ [r] = [r]"
+| "min_budget_merge full (r0#r1#rs) = (if (r_amount r0 < MIN_BUDGET \<or> full)
+     then min_budget_merge full (r1\<lparr> r_amount := r_amount r1 + r_amount r0 \<rparr> # rs)
+     else (r0#r1#rs))"  (* RT: full is refill_full value for cur_sc *)
 
 
 definition
@@ -364,7 +364,8 @@ where
     csc_ptr \<leftarrow> gets cur_sc;
     csc \<leftarrow> get_sched_context csc_ptr;
     cur_refills \<leftarrow> return $ sc_refills csc;
-    set_refills csc_ptr (min_budget_merge (sc_refills csc))
+    full \<leftarrow> refill_full csc_ptr;
+    set_refills csc_ptr (min_budget_merge full (sc_refills csc))
   od"
 
 definition

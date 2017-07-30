@@ -931,11 +931,9 @@ NB: the argument order is different from the abstract spec.
 >     scOpt <- threadGet tcbSchedContext curTh
 >     assert (scOpt /= Nothing) "switchSchedContext: schedule context must not be Nothing"
 >     sc <- return $ fromJust scOpt
->     if (sc /= curSc)
->         then do
->             setReprogramTimer True
->             refillUnblockCheck sc
->         else return ()
+>     when (sc /= curSc) $ do
+>         setReprogramTimer True
+>         refillUnblockCheck sc
 >     reprogram <- getReprogramTimer
 >     if reprogram
 >         then commitTime

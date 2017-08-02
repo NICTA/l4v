@@ -625,11 +625,8 @@ definition
 definition
   msg_align_bits :: nat
   where
-  "msg_align_bits \<equiv> 9"
-(* RT: prove the lemma below and move back this definition to the full one
   "msg_align_bits \<equiv> 2 + (LEAST n. (cap_transfer_data_size + msg_max_length + msg_max_extra_caps + 2) \<le> 2 ^ n)"
-*)
-(* RT: prove this!
+
 lemma msg_align_bits:
   "msg_align_bits = 9"
 proof -
@@ -640,15 +637,13 @@ proof -
   next
     fix y
     assume "(cap_transfer_data_size + msg_max_length + msg_max_extra_caps + 2) \<le> 2 ^ y"
-    moreover
-    hence "(2 :: nat) ^ 7 \<le> 2 ^ y"
-      by sorry (*(simp add: cap_transfer_data_size_def msg_max_length_def msg_max_extra_caps_def)*)
     thus "7 \<le> y"
-      by (rule power_le_imp_le_exp [rotated], simp)
+      using power_increasing[where n=y and N=6 and a="(2::nat)"]
+      by (fastforce simp add: cap_transfer_data_size_def msg_max_length_def msg_max_extra_caps_def)
   qed
   thus ?thesis unfolding msg_align_bits_def by simp
 qed
-*)
+
 
 definition
 check_valid_ipc_buffer :: "vspace_ref \<Rightarrow> cap \<Rightarrow> (unit,'z::state_ext) se_monad" where

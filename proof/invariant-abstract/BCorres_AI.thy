@@ -99,8 +99,7 @@ crunch_ignore (bcorres)
         select unless mapM catch bindE liftE whenE alternative cap_swap_ext
         cap_insert_ext cap_move_ext liftM create_cap_ext
         possible_switch_to reschedule_required set_priority
-        set_thread_state_ext
-        tcb_sched_action timer_tick
+        tcb_sched_action
         lookup_error_on_failure getActiveIRQ
         gets_the liftME zipWithM_x unlessE mapME_x handleE)
 
@@ -172,14 +171,17 @@ lemma get_tcb_truncate[simp]: "get_tcb a (truncate_state s) = get_tcb a s"
   apply (simp add: get_tcb_def)
   done
 
-crunch (bcorres)bcorres[wp]: cancel_all_ipc,cancel_all_signals,unbind_maybe_notification,unbind_notification, bind_notification truncate_state (simp: gets_the_def ignore: gets_the)
-
+crunch (bcorres)bcorres[wp]: cancel_all_ipc,unbind_maybe_notification,unbind_notification, bind_notification truncate_state (simp: gets_the_def ignore: gets_the)
+(*
+crunch (bcorres)bcorres[wp]: cancel_all_signals truncate_state (simp: gets_the_def ignore: gets_the)
+*)
+(*
 lemma fast_finalise_bcorres[wp]:
   "bcorres (fast_finalise a b) (fast_finalise a b)"
   apply (cases a)
   apply (simp | wp | wpc)+
   done
-
+*)
 lemma bcorres_unless[wp]: "bcorres f f' \<Longrightarrow> bcorres (unless a f) (unless a f')"
   apply (simp add: unless_def | wp)+
   done
@@ -229,14 +231,15 @@ requalify_facts Arch.arch_finalise_cap_bcorres Arch.prepare_thread_delete_bcorre
 
 declare arch_finalise_cap_bcorres[wp] prepare_thread_delete_bcorres[wp]
 
-
+(*
 crunch (bcorres)bcorres[wp]: "IpcCancel_A.suspend",deleting_irq_handler truncate_state (simp: gets_the_def swp_def ignore: gets_the ignore: throw_on_false)
-
+*)
+(*
 lemma finalise_cap_bcorres[wp]: "bcorres (finalise_cap a b) (finalise_cap a b)"
   apply (cases a)
   apply (wp | wpc | simp | intro impI allI conjI)+
   done
-
+*)
 lemma alternative_bcorres[wp]: "bcorres f f' \<Longrightarrow>  bcorres g g' \<Longrightarrow> bcorres (f \<sqinter> g) (f' \<sqinter> g')"
   apply (simp add: alternative_def bcorres_underlying_def s_bcorres_underlying_def)
   apply force

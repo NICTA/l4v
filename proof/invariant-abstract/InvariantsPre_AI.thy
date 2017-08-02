@@ -98,6 +98,8 @@ datatype a_type =
   | AEndpoint
   | ANTFN
   | ACapTable nat
+  | ASchedContext
+  | AReply
   | AGarbage nat -- "number of bytes of garbage"
   | AArch aa_type
 
@@ -110,6 +112,8 @@ where
          | TCB tcb                   \<Rightarrow> ATCB
          | Endpoint endpoint         \<Rightarrow> AEndpoint
          | Notification notification \<Rightarrow> ANTFN
+         | SchedContext sched_context \<Rightarrow> ASchedContext
+         | Reply reply               \<Rightarrow> AReply
          | ArchObj ao                \<Rightarrow> AArch (aa_type ao)"
 
 lemmas a_type_simps =

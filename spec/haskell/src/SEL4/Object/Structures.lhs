@@ -206,6 +206,8 @@ list of pointers to waiting threads;
 >     scNtfn :: Maybe (PPtr Notification),
 >     scRefills :: [Refill],
 >     scRefillMax :: Int,
+>     scRefillHead :: Int,
+>     scRefillTail :: Int,
 >     scReplies :: [PPtr Reply] }
 
 > data Reply = Reply {

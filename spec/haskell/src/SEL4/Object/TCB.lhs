@@ -31,13 +31,14 @@ This module uses the C preprocessor to select a target architecture.
 >         archThreadSet, archThreadGet,
 >         decodeSchedContextInvocation, decodeSchedControlInvocation,
 >         checkBudget, chargeBudget, scAndTimer,
->         checkBudgetRestart, commitTime, awaken, sortQueue, replyUnbindCaller
+>         checkBudgetRestart, commitTime, awaken, sortQueue, replyUnbindCaller,
+>         replaceAt
 >     ) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.API.Types SEL4.API.Failures SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Invocation #-}
-% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget chargeBudget sortQueue replyUnbindCaller #-}
+% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget chargeBudget sortQueue replyUnbindCaller replaceAt #-}
 
 > import SEL4.Config (numDomains, timeArgSize)
 > import SEL4.API.Types
@@ -868,21 +869,28 @@ On some architectures, the thread context may include registers that may be modi
 > getSanitiseRegisterInfo :: PPtr TCB -> Kernel Bool
 > getSanitiseRegisterInfo t = Arch.getSanitiseRegisterInfo t
 
+> replaceAt :: Int -> [a] -> a -> [a]
+> replaceAt i lst v =
+>     let x = take i lst
+>         y = drop (i + 1) lst
+>     in x ++ [v] ++ y
+
 > chargeBudget :: Ticks -> Ticks -> Kernel ()
 > chargeBudget capacity consumed = do
->     csc <- getCurSc
->     robin <- isRoundRobin csc
+>     scPtr <- getCurSc
+>     sc <- getSchedContext scPtr
+>     robin <- isRoundRobin scPtr
 >     if robin
 >         then do
->             refills <- getRefills csc
-
-TODO: head last init - edge condition?
-
->             rfhd <- return $ head refills
->             rftl <- return $ last refills
->             rfBody <- return $ init (tail refills)
->             setRefills csc (rfhd { rAmount = rAmount rfhd + rAmount rftl } : rfBody ++ [rftl { rAmount = 0 }])
->         else refillBudgetCheck csc consumed capacity
+>             refills <- getRefills scPtr
+>             headIndex <- return $ scRefillHead sc
+>             tailIndex <- return $ scRefillTail sc
+>             rfhd <- return $ refillHd sc
+>             rftl <- return $ refillTl sc
+>             refills' <- return $ replaceAt headIndex refills (rfhd { rAmount = rAmount rfhd + rAmount rftl })
+>             refills'' <- return $ replaceAt tailIndex refills' (rftl { rAmount = 0 })
+>             setRefills scPtr refills''
+>         else refillBudgetCheck scPtr consumed capacity
 >     setConsumedTime 0
 >     ct <- getCurThread
 >     runnable <- isRunnable ct

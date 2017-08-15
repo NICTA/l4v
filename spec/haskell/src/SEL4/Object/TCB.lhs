@@ -21,7 +21,6 @@ This module uses the C preprocessor to select a target architecture.
 > module SEL4.Object.TCB (
 >         threadGet, threadGetDet, threadSet, asUser, sanitiseRegister, getSanitiseRegisterInfo,
 >         getThreadCSpaceRoot, getThreadVSpaceRoot,
->         getThreadReplySlot, getThreadCallerSlot,
 >         getThreadBufferSlot,
 >         getMRs, setMRs, copyMRs, getMessageInfo, setMessageInfo,
 >         tcbFaultHandler, tcbIPCBuffer,
@@ -827,16 +826,6 @@ This function will return a physical pointer to a thread's page table root, give
 
 > getThreadVSpaceRoot :: PPtr TCB -> Kernel (PPtr CTE)
 > getThreadVSpaceRoot thread = locateSlotTCB thread tcbVTableSlot
-
-This function will return a physical pointer to a thread's reply slot, which is used when creating or revoking its reply capability.
-
-> getThreadReplySlot :: PPtr TCB -> Kernel (PPtr CTE)
-> getThreadReplySlot thread = locateSlotTCB thread tcbReplySlot
-
-This function will return a physical pointer to a thread's caller slot, used by the "Call" and "Reply" system calls.
-
-> getThreadCallerSlot :: PPtr TCB -> Kernel (PPtr CTE)
-> getThreadCallerSlot thread = locateSlotTCB thread tcbCallerSlot
 
 This function will return a physical pointer to a thread's IPC buffer slot, used to quickly access the thread's IPC buffer.
 

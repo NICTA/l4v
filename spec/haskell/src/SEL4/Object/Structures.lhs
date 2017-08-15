@@ -326,14 +326,8 @@ Each TCB contains four CTE entries. The following constants define the slot numb
 > tcbVTableSlot :: Word
 > tcbVTableSlot = 1
 
-> tcbReplySlot :: Word
-> tcbReplySlot = 2
-
-> tcbCallerSlot :: Word
-> tcbCallerSlot = 3
-
 > tcbIPCBufferSlot :: Word
-> tcbIPCBufferSlot = 4
+> tcbIPCBufferSlot = 2
 
 > minPriority :: Priority
 > minPriority = 0

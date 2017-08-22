@@ -404,6 +404,23 @@ This is to ensure that the source capability is not made invalid by the deletion
 >         notificationTCB = tcb,
 >         notificationPtr = Nothing }
 
+> installTCBCap :: PPtr TCB -> Capability -> PPtr CTE -> Int -> Maybe (Capability, PPtr CTE) -> KernelP ()
+> installTCBCap target tcap slot n slotOpt =
+>     case slotOpt of
+>         Nothing -> return ()
+>         Just (newCap, srcSlot) -> do
+>             rootSlot <- withoutPreemption $ (case n of
+>                 0 -> getThreadCSpaceRoot
+>                 1 -> getThreadVSpaceRoot
+>                 3 -> getThreadFaultHandlerSlot
+>                 _ -> fail "installTCBCap: improper index") target
+>             cteDelete rootSlot True
+>             withoutPreemption
+>                 $ checkCapAt newCap srcSlot
+>                 $ checkCapAt tcap slot
+>                 $ assertDerived srcSlot newCap
+>                 $ cteInsert newCap srcSlot rootSlot
+
 \subsection[invoke]{Performing TCB Invocations}
 
 > invokeTCB :: TCBInvocation -> KernelP [Word]
@@ -427,7 +444,7 @@ The "ThreadControl" operation is used to implement the "SetSpace", "SetPriority"
 
 The use of "checkCapAt" addresses a corner case in which the only capability to a certain thread is in its own CSpace, which is otherwise unreachable. Replacement of the CSpace root results in "cteDelete" cleaning up both CSpace and thread, after which "cteInsert" should not be called. Error reporting in this case is unimportant, as the requesting thread cannot continue to execute.
 
-> invokeTCB (ThreadControl target slot faultHandler mcp priority cRoot vRoot buffer sc)
+> invokeTCB (ThreadControl target slot faultHandler mcp priority croot vroot buffer sc)
 >   = do
 >         let tCap = ThreadCap { capTCBPtr = target }
 >         withoutPreemption $ maybe (return ()) (setMCPriority target) mcp
@@ -442,33 +459,9 @@ The use of "checkCapAt" addresses a corner case in which the only capability to 
 >             Just (Just scPtr) -> do
 >                 sc' <- threadGet tcbSchedContext target
 >                 when (sc' /= Just scPtr) $ schedContextBindTCB scPtr target
->         maybe (return ()) (\(newCap, srcSlot) -> do
->             rootSlot <- withoutPreemption $ getThreadCSpaceRoot target
->             cteDelete rootSlot True
->             withoutPreemption
->                 $ checkCapAt newCap srcSlot
->                 $ checkCapAt tCap slot
->                 $ assertDerived srcSlot newCap
->                 $ cteInsert newCap srcSlot rootSlot)
->           cRoot
->         maybe (return ()) (\(newCap, srcSlot) -> do
->             rootSlot <- withoutPreemption $ getThreadVSpaceRoot target
->             cteDelete rootSlot True
->             withoutPreemption
->                 $ checkCapAt newCap srcSlot
->                 $ checkCapAt tCap slot
->                 $ assertDerived srcSlot newCap
->                 $ cteInsert newCap srcSlot rootSlot)
->           vRoot
->         maybe (return ()) (\(newCap, srcSlot) -> do
->             bufferSlot <- withoutPreemption $ getThreadBufferSlot target
->             cteDelete bufferSlot True
->             withoutPreemption
->                 $ checkCapAt newCap srcSlot
->                 $ checkCapAt tCap slot
->                 $ assertDerived srcSlot newCap
->                 $ cteInsert newCap srcSlot bufferSlot)
->           faultHandler
+>         installTCBCap target (ThreadCap target) slot 0 croot
+>         installTCBCap target (ThreadCap target) slot 1 vroot
+>         installTCBCap target (ThreadCap target) slot 3 faultHandler
 >         maybe (return ())
 >             (\(ptr, frame) -> do
 >                 bufferSlot <- withoutPreemption $ getThreadBufferSlot target
@@ -816,6 +809,9 @@ This function will return a physical pointer to a thread's IPC buffer slot, used
 
 > getThreadBufferSlot :: PPtr TCB -> Kernel (PPtr CTE)
 > getThreadBufferSlot thread = locateSlotTCB thread tcbIPCBufferSlot
+
+> getThreadFaultHandlerSlot :: PPtr TCB -> Kernel (PPtr CTE)
+> getThreadFaultHandlerSlot thread = locateSlotTCB thread tcbFaultHandlerSlot
 
 \subsubsection{Fetching or Modifying TCB Fields}
 

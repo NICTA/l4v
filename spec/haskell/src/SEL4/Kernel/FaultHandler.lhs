@@ -21,7 +21,7 @@ This module contains functions that determine how recoverable faults encountered
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object
-> import SEL4.Object.Structures(TCB(..))
+> import SEL4.Object.Structures(TCB(..), CTE(..))
 > import SEL4.Kernel.Thread
 
 \end{impdetails}
@@ -38,7 +38,7 @@ When a thread faults, the kernel attempts to send a fault IPC to the fault handl
 
 > handleFault tptr ex = do
 >     tcb <- getObject tptr
->     hasFh <- (sendFaultIPC tptr (tcbFaultHandler tcb) ex `catchFailure` const (return False))
+>     hasFh <- (sendFaultIPC tptr (cteCap (tcbFaultHandler tcb)) ex `catchFailure` const (return False))
 >     unless hasFh $ (handleNoFault tptr)
 
 \subsection{Sending Fault IPC}

@@ -175,7 +175,7 @@ abbreviation
  *)
 record itcb =
   itcb_state         :: thread_state
-  itcb_fault_handler :: cap_ref
+  itcb_fault_handler :: cap (* RT: do we need this? *)
   itcb_ipc_buffer    :: vspace_ref
   itcb_fault         :: "fault option"
   itcb_bound_notification     :: "obj_ref option"
@@ -459,7 +459,9 @@ where
    [tcb_cnode_index 0 \<mapsto> (tcb_ctable, tcb_ctable_update, (\<lambda>_ _. \<top>)),
     tcb_cnode_index 1 \<mapsto> (tcb_vtable, tcb_vtable_update, (\<lambda>_ _. \<top>)),
     tcb_cnode_index 2 \<mapsto> (tcb_ipcframe, tcb_ipcframe_update,
-                          (\<lambda>_ _. is_nondevice_page_cap or (op = NullCap)))]"
+                          (\<lambda>_ _. is_nondevice_page_cap or (op = NullCap))),
+    tcb_cnode_index 3 \<mapsto> (tcb_fault_handler, tcb_fault_handler_update, (\<lambda>_ _. \<top>))]"
+                                  (* RT: check the fault_handler case *)
 
 definition
   valid_fault :: "ExceptionTypes_A.fault \<Rightarrow> bool"

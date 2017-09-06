@@ -405,21 +405,22 @@ This is to ensure that the source capability is not made invalid by the deletion
 >         notificationPtr = Nothing }
 
 > installTCBCap :: PPtr TCB -> Capability -> PPtr CTE -> Int -> Maybe (Capability, PPtr CTE) -> KernelP ()
-> installTCBCap target tcap slot n slotOpt =
->     case slotOpt of
->         Nothing -> return ()
->         Just (newCap, srcSlot) -> do
->             rootSlot <- withoutPreemption $ (case n of
->                 0 -> getThreadCSpaceRoot
->                 1 -> getThreadVSpaceRoot
->                 3 -> getThreadFaultHandlerSlot
->                 _ -> fail "installTCBCap: improper index") target
->             cteDelete rootSlot True
->             withoutPreemption
->                 $ checkCapAt newCap srcSlot
->                 $ checkCapAt tcap slot
->                 $ assertDerived srcSlot newCap
->                 $ cteInsert newCap srcSlot rootSlot
+> installTCBCap _ _ _ _ Nothing = return ()
+> installTCBCap target tcap slot n (Just (newCap, srcSlot)) = do
+>     rootSlot <-
+>         if n == 0
+>             then withoutPreemption $ getThreadCSpaceRoot target
+>             else if n == 1
+>                  then withoutPreemption $ getThreadVSpaceRoot target
+>                  else if n == 3
+>                       then withoutPreemption $ getThreadFaultHandlerSlot target
+>                       else fail "installTCBCap: improper index"
+>     cteDelete rootSlot True
+>     withoutPreemption
+>         $ checkCapAt newCap srcSlot
+>         $ checkCapAt tcap slot
+>         $ assertDerived srcSlot newCap
+>         $ cteInsert newCap srcSlot rootSlot
 
 \subsection[invoke]{Performing TCB Invocations}
 

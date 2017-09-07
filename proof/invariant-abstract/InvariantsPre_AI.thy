@@ -216,6 +216,8 @@ datatype reftype
   = TCBBlockedSend | TCBBlockedRecv
      | TCBSignal | TCBBound | EPSend | EPRecv | NTFNSignal | NTFNBound
      | TCBHypRef | HypTCBRef
+     | TCBSchedContext | SCTcb | NTFNSchedContext | SCNtfn
+     | TCBReply | ReplyCaller | SCReply | ReplySchedContext
 
 primrec
  symreftype :: "reftype \<Rightarrow> reftype"
@@ -230,6 +232,14 @@ where
 | "symreftype NTFNBound       = TCBBound"
 | "symreftype TCBHypRef = HypTCBRef"
 | "symreftype HypTCBRef = TCBHypRef"
+| "symreftype TCBSchedContext = SCTcb"
+| "symreftype SCTcb       = TCBSchedContext"
+| "symreftype NTFNSchedContext = SCNtfn"
+| "symreftype SCNtfn       = NTFNSchedContext"
+| "symreftype TCBReply        = ReplyCaller"
+| "symreftype ReplyCaller     = TCBReply"
+| "symreftype SCReply         = ReplySchedContext"
+| "symreftype ReplySchedContext = SCReply"
 
 
 definition

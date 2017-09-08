@@ -207,6 +207,7 @@ list of pointers to waiting threads;
 >     scNtfn :: Maybe (PPtr Notification),
 >     scRefills :: [Refill],
 >     scBadge :: Word,
+>     scYieldFrom :: Maybe (PPtr TCB),
 >     scRefillMax :: Int,
 >     scRefillHead :: Int,
 >     scRefillTail :: Int,
@@ -309,6 +310,8 @@ The TCB is used to store various data about the thread's current state:
 \item and the thread's schedule context object
 
 >         tcbSchedContext :: Maybe (PPtr SchedContext),
+
+>         tcbYieldTo :: Maybe (PPtr SchedContext),
 
 >         tcbReply :: Maybe (PPtr Reply),
 
@@ -419,6 +422,9 @@ A user thread may be in the following states:
 \item ready to start executing at the current instruction (after a fault, an interrupted system call, or an explicitly set program counter);
 
 >     | Restart
+
+>     | YieldTo
+
 >     deriving (Show, Eq)
 
 \end{itemize}

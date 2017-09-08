@@ -906,3 +906,9 @@ TODO: Check the value later. Maybe it is 1
 >     cbptr <- ask
 >     liftIO $ Platform.getCurrentTime cbptr
 
+> maxUsToTicks :: Word64
+> maxUsToTicks = undefined
+
+> maxTicksToUs :: Word64
+> maxTicksToUs = undefined
+

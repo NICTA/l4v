@@ -387,8 +387,13 @@ This module uses the C preprocessor to select a target architecture.
 > schedContextUpdateConsumed scPtr = do
 >     sc <- getSchedContext scPtr
 >     consumed <- return $ scConsumed sc
->     setSchedContext scPtr $ sc { scConsumed = 0 }
->     return $ ticksToUs consumed
+>     if (consumed >= maxTicksToUs)
+>         then do
+>             setSchedContext scPtr $ sc { scConsumed = scConsumed sc - maxTicksToUs }
+>             return maxTicksToUs
+>         else do
+>             setSchedContext scPtr $ sc { scConsumed = 0 }
+>             return $ ticksToUs consumed
 
 > unbindFromSc :: PPtr TCB -> Kernel ()
 > unbindFromSc tcbPtr = do

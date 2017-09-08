@@ -138,6 +138,9 @@ This list may be empty, though it should contain as many registers as possible. 
 > syscallMessage :: [Register]
 > syscallMessage = map Register Arch.syscallMessage
 
+> timeoutMessage :: [Register]
+> timeoutMessage = map Register Arch.timeoutMessage
+
 > replyRegister :: Register
 > replyRegister = Register Arch.replyRegister
 
@@ -171,5 +174,4 @@ The "mask" function is a trivial function which, given a number of bits, returns
 
 > mask :: (Bits w, Num w) => Int -> w
 > mask bits = bit bits - 1
-
 

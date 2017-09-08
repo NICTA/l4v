@@ -10,6 +10,14 @@
 
 This module specifies the behavior of schedule context objects.
 
+\begin{impdetails}
+
+This module uses the C preprocessor to select a target architecture.
+
+> {-# LANGUAGE CPP #-}
+
+\end{impdetails}
+
 > module SEL4.Object.SchedContext (
 >         schedContextUnbindAllTCBs, unbindFromSc, invokeSchedContext,
 >         invokeSchedControlConfigure, getSchedContext,
@@ -28,15 +36,16 @@ This module specifies the behavior of schedule context objects.
 \begin{impdetails}
 
 > import SEL4.Machine.Hardware
-> import SEL4.Machine.RegisterSet(PPtr)
+> import SEL4.Machine.RegisterSet(PPtr, msgInfoRegister, setRegister)
 > import SEL4.API.Failures(SyscallError(..))
+> import SEL4.API.Types(MessageInfo(..), wordFromMessageInfo)
 > import SEL4.Model.Failures(KernelF, withoutFailure)
 > import SEL4.Model.PSpace(getObject, setObject)
 > import SEL4.Model.StateData
 > import {-# SOURCE #-} SEL4.Object.Notification
 > import {-# SOURCE #-} SEL4.Object.Reply
 > import SEL4.Object.Structures
-> import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet, checkBudget, chargeBudget, replaceAt)
+> import {-# SOURCE #-} SEL4.Object.TCB(asUser, threadGet, threadSet, checkBudget, chargeBudget, replaceAt, setTimeArg)
 > import {-# SOURCE #-} SEL4.Kernel.Thread
 > import SEL4.API.Invocation(SchedContextInvocation(..), SchedControlInvocation(..))
 
@@ -372,6 +381,13 @@ This module specifies the behavior of schedule context objects.
 >     sc <- getSchedContext scPtr
 >     when (scTCB sc /= Nothing) $ schedContextUnbindTCB scPtr
 
+> schedContextUpdateConsumed :: PPtr SchedContext -> Kernel Word64
+> schedContextUpdateConsumed scPtr = do
+>     sc <- getSchedContext scPtr
+>     consumed <- return $ scConsumed sc
+>     setSchedContext scPtr $ sc { scConsumed = 0 }
+>     return $ ticksToUs consumed
+
 > unbindFromSc :: PPtr TCB -> Kernel ()
 > unbindFromSc tcbPtr = do
 >     scPtrOpt <- threadGet tcbSchedContext tcbPtr
@@ -381,6 +397,11 @@ This module specifies the behavior of schedule context objects.
 
 > invokeSchedContext :: SchedContextInvocation -> KernelF SyscallError ()
 > invokeSchedContext iv = withoutFailure $ case iv of
+>     InvokeSchedContextConsumed scPtr buffer -> do
+>         consumed <- schedContextUpdateConsumed scPtr
+>         tptr <- getCurThread
+>         length <- return $ setTimeArg 0 consumed buffer tptr
+>         asUser tptr $ setRegister msgInfoRegister (wordFromMessageInfo (MI length 0 0 0))
 >     InvokeSchedContextBind scPtr cap -> case cap of
 >         ThreadCap tcbPtr -> schedContextBindTCB scPtr tcbPtr
 >         NotificationCap ntfn _ _ _ -> schedContextBindNtfn scPtr ntfn
@@ -395,11 +416,12 @@ This module specifies the behavior of schedule context objects.
 
 > invokeSchedControlConfigure :: SchedControlInvocation -> KernelF SyscallError ()
 > invokeSchedControlConfigure iv = case iv of
->     InvokeSchedControlConfigure scPtr budget period mRefills -> withoutFailure $ do
+>     InvokeSchedControlConfigure scPtr budget period mRefills badge -> withoutFailure $ do
 >         sc <- getSchedContext scPtr
 >         period <- return (if budget == period then 0 else period)
 >         mRefills <- return (if budget == period then minRefills else mRefills)
 >         tptrOpt <- return $ scTCB sc
+>         setSchedContext scPtr $ sc { scBadge = badge }
 >         when (tptrOpt /= Nothing) $ do
 >             assert (tptrOpt /= Nothing) "invokeSchedControlConfigure: option of TCB pointer must not be Nothing"
 >             tptr <- return $ fromJust tptrOpt
@@ -412,7 +434,7 @@ This module specifies the behavior of schedule context objects.
 >                 result <- checkBudget
 >                 if result
 >                     then commitTime
->                     else chargeBudget capacity consumed
+>                     else chargeBudget capacity consumed False
 >             runnable <- isRunnable tptr
 >             if 0 < scRefillMax sc
 >                 then do
@@ -446,10 +468,10 @@ This module specifies the behavior of schedule context objects.
 > commitTime :: Kernel ()
 > commitTime = do
 >     consumed <- getConsumedTime
+>     csc <- getCurSc
+>     sc <- getSchedContext csc
 >     when (0 < consumed) $ do
->         csc <- getCurSc
 >         robin <- isRoundRobin csc
->         sc <- getSchedContext csc
 >         if robin
 >             then do
 >                 newHd <- return $ ((refillHd sc) { rTime = rTime (refillHd sc) - consumed })
@@ -460,6 +482,7 @@ This module specifies the behavior of schedule context objects.
 >                 setRefills csc refills''
 >             else refillSplitCheck csc consumed
 >     commitDomainTime
+>     setSchedContext csc (sc { scConsumed = scConsumed sc + consumed })
 >     setConsumedTime 0
 
 > rollbackTime :: Kernel ()
@@ -557,7 +580,7 @@ This module specifies the behavior of schedule context objects.
 >         setSchedContext scPtr (sc { scTCB = Nothing })
 
 > coreSchedContextBytes :: Int
-> coreSchedContextBytes = 72
+> coreSchedContextBytes = 80
 
 > refillSizeBytes :: Int
 > refillSizeBytes = 16

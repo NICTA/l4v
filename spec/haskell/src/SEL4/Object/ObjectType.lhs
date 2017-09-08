@@ -391,8 +391,8 @@ The "decodeInvocation" function parses the message, determines the operation tha
 > decodeInvocation label args _ _ DomainCap extraCaps =
 >     liftM (uncurry InvokeDomain) $ decodeDomainInvocation label args extraCaps
 >
-> decodeInvocation label _ _ _ (SchedContextCap {capSchedContextPtr=sc}) extraCaps =
->     liftM InvokeSchedContext $ decodeSchedContextInvocation label sc (map fst extraCaps)
+> decodeInvocation label args _ _ (SchedContextCap {capSchedContextPtr=sc}) extraCaps =
+>     liftM InvokeSchedContext $ decodeSchedContextInvocation label sc (map fst extraCaps) args
 >
 > decodeInvocation label args _ _ SchedControlCap extraCaps =
 >     liftM InvokeSchedControl $ decodeSchedControlInvocation label args (map fst extraCaps)

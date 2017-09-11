@@ -321,8 +321,26 @@ This module uses the C preprocessor to select a target architecture.
 >             setRefills scPtr refills''
 
 > refillUpdate :: PPtr SchedContext -> Ticks -> Ticks -> Int -> Kernel ()
-> refillUpdate scPtr newPeriod newBudget newMaxRefills =
->     refillNew scPtr newMaxRefills newBudget newPeriod
+> refillUpdate scPtr newPeriod newBudget newMaxRefills = do
+>     sc <- getSchedContext scPtr
+>     assert (scRefillMax sc > 0) "refill must be initialised in order to be updated"
+>     refills <- return $ scRefills sc
+>     refills1 <- return $ replaceAt 0 refills (refills !! (scRefillHead sc))
+>     sc1 <- return $ sc { scPeriod = newPeriod, scRefillHead = 0, scRefillTail = 0,
+>         scRefills = refills1, scRefillMax = newMaxRefills }
+>     setSchedContext scPtr sc1
+>     curTime <- getCurTime
+>     ready <- refillReady scPtr
+>     refills2 <- if ready then return $ replaceAt 0 refills1 ((head refills1) { rTime = curTime })
+>                 else return refills1
+>     setRefills scPtr refills2
+>     if (rAmount (head refills2) >= newBudget)
+>         then do
+>             refills3 <- return $ replaceAt 0 refills2 ((head refills2) { rAmount = newBudget })
+>             setRefills scPtr refills3
+>             maybeAddEmptyTail scPtr
+>         else refillAddTail scPtr (Refill { rAmount = (newBudget - rAmount (head refills2)),
+>                                            rTime = rTime (head refills2) + newPeriod })
 
 > postpone :: PPtr SchedContext -> Kernel ()
 > postpone scPtr = do

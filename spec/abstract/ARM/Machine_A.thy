@@ -151,6 +151,8 @@ definition
  "exception_message \<equiv> exceptionMessage"
 definition
  "syscall_message \<equiv> syscallMessage"
+definition
+  "timeout_message \<equiv> timeoutMessage"
 
 datatype arch_fault
     = VMFault vspace_ref "machine_word list"

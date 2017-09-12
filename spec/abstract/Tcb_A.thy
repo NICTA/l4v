@@ -157,7 +157,7 @@ where
   "invoke_tcb (Suspend thread) = liftE (do suspend thread; return [] od)"
 | "invoke_tcb (Resume thread) = liftE (do restart thread; return [] od)"
 
-| "invoke_tcb (ThreadControl target slot fault_handler mcp priority croot vroot buffer sc)
+| "invoke_tcb (ThreadControl target slot fault_handler timeout_handler mcp priority croot vroot buffer sc)
    = doE
     liftE $  case mcp of None \<Rightarrow> return()
      | Some newmcp \<Rightarrow> set_mcpriority target newmcp;
@@ -175,6 +175,7 @@ where
     install_tcb_cap target (ThreadCap target) slot 0 croot;
     install_tcb_cap target (ThreadCap target) slot 1 vroot;
     install_tcb_cap target (ThreadCap target) slot 3 fault_handler;
+    install_tcb_cap target (ThreadCap target) slot 4 timeout_handler;
     (case buffer of None \<Rightarrow> returnOk ()
      | Some (ptr, frame) \<Rightarrow> doE
       cap_delete (target, tcb_cnode_index 2);

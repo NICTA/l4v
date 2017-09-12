@@ -76,25 +76,6 @@ definition
    od"
 
 definition
-  end_timeslice :: "(unit,'z::state_ext) s_monad"
-where
-  "end_timeslice = do
-     ct \<leftarrow> gets cur_thread;
-     it \<leftarrow> gets idle_thread;
-     when (ct \<noteq> it) $ do
-       sc_ptr \<leftarrow> gets cur_sc;
-       ready \<leftarrow> refill_ready sc_ptr;
-       sufficient \<leftarrow> refill_sufficient sc_ptr 0;
-       if ready \<and> sufficient then do
-         cur \<leftarrow> gets cur_thread;
-         do_extended_op $ tcb_sched_action tcb_sched_append cur
-       od
-       else
-         postpone sc_ptr
-    od
-  od"
-
-definition
   set_next_interrupt :: "unit det_ext_monad"
 where
   "set_next_interrupt = do
@@ -112,66 +93,6 @@ where
        return $ min (r_time (refill_hd sc)) new_thread_time
      od;
      set_next_timer_interrupt new_thread_time
-  od"
-
-definition
-  charge_budget :: "ticks \<Rightarrow> ticks \<Rightarrow> unit det_ext_monad"
-where
-  "charge_budget capacity consumed = do
-    csc \<leftarrow> gets cur_sc;
-    robin \<leftarrow> is_round_robin csc;
-    if robin then do
-      refills \<leftarrow> get_refills csc;
-      let rfhd = hd refills; rftl = last refills; rf_body = butlast (tl refills) in
-        set_refills csc
-          (rfhd \<lparr> r_amount := r_amount rfhd + r_amount rftl \<rparr> # rf_body @ [rftl \<lparr> r_amount := 0 \<rparr>])
-    od
-    else refill_budget_check csc consumed capacity;
-    modify $ consumed_time_update (K 0);
-    ct \<leftarrow> gets cur_thread;
-    st \<leftarrow> get_thread_state ct;
-    when (runnable st) $ do
-      end_timeslice;
-      reschedule_required;
-      modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)
-    od
-  od"
-
-definition
-  check_budget :: "bool det_ext_monad"
-where
-  "check_budget = do
-     csc \<leftarrow> gets cur_sc;
-     consumed \<leftarrow> gets consumed_time;
-     capacity \<leftarrow> refill_capacity csc consumed;
-     full \<leftarrow> refill_full csc;
-     robin \<leftarrow> is_round_robin csc;
-     if (capacity \<ge> MIN_BUDGET \<and> (robin \<or> \<not>full)) then do
-       dom_exp \<leftarrow> gets is_cur_domain_expired;
-       if dom_exp then do
-         modify (\<lambda>s. s\<lparr> reprogram_timer := True \<rparr>);
-         reschedule_required;
-         return False
-      od
-      else return True
-    od
-    else do
-      consumed \<leftarrow> gets consumed_time;
-      charge_budget capacity consumed;
-      return False
-    od
-  od"
-
-definition
-  check_budget_restart :: "bool det_ext_monad"
-where
-  "check_budget_restart = do
-     result \<leftarrow> check_budget;
-     when (\<not>result) $ do
-       cur \<leftarrow> gets cur_thread;
-       set_thread_state cur Restart
-     od;
-     return result
   od"
 
 definition
@@ -236,39 +157,6 @@ where
       switch_if_required_to t;
       modify (\<lambda>s. s\<lparr>reprogram_timer := True\<rparr>)
     od) rq1
-  od"
-
-text \<open> The Scheduling Control invocation configures the budget of a scheduling context. \<close>
-definition
-  invoke_sched_control_configure :: "sched_control_invocation \<Rightarrow> (unit, det_ext) se_monad"
-where
-  "invoke_sched_control_configure iv \<equiv>
-  case iv of InvokeSchedControlConfigure sc_ptr budget period mrefills \<Rightarrow> liftE $ do
-    sc \<leftarrow> get_sched_context sc_ptr;
-    period \<leftarrow> return (if budget = period then 0 else period);
-    mrefills \<leftarrow> return (if budget = period then MIN_REFILLS else mrefills);
-    when (sc_tcb sc \<noteq> None) $ do
-      tcb_ptr \<leftarrow> assert_opt $ sc_tcb sc;
-      do_extended_op $ tcb_release_remove tcb_ptr;
-      do_extended_op $ tcb_sched_action tcb_sched_dequeue tcb_ptr;
-      cur_sc \<leftarrow> gets cur_sc;
-      when (cur_sc = sc_ptr) $ do
-        consumed \<leftarrow> gets consumed_time;
-        capacity \<leftarrow> refill_capacity sc_ptr consumed;
-        result \<leftarrow> check_budget;
-        if result then commit_time else charge_budget capacity consumed
-      od;
-      st \<leftarrow> get_thread_state tcb_ptr;
-      if 0 < sc_refill_max sc then do
-        when (runnable st) $ refill_update sc_ptr period budget mrefills;
-        sched_context_resume sc_ptr;
-        ct \<leftarrow> gets cur_thread;
-        if (tcb_ptr = ct) then reschedule_required
-        else when (runnable st) $ switch_if_required_to tcb_ptr
-      od
-      else
-        refill_new sc_ptr mrefills budget period
-    od
   od"
 
 class state_ext_sched = state_ext +
@@ -349,5 +237,52 @@ end
 
 
 lemmas schedule_def = schedule_det_ext_ext_def schedule_unit_def
+
+text {* Scheduling context invocation function *}
+
+text \<open> User-level scheduling context invocations. \<close>
+
+definition
+  parse_time_arg :: "nat \<Rightarrow> data list \<Rightarrow> time"
+where
+  "parse_time_arg i args \<equiv> (ucast (args!(i+1)) << 32) + ucast (args!i)"
+
+definition
+  set_time_arg :: "nat \<Rightarrow> time \<Rightarrow> data list \<Rightarrow> obj_ref \<Rightarrow> (length_type,'z::state_ext) s_monad"
+where
+  "set_time_arg i t args r \<equiv> return (ucast (t >> 32))"
+
+definition
+  sched_context_update_consumed :: "obj_ref \<Rightarrow> (time,'z::state_ext) s_monad" where
+  "sched_context_update_consumed sc_ptr \<equiv> do
+    sc \<leftarrow> get_sched_context sc_ptr;
+    set_sched_context sc_ptr (sc\<lparr>sc_consumed := 0 \<rparr>);
+    return (sc_consumed sc)
+   od"
+
+definition
+  invoke_sched_context :: "sched_context_invocation \<Rightarrow> (unit, det_ext) se_monad"
+where
+  "invoke_sched_context iv \<equiv> liftE $ case iv of
+    InvokeSchedContextConsumed sc_ptr args \<Rightarrow> do
+      consumed \<leftarrow> sched_context_update_consumed sc_ptr;
+      ct \<leftarrow> gets cur_thread;
+      buffer \<leftarrow> return $ data_to_oref $ args ! 0;
+      sent \<leftarrow> set_mrs ct (Some buffer) ((ucast consumed) # [ucast (consumed >> 32)]);
+      set_message_info ct $ MI sent 0 0 0 (* RT: is this correct? *)
+    od
+  | InvokeSchedContextBind sc_ptr cap \<Rightarrow> (case cap of
+      ThreadCap tcb_ptr \<Rightarrow> sched_context_bind_tcb sc_ptr tcb_ptr
+    | NotificationCap ntfn _ _ \<Rightarrow> sched_context_bind_ntfn sc_ptr ntfn
+    | _ \<Rightarrow> fail)
+  | InvokeSchedContextUnbindObject sc_ptr cap \<Rightarrow> (case cap of
+      ThreadCap _ \<Rightarrow> sched_context_unbind_tcb sc_ptr
+    | NotificationCap _ _ _ \<Rightarrow> sched_context_unbind_ntfn sc_ptr
+    | _ \<Rightarrow> fail)
+  | InvokeSchedContextUnbind sc_ptr \<Rightarrow> do
+      sched_context_unbind_all_tcbs sc_ptr;
+      sched_context_unbind_ntfn sc_ptr
+    od"
+
 
 end

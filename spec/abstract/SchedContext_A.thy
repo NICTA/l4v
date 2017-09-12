@@ -455,24 +455,6 @@ where
     od
   od"
 
-text \<open> User-level scheduling context invocations. \<close>
-definition
-  invoke_sched_context :: "sched_context_invocation \<Rightarrow> (unit, det_ext) se_monad"
-where
-  "invoke_sched_context iv \<equiv> liftE $ case iv of
-    InvokeSchedContextBind sc_ptr cap \<Rightarrow> (case cap of
-      ThreadCap tcb_ptr \<Rightarrow> sched_context_bind_tcb sc_ptr tcb_ptr
-    | NotificationCap ntfn _ _ \<Rightarrow> sched_context_bind_ntfn sc_ptr ntfn
-    | _ \<Rightarrow> fail)
-  | InvokeSchedContextUnbindObject sc_ptr cap \<Rightarrow> (case cap of
-      ThreadCap _ \<Rightarrow> sched_context_unbind_tcb sc_ptr
-    | NotificationCap _ _ _ \<Rightarrow> sched_context_unbind_ntfn sc_ptr
-    | _ \<Rightarrow> fail)
-  | InvokeSchedContextUnbind sc_ptr \<Rightarrow> do
-      sched_context_unbind_all_tcbs sc_ptr;
-      sched_context_unbind_ntfn sc_ptr
-    od"
-
 text \<open> Update time consumption of current scheduling context and current domain. \<close>
 definition
   commit_time :: "(unit, 'z::state_ext) s_monad"
@@ -481,10 +463,10 @@ where
     consumed \<leftarrow> gets consumed_time;
     ct \<leftarrow> gets cur_thread;
     it \<leftarrow> gets idle_thread;
+    csc \<leftarrow> gets cur_sc;
+    sc \<leftarrow> get_sched_context csc;
     when (0 < consumed) $ do
-      csc \<leftarrow> gets cur_sc;
       robin \<leftarrow> is_round_robin csc;
-      sc \<leftarrow> get_sched_context csc;
       if robin then
         let new_hd = ((refill_hd sc) \<lparr> r_time := r_time (refill_hd sc) - consumed \<rparr>);
             new_tl = ((refill_tl sc) \<lparr> r_time := r_time (refill_tl sc) + consumed \<rparr>) in
@@ -492,6 +474,7 @@ where
       else refill_split_check csc consumed
     od;
     do_extended_op $ commit_domain_time; (***)
+    set_sched_context csc (sc\<lparr>sc_consumed := (sc_consumed sc) + consumed \<rparr>);
     modify (\<lambda>s. s\<lparr>consumed_time := 0\<rparr> )
   od"
 

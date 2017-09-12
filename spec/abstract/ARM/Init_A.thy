@@ -74,6 +74,7 @@ definition
     tcb_vtable = NullCap,
     tcb_ipcframe = NullCap,
     tcb_fault_handler = NullCap,
+    tcb_timeout_handler = NullCap,
     tcb_state = IdleThreadState,
     tcb_ipc_buffer = 0,
     tcb_fault = None,

@@ -257,34 +257,26 @@ definition
    od"
 
 definition
-  possible_switch_to :: "obj_ref \<Rightarrow> bool \<Rightarrow> unit det_ext_monad" where
-  "possible_switch_to target on_same_prio \<equiv> do
+  possible_switch_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
+  "possible_switch_to target \<equiv> do
      sc_opt \<leftarrow> thread_get tcb_sched_context target;
      inq \<leftarrow> gets $ in_release_queue target;
      when (sc_opt \<noteq> None \<and> \<not>inq) $ do
-       cur \<leftarrow> gets cur_thread;
-       cur_dom \<leftarrow> gets cur_domain;
-       cur_prio \<leftarrow> ethread_get tcb_priority cur;
-       target_dom \<leftarrow> ethread_get tcb_domain target;
-       target_prio \<leftarrow> ethread_get tcb_priority target;
-       action \<leftarrow> gets scheduler_action;
-       if (target_dom \<noteq> cur_dom) then tcb_sched_action tcb_sched_enqueue target
-       else do
-         if (target_prio > cur_prio \<or> (target_prio = cur_prio \<and> on_same_prio))
-                \<and> action = resume_cur_thread then set_scheduler_action $ switch_thread target
-           else tcb_sched_action tcb_sched_enqueue target;
-         case action of switch_thread _ \<Rightarrow> reschedule_required | _ \<Rightarrow> return ()
+     cur_dom \<leftarrow> gets cur_domain;
+     target_dom \<leftarrow> ethread_get tcb_domain target;
+     action \<leftarrow> gets scheduler_action;
+
+     if (target_dom \<noteq> cur_dom) then
+       tcb_sched_action tcb_sched_enqueue target
+     else if (action \<noteq> resume_cur_thread) then
+       do
+         reschedule_required;
+         tcb_sched_action tcb_sched_enqueue target
        od
-     od
+     else
+       set_scheduler_action $ switch_thread target
+   od
    od"
-
-definition
-  attempt_switch_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "attempt_switch_to target \<equiv> possible_switch_to target True"
-
-definition
-  switch_if_required_to :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "switch_if_required_to target \<equiv> possible_switch_to target False"
 
 text {* Cancel all message operations on threads currently queued within this
 synchronous message endpoint. Threads so queued are placed in the Restart state.
@@ -327,7 +319,7 @@ where
                 st \<leftarrow> get_thread_state t;
                 if blocking_ipc_badge st = badge then do
                   set_thread_state t Restart;
-                  switch_if_required_to t;
+                  possible_switch_to t;
                   return False
                 od
                 else return True
@@ -400,7 +392,7 @@ where
      case ntfn_obj ntfn of WaitingNtfn queue \<Rightarrow> do
                       _ \<leftarrow> set_notification ntfnptr $ ntfn_set_obj ntfn IdleNtfn;
                       mapM_x (\<lambda>t. do set_thread_state t Restart;
-                                     switch_if_required_to t od) queue;
+                                     possible_switch_to t od) queue;
                       do_extended_op (reschedule_required)
                      od
                | _ \<Rightarrow> return ()

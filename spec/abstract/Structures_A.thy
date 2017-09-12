@@ -379,6 +379,7 @@ record tcb =
  tcb_vtable        :: cap
  tcb_ipcframe      :: cap
  tcb_fault_handler :: cap
+ tcb_timeout_handler :: cap
  tcb_state         :: thread_state
  tcb_ipc_buffer    :: vspace_ref
  tcb_fault         :: "fault option"
@@ -408,6 +409,7 @@ definition
       tcb_vtable   = NullCap,
       tcb_ipcframe = NullCap,
       tcb_fault_handler = NullCap,
+      tcb_timeout_handler = NullCap,
       tcb_state    = Inactive,
       tcb_ipc_buffer = 0,
       tcb_fault      = None,
@@ -426,10 +428,12 @@ record refill =
 
 record sched_context =
   sc_period     :: ticks
+  sc_consumed   :: ticks
   sc_tcb        :: "obj_ref option"
   sc_ntfn       :: "obj_ref option"
   sc_refills    :: "refill list"
   sc_refill_max :: nat
+  sc_badge      :: badge
   sc_replies    :: "obj_ref list"
 
 definition "MIN_REFILLS = 2"
@@ -439,10 +443,12 @@ definition
   default_sched_context :: sched_context where
   "default_sched_context \<equiv> \<lparr>
     sc_period     = 0,
+    sc_consumed     = 0,
     sc_tcb        = None,
     sc_ntfn       = None,
     sc_refills    = [\<lparr>r_time=0, r_amount=0\<rparr>],
     sc_refill_max = 0,
+    sc_badge      = 0,
     sc_replies    = []
   \<rparr>"
 
@@ -677,7 +683,8 @@ definition
    [tcb_cnode_index 0 \<mapsto> tcb_ctable tcb,
     tcb_cnode_index 1 \<mapsto> tcb_vtable tcb,
     tcb_cnode_index 2 \<mapsto> tcb_ipcframe tcb,
-    tcb_cnode_index 3 \<mapsto> tcb_fault_handler tcb]"
+    tcb_cnode_index 3 \<mapsto> tcb_fault_handler tcb,
+    tcb_cnode_index 4 \<mapsto> tcb_timeout_handler tcb]"
 
 definition
   "cap_of kobj \<equiv>

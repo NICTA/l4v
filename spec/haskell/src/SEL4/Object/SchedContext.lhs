@@ -31,15 +31,16 @@ This module uses the C preprocessor to select a target architecture.
 >         maybeDonateSc, maybeReturnSc,
 >         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn,
 >         isRoundRobin, getRefills, setRefills, refillFull, refillAbsoluteMax,
->         schedContextCompleteYieldTo, schedContextCancelYieldTo
+>         schedContextCompleteYieldTo, schedContextCancelYieldTo,
+>         schedContextUpdateConsumed
 >     ) where
 
 \begin{impdetails}
 
 > import SEL4.Machine.Hardware
-> import SEL4.Machine.RegisterSet(PPtr(..), msgInfoRegister, setRegister, Word)
+> import SEL4.Machine.RegisterSet(PPtr(..), Word)
 > import SEL4.API.Failures(SyscallError(..))
-> import SEL4.API.Types(MessageInfo(..), wordFromMessageInfo)
+> import SEL4.API.Types(MessageInfo(..))
 > import {-# SOURCE #-} SEL4.Kernel.VSpace(lookupIPCBuffer)
 > import SEL4.Model.Failures(KernelF, withoutFailure)
 > import SEL4.Model.PSpace(getObject, setObject)
@@ -47,7 +48,7 @@ This module uses the C preprocessor to select a target architecture.
 > import {-# SOURCE #-} SEL4.Object.Notification
 > import {-# SOURCE #-} SEL4.Object.Reply
 > import SEL4.Object.Structures
-> import {-# SOURCE #-} SEL4.Object.TCB(asUser, threadGet, threadSet, checkBudget, chargeBudget, replaceAt, setTimeArg)
+> import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet, checkBudget, chargeBudget, replaceAt, setTimeArg, setMessageInfo, setMRs)
 > import {-# SOURCE #-} SEL4.Kernel.Thread
 > import SEL4.API.Invocation(SchedContextInvocation(..), SchedControlInvocation(..))
 
@@ -424,8 +425,8 @@ This module uses the C preprocessor to select a target architecture.
 > setConsumed scPtr buffer = do
 >     consumed <- schedContextUpdateConsumed scPtr
 >     tptr <- getCurThread
->     length <- return $ setTimeArg 0 consumed buffer tptr
->     asUser tptr $ setRegister msgInfoRegister (wordFromMessageInfo (MI length 0 0 0))
+>     sent <- setMRs tptr (Just buffer) (setTimeArg consumed)
+>     setMessageInfo tptr $ MI sent 0 0 0
 
 > invokeSchedContext :: SchedContextInvocation -> KernelF SyscallError ()
 > invokeSchedContext iv = withoutFailure $ case iv of

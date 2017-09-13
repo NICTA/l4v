@@ -25,6 +25,8 @@ This module specifies the mechanisms used by the seL4 kernel to handle faults an
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object
+> import SEL4.Object.SchedContext
+> import SEL4.Object.Structures
 
 \end{impdetails}
 
@@ -50,8 +52,13 @@ When a user-level task causes a fault or exception, represented in this model by
 >     return (3, msg ++ [exception, code])
 
 > makeFaultMessage (Timeout badge) thread = do
->     msg <- asUser thread $ mapM getRegister timeoutMessage
->     return (4, msg ++ [badge])
+>     tcb <- getObject thread
+>     scPtrOpt <- return $ tcbSchedContext tcb
+>     case scPtrOpt of
+>         Nothing -> return (5, [badge])
+>         Just scPtr -> do
+>             consumed <- schedContextUpdateConsumed scPtr
+>             return (5, badge : setTimeArg consumed)
 
 > makeFaultMessage (ArchFault af) thread = makeArchFaultMessage af thread
 

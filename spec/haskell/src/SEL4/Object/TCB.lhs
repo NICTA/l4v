@@ -657,8 +657,10 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 > parseTimeArg :: Int -> [Word] -> Time
 > parseTimeArg i args = fromIntegral (args !! (i+1)) `shiftL` 32 + fromIntegral (args !! i)
 
-> setTimeArg :: Int -> Time -> PPtr Word -> PPtr TCB -> Word
-> setTimeArg = undefined
+Unlike the C code, setTimeArg does not set the message registers.
+
+> setTimeArg :: Time -> [Word]
+> setTimeArg t = fromIntegral t : [fromIntegral $ t `shiftR` 32]
 
 > decodeSchedControlInvocation :: Word -> [Word] -> [Capability] ->
 >         KernelF SyscallError SchedControlInvocation

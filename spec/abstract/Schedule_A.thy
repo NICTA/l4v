@@ -248,29 +248,43 @@ where
   "parse_time_arg i args \<equiv> (ucast (args!(i+1)) << 32) + ucast (args!i)"
 
 definition
-  set_time_arg :: "nat \<Rightarrow> time \<Rightarrow> data list \<Rightarrow> obj_ref \<Rightarrow> (length_type,'z::state_ext) s_monad"
+  sched_context_yield_to :: "obj_ref \<Rightarrow> data list \<Rightarrow> (unit, det_ext) s_monad"
 where
-  "set_time_arg i t args r \<equiv> return (ucast (t >> 32))"
-
-definition
-  sched_context_update_consumed :: "obj_ref \<Rightarrow> (time,'z::state_ext) s_monad" where
-  "sched_context_update_consumed sc_ptr \<equiv> do
+  "sched_context_yield_to sc_ptr args \<equiv> do
+    flag \<leftarrow> return True;
+    refill_unblock_check sc_ptr;
     sc \<leftarrow> get_sched_context sc_ptr;
-    set_sched_context sc_ptr (sc\<lparr>sc_consumed := 0 \<rparr>);
-    return (sc_consumed sc)
-   od"
+    tcb_ptr \<leftarrow> assert_opt (sc_tcb sc);
+    schedulable \<leftarrow> is_schedulable tcb_ptr False;
+    when (schedulable) $ do
+      sufficient \<leftarrow> refill_sufficient sc_ptr 0;
+      ready \<leftarrow> refill_ready sc_ptr;
+      assert (sufficient \<and> ready);
+      ct_ptr \<leftarrow> gets cur_thread;
+      prios \<leftarrow> ethread_get tcb_priority tcb_ptr;
+      ct_prios \<leftarrow> ethread_get tcb_priority ct_ptr;
+      if (prios < ct_prios)
+      then do
+        tcb_sched_action tcb_sched_dequeue tcb_ptr;
+        tcb_sched_action tcb_sched_enqueue tcb_ptr
+      od
+      else do
+        flag \<leftarrow> return False;
+        thread_set (\<lambda>t. t\<lparr> tcb_yield_to := Some sc_ptr \<rparr> ) ct_ptr;
+        set_sched_context sc_ptr (sc\<lparr> sc_yield_from := Some ct_ptr \<rparr>);
+        attempt_switch_to ct_ptr;
+        set_thread_state ct_ptr YieldTo
+      od
+    od;
+    when flag $ set_consumed sc_ptr args
+  od"
+
 
 definition
   invoke_sched_context :: "sched_context_invocation \<Rightarrow> (unit, det_ext) se_monad"
 where
   "invoke_sched_context iv \<equiv> liftE $ case iv of
-    InvokeSchedContextConsumed sc_ptr args \<Rightarrow> do
-      consumed \<leftarrow> sched_context_update_consumed sc_ptr;
-      ct \<leftarrow> gets cur_thread;
-      buffer \<leftarrow> return $ data_to_oref $ args ! 0;
-      sent \<leftarrow> set_mrs ct (Some buffer) ((ucast consumed) # [ucast (consumed >> 32)]);
-      set_message_info ct $ MI sent 0 0 0 (* RT: is this correct? *)
-    od
+    InvokeSchedContextConsumed sc_ptr args \<Rightarrow> set_consumed sc_ptr args
   | InvokeSchedContextBind sc_ptr cap \<Rightarrow> (case cap of
       ThreadCap tcb_ptr \<Rightarrow> sched_context_bind_tcb sc_ptr tcb_ptr
     | NotificationCap ntfn _ _ \<Rightarrow> sched_context_bind_ntfn sc_ptr ntfn
@@ -282,7 +296,10 @@ where
   | InvokeSchedContextUnbind sc_ptr \<Rightarrow> do
       sched_context_unbind_all_tcbs sc_ptr;
       sched_context_unbind_ntfn sc_ptr
-    od"
+    od
+  | InvokeSchedContextYieldTo sc_ptr args \<Rightarrow>
+      sched_context_yield_to sc_ptr args"
+
 
 
 end

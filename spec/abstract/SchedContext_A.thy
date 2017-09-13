@@ -11,7 +11,7 @@
 chapter "Scheduling Contexts and Control"
 
 theory SchedContext_A
-imports IpcCancel_A Invocations_A
+imports TcbAcc_A IpcCancel_A
 begin
 
 text \<open> This theory contains operations on scheduling contexts and scheduling control. \<close>
@@ -406,6 +406,66 @@ where
    od"
 
 
+text {* consumed related functions *}
+
+definition
+  sched_context_update_consumed :: "obj_ref \<Rightarrow> (time,'z::state_ext) s_monad" where
+  "sched_context_update_consumed sc_ptr \<equiv> do
+    sc \<leftarrow> get_sched_context sc_ptr;
+    set_sched_context sc_ptr (sc\<lparr>sc_consumed := 0 \<rparr>);
+    return (sc_consumed sc)
+   od"
+
+definition
+  set_consumed :: "obj_ref \<Rightarrow> data list \<Rightarrow> (unit, det_ext) s_monad"
+where
+  "set_consumed sc_ptr args \<equiv>do
+      consumed \<leftarrow> sched_context_update_consumed sc_ptr;
+      ct \<leftarrow> gets cur_thread;
+      buffer \<leftarrow> return $ data_to_oref $ args ! 0;
+      sent \<leftarrow> set_mrs ct (Some buffer) ((ucast consumed) # [ucast (consumed >> 32)]);
+      set_message_info ct $ MI sent 0 0 0 (* RT: is this correct? *)
+    od"
+
+text {* yield\_to related functions *}
+
+definition
+  cancel_yield_to :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+where
+  "cancel_yield_to tcb_ptr \<equiv> do
+     yieldto \<leftarrow> thread_get tcb_yield_to tcb_ptr;
+     case yieldto of
+       None \<Rightarrow> return  ()
+     | Some sc_ptr \<Rightarrow> do
+         sc \<leftarrow> get_sched_context sc_ptr;
+         set_sched_context sc_ptr (sc \<lparr> sc_yield_from := None \<rparr> );
+         thread_set (\<lambda>t. t \<lparr> tcb_yield_to := None\<rparr> ) tcb_ptr
+       od
+  od"
+
+definition
+  complete_yield_to :: "obj_ref \<Rightarrow> (unit, det_ext) s_monad"
+where
+  "complete_yield_to tcb_ptr \<equiv> do
+     yieldto \<leftarrow> thread_get tcb_yield_to tcb_ptr;
+     case yieldto of
+       None \<Rightarrow> return  ()
+     | Some sc_ptr \<Rightarrow> do
+         args \<leftarrow> return [];
+         set_consumed sc_ptr args;
+         cancel_yield_to tcb_ptr;
+         set_thread_state tcb_ptr Running
+      od
+    od"
+
+definition
+  sched_context_unbind_yield_from :: "obj_ref \<Rightarrow> (unit, det_ext) s_monad"
+where
+  "sched_context_unbind_yield_from sc_ptr \<equiv> do
+    sc \<leftarrow> get_sched_context sc_ptr;
+    maybeM complete_yield_to (sc_yield_from sc)
+od"
+
 text \<open>  Bind a TCB to a scheduling context. \<close>
 definition
   sched_context_bind_tcb :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> unit det_ext_monad"
@@ -422,10 +482,14 @@ where
 
 text \<open> Unbind TCB from its scheduling context, if there is one bound. \<close>
 definition
-  unbind_from_sc :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
+  unbind_from_sc :: "obj_ref \<Rightarrow> (unit, det_ext) s_monad"
 where
   "unbind_from_sc tcb_ptr = do
     sc_ptr_opt \<leftarrow> thread_get tcb_sched_context tcb_ptr;
+    maybeM (\<lambda>s. do
+                  sc \<leftarrow> get_sched_context s;
+                  maybeM complete_yield_to (sc_yield_from sc)
+                od) sc_ptr_opt;
     maybeM sched_context_unbind_tcb sc_ptr_opt
   od"
 
@@ -502,5 +566,18 @@ where
     modify (\<lambda>s. s\<lparr> cur_time := cur_time' \<rparr>);
     modify (\<lambda>s. s\<lparr> consumed_time := cur_time' - prev_time \<rparr>)
   od"
+
+text {* Suspend a thread, cancelling any pending operations and preventing it
+from further execution by setting it to the Inactive state. *}
+definition
+  suspend :: "obj_ref \<Rightarrow> unit det_ext_monad"
+where
+  "suspend thread \<equiv> do
+     cancel_ipc thread;
+     set_thread_state thread Inactive;
+     do_extended_op (tcb_sched_action (tcb_sched_dequeue) thread);
+     cancel_yield_to thread
+   od"
+
 
 end

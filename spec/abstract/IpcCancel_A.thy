@@ -123,6 +123,14 @@ where
     when (hd replies = r) $ sched_context_donate sc_ptr caller
   od"
 
+definition
+  unbind_from_reply :: "obj_ref \<Rightarrow> (unit, det_ext) s_monad"
+where
+  "unbind_from_reply tptr \<equiv> do
+    reply_opt \<leftarrow> thread_get tcb_reply tptr;
+    maybeM reply_remove reply_opt
+  od"
+
 text {* Push a reply object to the call stack. *}
 definition
   reply_push :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> obj_ref \<Rightarrow> bool \<Rightarrow> unit det_ext_monad"
@@ -427,31 +435,6 @@ where
     when (sc_tcb sc \<noteq> None) $ sched_context_unbind_tcb sc_ptr
   od"
 
-text {* Finalise a capability if the capability is known to be of the kind
-which can be finalised immediately. This is a simplified version of the
-@{text finalise_cap} operation. *}
-fun
-  fast_finalise :: "cap \<Rightarrow> bool \<Rightarrow> unit det_ext_monad"
-where
-  "fast_finalise NullCap                 final = return ()"
-| "fast_finalise (ReplyCap r)            final =
-      (when final $ reply_remove r)"
-| "fast_finalise (EndpointCap r b R)     final =
-      (when final $ cancel_all_ipc r)"
-| "fast_finalise (NotificationCap r b R) final =
-      (when final $ do
-          sched_context_maybe_unbind_ntfn r;
-          unbind_maybe_notification r;
-          cancel_all_signals r
-       od)"
-| "fast_finalise (SchedContextCap sc b)    final =
-      (when final $ do
-          sched_context_unbind_all_tcbs sc;
-          sched_context_unbind_ntfn sc;
-          sched_context_clear_replies sc
-      od)"
-| "fast_finalise _ _ = fail"
-
 text {* The optional IRQ stored in a capability, presented either as an optional
 value or a set. *}
 definition
@@ -510,19 +493,6 @@ where
       od
   od"
 
-text {* Delete a capability with the assumption that the fast finalisation
-process will be sufficient. *}
-definition
-  cap_delete_one :: "cslot_ptr \<Rightarrow> unit det_ext_monad" where
- "cap_delete_one slot \<equiv> do
-    cap \<leftarrow> get_cap slot;
-    unless (cap = NullCap) $ do
-      final \<leftarrow> is_final_cap cap;
-      fast_finalise cap final;
-      empty_slot slot None
-    od
-  od"
-
 text {* Cancel the message receive operation of a thread waiting for a Reply
 capability it has issued to be invoked. *}
 definition
@@ -564,17 +534,6 @@ where
         | BlockedOnNotification event \<Rightarrow> cancel_signal tptr event
         | BlockedOnReply \<Rightarrow> reply_cancel_ipc tptr
         | _ \<Rightarrow> return ()
-   od"
-
-text {* Suspend a thread, cancelling any pending operations and preventing it
-from further execution by setting it to the Inactive state. *}
-definition
-  suspend :: "obj_ref \<Rightarrow> unit det_ext_monad"
-where
-  "suspend thread \<equiv> do
-     cancel_ipc thread;
-     set_thread_state thread Inactive;
-     do_extended_op (tcb_sched_action (tcb_sched_dequeue) thread)
    od"
 
 end

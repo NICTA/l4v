@@ -15,7 +15,7 @@ The TCB and thread related specifications.
 chapter "Threads and TCBs"
 
 theory Tcb_A
-imports TcbAcc_A Schedule_A "$L4V_ARCH/ArchTcb_A"
+imports Schedule_A "$L4V_ARCH/ArchTcb_A"
 begin
 
 context begin interpretation Arch .
@@ -52,12 +52,13 @@ control is restored to a used thread. If it needs to be restarted then its
 program counter is set to the operation it was performing rather than the next
 operation. The idle thread is handled specially. *}
 definition
-  activate_thread :: "(unit,'z::state_ext) s_monad" where
+  activate_thread :: "(unit,det_ext) s_monad" where
   "activate_thread \<equiv> do
      thread \<leftarrow> gets cur_thread;
      state \<leftarrow> get_thread_state thread;
      (case state
        of Running \<Rightarrow> return ()
+        | YieldTo \<Rightarrow> complete_yield_to thread
         | Restart \<Rightarrow> (do
             pc \<leftarrow> as_user thread getRestartPC;
             as_user thread $ setNextPC pc;

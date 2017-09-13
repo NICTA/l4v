@@ -361,6 +361,7 @@ datatype thread_state
   = Running
   | Inactive
   | Restart
+  | YieldTo
   | BlockedOnReceive obj_ref "obj_ref option"
   | BlockedOnSend obj_ref sender_payload
   | BlockedOnReply
@@ -381,6 +382,7 @@ record tcb =
  tcb_bound_notification     :: "obj_ref option"
  tcb_mcpriority    :: priority
  tcb_sched_context :: "obj_ref option"
+ tcb_yield_to      :: "obj_ref option"
  tcb_reply         :: "obj_ref option"
  tcb_arch          :: arch_tcb
 
@@ -391,6 +393,7 @@ where
   "runnable (Running)               = True"
 | "runnable (Inactive)              = False"
 | "runnable (Restart)               = True"
+| "runnable (YieldTo)               = True"
 | "runnable (BlockedOnReceive _ _)  = False"
 | "runnable (BlockedOnSend x y)     = False"
 | "runnable (BlockedOnNotification x) = False"
@@ -411,6 +414,7 @@ definition
       tcb_bound_notification  = None,
       tcb_mcpriority = minBound,
       tcb_sched_context = None,
+      tcb_yield_to   = None,
       tcb_reply      = None,
       tcb_arch       = default_arch_tcb\<rparr>"
 
@@ -429,6 +433,7 @@ record sched_context =
   sc_refills    :: "refill list"
   sc_refill_max :: nat
   sc_badge      :: badge
+  sc_yield_from :: "obj_ref option"
   sc_replies    :: "obj_ref list"
 
 definition "MIN_REFILLS = 2"
@@ -444,6 +449,7 @@ definition
     sc_refills    = [\<lparr>r_time=0, r_amount=0\<rparr>],
     sc_refill_max = 0,
     sc_badge      = 0,
+    sc_yield_from = None,
     sc_replies    = []
   \<rparr>"
 

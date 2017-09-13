@@ -447,7 +447,7 @@ and scheduling control. *}
 
 definition
   decode_sched_context_invocation ::
-  "data \<Rightarrow> obj_ref \<Rightarrow> cap list \<Rightarrow> data list \<Rightarrow> (sched_context_invocation,'z::state_ext) se_monad"
+  "data \<Rightarrow> obj_ref \<Rightarrow> cap list \<Rightarrow> data list \<Rightarrow> (sched_context_invocation, det_ext) se_monad"
 where
   "decode_sched_context_invocation label sc_ptr excaps args \<equiv>
   case invocation_type label of
@@ -485,8 +485,20 @@ where
       returnOk $ InvokeSchedContextUnbindObject sc_ptr cap
     odE
   | SchedContextUnbind \<Rightarrow> returnOk $ InvokeSchedContextUnbind sc_ptr
+  | SchedContextYieldTo \<Rightarrow> doE
+      sc \<leftarrow> liftE $ get_sched_context sc_ptr;
+      case (sc_tcb sc) of
+        None \<Rightarrow> throwError IllegalOperation
+      | Some tcb_ptr \<Rightarrow> doE
+          ct_ptr \<leftarrow> liftE $ gets cur_thread;
+          whenE (tcb_ptr = ct_ptr) $ throwError IllegalOperation;
+          prios \<leftarrow> liftE $ ethread_get tcb_priority tcb_ptr;
+          ct_mcp \<leftarrow> liftE $ thread_get tcb_mcpriority ct_ptr;
+          whenE (prios > ct_mcp) $ throwError IllegalOperation
+      odE;
+      returnOk $ InvokeSchedContextYieldTo sc_ptr args
+   odE
   | _ \<Rightarrow> throwError $ IllegalOperation"
-
 
 definition
   TIME_ARG_SIZE :: nat

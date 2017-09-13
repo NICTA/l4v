@@ -66,6 +66,7 @@ datatype sched_context_invocation =
   | InvokeSchedContextBind obj_ref cap
   | InvokeSchedContextUnbindObject obj_ref cap
   | InvokeSchedContextUnbind obj_ref
+  | InvokeSchedContextYieldTo obj_ref "data list"
 
 datatype sched_control_invocation =
     InvokeSchedControlConfigure obj_ref ticks ticks nat badge

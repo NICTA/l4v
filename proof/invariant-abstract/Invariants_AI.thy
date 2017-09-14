@@ -455,8 +455,9 @@ where
     tcb_cnode_index 1 \<mapsto> (tcb_vtable, tcb_vtable_update, (\<lambda>_ _. \<top>)),
     tcb_cnode_index 2 \<mapsto> (tcb_ipcframe, tcb_ipcframe_update,
                           (\<lambda>_ _. is_nondevice_page_cap or (op = NullCap))),
-    tcb_cnode_index 3 \<mapsto> (tcb_fault_handler, tcb_fault_handler_update, (\<lambda>_ _. \<top>))]"
-                                  (* RT: check the fault_handler case *)
+    tcb_cnode_index 3 \<mapsto> (tcb_fault_handler, tcb_fault_handler_update, (\<lambda>_ _. \<top>)),
+    tcb_cnode_index 4 \<mapsto> (tcb_timeout_handler, tcb_timeout_handler_update, (\<lambda>_ _. \<top>))]"
+                                  (* RT: check the handler cases *)
 
 definition
   valid_fault :: "ExceptionTypes_A.fault \<Rightarrow> bool"
@@ -552,7 +553,7 @@ where
                           Some (getF, setF, restr) \<Rightarrow> restr (fst ptr) st cap
                         | None \<Rightarrow> True)
                (fst ptr) s
-      \<and> (snd ptr = tcb_cnode_index 4 \<longrightarrow>
+      \<and> (snd ptr = tcb_cnode_index 2 \<longrightarrow>
            (\<forall>tcb. ko_at (TCB tcb) (fst ptr) s
                    \<longrightarrow> valid_ipc_buffer_cap cap (tcb_ipc_buffer tcb)))"
 
@@ -1257,7 +1258,7 @@ lemma valid_capsD:
 
 lemma tcb_cnode_index_distinct[simp]:
   "(tcb_cnode_index n = tcb_cnode_index m)
-       = ((of_nat n :: 2 word) = (of_nat m :: 2 word))"
+       = ((of_nat n :: 3 word) = (of_nat m :: 3 word))"
   by (simp add: tcb_cnode_index_def)
 
 
@@ -1272,6 +1273,9 @@ lemma tcb_cap_cases_simps[simp]:
   "tcb_cap_cases (tcb_cnode_index 3) =
    Some (tcb_fault_handler, tcb_fault_handler_update,
          (\<lambda>_ _. \<top>))"
+  "tcb_cap_cases (tcb_cnode_index 4) =
+   Some (tcb_timeout_handler, tcb_timeout_handler_update,
+         (\<lambda>_ _. \<top>))"
   by (simp add: tcb_cap_cases_def)+
 
 lemma ran_tcb_cap_cases:
@@ -1279,7 +1283,8 @@ lemma ran_tcb_cap_cases:
     {(tcb_ctable, tcb_ctable_update, (\<lambda>_ _. \<top>)),
      (tcb_vtable, tcb_vtable_update, (\<lambda>_ _. \<top>)),
      (tcb_ipcframe, tcb_ipcframe_update, (\<lambda>_ _. is_nondevice_page_cap or (op = NullCap))),
-     (tcb_fault_handler, tcb_fault_handler_update, (\<lambda>_ _. \<top>))}"
+     (tcb_fault_handler, tcb_fault_handler_update, (\<lambda>_ _. \<top>)),
+     (tcb_timeout_handler, tcb_timeout_handler_update, (\<lambda>_ _. \<top>))}"
   by (simp add: tcb_cap_cases_def insert_commute)
 
 lemma tcb_cnode_map_tcb_cap_cases:
@@ -1288,9 +1293,8 @@ lemma tcb_cnode_map_tcb_cap_cases:
 
 lemma ran_tcb_cnode_map:
   "ran (tcb_cnode_map t) =
-   {tcb_vtable t, tcb_ctable t, tcb_ipcframe t, tcb_fault_handler t}"
+   {tcb_vtable t, tcb_ctable t, tcb_ipcframe t, tcb_fault_handler t, tcb_timeout_handler t}"
   by (fastforce simp: tcb_cnode_map_def)
-
 
 lemma st_tcb_idle_cap_valid_Null [simp]:
   "st_tcb_at (idle or inactive) (fst sl) s \<longrightarrow>

@@ -24,6 +24,7 @@ requalify_consts
   in_user_frame
   as_user
   msg_max_length
+  lookup_ipc_buffer
 
 end
 

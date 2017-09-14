@@ -21,7 +21,6 @@ begin
 context begin interpretation Arch .
 
 requalify_consts
-  lookup_ipc_buffer
   make_arch_fault_msg
   handle_arch_fault_reply
 end

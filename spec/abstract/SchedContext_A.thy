@@ -451,8 +451,9 @@ where
      case yieldto of
        None \<Rightarrow> return  ()
      | Some sc_ptr \<Rightarrow> do
-         args \<leftarrow> return [];
-         set_consumed sc_ptr args;
+         args \<leftarrow> lookup_ipc_buffer True tcb_ptr;
+         buf \<leftarrow> assert_opt args;
+         set_consumed sc_ptr [buf];
          cancel_yield_to tcb_ptr;
          set_thread_state tcb_ptr Running
       od

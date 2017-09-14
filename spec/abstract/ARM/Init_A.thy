@@ -69,8 +69,6 @@ definition
   (idle_thread_ptr \<mapsto> TCB \<lparr>
     tcb_ctable = NullCap,
     tcb_vtable = NullCap,
-    tcb_reply = NullCap,
-    tcb_caller = NullCap,
     tcb_ipcframe = NullCap,
     tcb_state = IdleThreadState,
     tcb_fault_handler = replicate word_bits False,
@@ -79,6 +77,7 @@ definition
     tcb_bound_notification = None,
     tcb_mcpriority = minBound,
     tcb_sched_context = None,
+    tcb_reply = None,
     tcb_arch = init_arch_tcb
   \<rparr>,
   init_globals_frame \<mapsto> ArchObj (DataPage False ARMSmallPage), (* FIXME: same reason as why we kept the definition of init_globals_frame *)

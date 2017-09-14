@@ -94,22 +94,13 @@ where
      set_object ref (TCB (tcb \<lparr> tcb_bound_notification := ntfn \<rparr>))
    od"
 
-definition set_thread_state_ext :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "set_thread_state_ext t \<equiv> do
-     inq \<leftarrow> gets $ in_release_queue t;
-     sched \<leftarrow> is_schedulable t inq;
-     cur \<leftarrow> gets cur_thread;
-     action \<leftarrow> gets scheduler_action;
-     when (\<not>sched \<and> cur = t \<and> action = resume_cur_thread) (set_scheduler_action choose_new_thread)
-   od"
-
 definition
   set_thread_state :: "obj_ref \<Rightarrow> thread_state \<Rightarrow> (unit,'z::state_ext) s_monad"
 where
   "set_thread_state ref ts \<equiv> do
      tcb \<leftarrow> gets_the $ get_tcb ref;
      set_object ref (TCB (tcb \<lparr> tcb_state := ts \<rparr>));
-     do_extended_op (set_thread_state_ext ref)
+     do_extended_op (schedule_tcb ref)
    od"
 
 definition
@@ -155,6 +146,8 @@ where
      set_object ptr (Notification ntfn)
    od"
 
+section {* Scheduling Contexts *}
+
 definition
   get_sched_context :: "obj_ref \<Rightarrow> (sched_context,'z::state_ext) s_monad"
 where
@@ -172,6 +165,30 @@ where
      assert (case obj of SchedContext sc \<Rightarrow> True | _ \<Rightarrow> False);
      set_object ptr (SchedContext sc)
    od"
+
+
+section {* Reply Objects *}
+
+definition
+  get_reply :: "obj_ref \<Rightarrow> reply det_ext_monad"
+where
+  "get_reply ptr \<equiv> do
+     kobj \<leftarrow> get_object ptr;
+     (case kobj of Reply r \<Rightarrow> return r
+                 | _ \<Rightarrow> fail)
+   od"
+  
+definition
+  set_reply :: "obj_ref \<Rightarrow> reply \<Rightarrow> (unit,'z::state_ext) s_monad"
+where
+  "set_reply ptr r \<equiv> do
+     obj \<leftarrow> get_object ptr;
+     assert (case obj of Reply _ \<Rightarrow> True | _ \<Rightarrow> False);
+     set_object ptr (Reply r)
+   od"
+
+abbreviation
+  "get_reply_caller r \<equiv> liftM reply_caller (get_reply r)"
 
 
 section {* IRQ State and Slot *}

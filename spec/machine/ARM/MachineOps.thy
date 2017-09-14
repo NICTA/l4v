@@ -360,8 +360,8 @@ text {*
 definition
   "non_kernel_IRQs = {}"
 
-text {*
-  @{term getActiveIRQ} is now derministic.
+text {* 
+  @{term getActiveIRQ} is now deterministic.
   It 'updates' the irq state to the reflect the passage of
   time since last the irq was gotten, then it gets the active
   IRQ (if there is one).

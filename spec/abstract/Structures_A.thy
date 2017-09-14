@@ -60,6 +60,7 @@ datatype apiobject_type =
   | NotificationObject
   | CapTableObject
   | SchedContextObject
+  | ReplyObject
   | ArchObject aobject_type
 
 definition
@@ -105,7 +106,7 @@ datatype cap
            -- {* device flag, pointer, size in bits (i.e. @{text "size = 2^bits"}) and freeIndex (i.e. @{text "freeRef = obj_ref + (freeIndex * 2^4)"}) *}
          | EndpointCap obj_ref badge cap_rights
          | NotificationCap obj_ref badge cap_rights
-         | ReplyCap obj_ref bool
+         | ReplyCap obj_ref
          | CNodeCap obj_ref nat "bool list"
            -- "CNode ptr, number of bits translated, guard"
          | ThreadCap obj_ref
@@ -168,10 +169,7 @@ definition
 
 definition
   is_reply_cap :: "cap \<Rightarrow> bool" where
-  "is_reply_cap cap \<equiv> case cap of ReplyCap _ m \<Rightarrow> \<not> m | _ \<Rightarrow> False"
-definition
-  is_master_reply_cap :: "cap \<Rightarrow> bool" where
-  "is_master_reply_cap cap \<equiv> case cap of ReplyCap _ m \<Rightarrow> m | _ \<Rightarrow> False"
+  "is_reply_cap cap \<equiv> case cap of ReplyCap _ \<Rightarrow> True | _ \<Rightarrow> False"
 definition
   is_zombie :: "cap \<Rightarrow> bool" where
   "is_zombie cap \<equiv> case cap of Zombie _ _ _ \<Rightarrow> True | _ \<Rightarrow> False"
@@ -341,10 +339,7 @@ indicates that the TCB is not currently used by a running thread.
 TCBs also contain some special-purpose capability slots. The CTable slot is a
 capability to a CNode through which the thread accesses capabilities with which
 to perform system calls. The VTable slot is a capability to a virtual address
-space (an architecture-specific capability type) in which the thread runs. If
-the thread has issued a Reply cap to another thread and is awaiting a reply,
-that cap will have a "master" Reply cap as its parent in the Reply slot. The
-Caller slot is used to initially store any Reply cap issued to this thread. The
+space (an architecture-specific capability type) in which the thread runs. The
 IPCFrame slot stores a capability to a memory frame (an architecture-specific
 capability type) through which messages will be sent and received.
 
@@ -364,7 +359,7 @@ datatype thread_state
   = Running
   | Inactive
   | Restart
-  | BlockedOnReceive obj_ref
+  | BlockedOnReceive obj_ref "obj_ref option"
   | BlockedOnSend obj_ref sender_payload
   | BlockedOnReply
   | BlockedOnNotification obj_ref
@@ -375,8 +370,6 @@ type_synonym priority = word8
 record tcb =
  tcb_ctable        :: cap
  tcb_vtable        :: cap
- tcb_reply         :: cap
- tcb_caller        :: cap
  tcb_ipcframe      :: cap
  tcb_state         :: thread_state
  tcb_fault_handler :: cap_ref
@@ -385,8 +378,8 @@ record tcb =
  tcb_bound_notification     :: "obj_ref option"
  tcb_mcpriority    :: priority
  tcb_sched_context :: "obj_ref option"
+ tcb_reply         :: "obj_ref option"
  tcb_arch          :: arch_tcb
-
 
 text {* Determines whether a thread in a given state may be scheduled. *}
 primrec
@@ -395,7 +388,7 @@ where
   "runnable (Running)               = True"
 | "runnable (Inactive)              = False"
 | "runnable (Restart)               = True"
-| "runnable (BlockedOnReceive x)  = False"
+| "runnable (BlockedOnReceive _ _)  = False"
 | "runnable (BlockedOnSend x y)     = False"
 | "runnable (BlockedOnNotification x) = False"
 | "runnable (IdleThreadState)       = False"
@@ -406,8 +399,6 @@ definition
   "default_tcb \<equiv> \<lparr>
       tcb_ctable   = NullCap,
       tcb_vtable   = NullCap,
-      tcb_reply    = NullCap,
-      tcb_caller   = NullCap,
       tcb_ipcframe = NullCap,
       tcb_state    = Inactive,
       tcb_fault_handler = to_bl (0::machine_word),
@@ -416,20 +407,22 @@ definition
       tcb_bound_notification  = None,
       tcb_mcpriority = minBound,
       tcb_sched_context = None,
+      tcb_reply      = None,
       tcb_arch       = default_arch_tcb\<rparr>"
 
 type_synonym ticks = "64 word"
-type_synonym time = "64 word"
+type_synonym time  = "64 word"
 
 record refill =
-  r_time :: time
+  r_time   :: time
   r_amount :: time
 
 record sched_context =
-  sc_period :: ticks
-  sc_tcb :: "obj_ref option"
-  sc_refills :: "refill list"
+  sc_period     :: ticks
+  sc_tcb        :: "obj_ref option"
+  sc_refills    :: "refill list"
   sc_refill_max :: nat
+  sc_replies    :: "obj_ref list"
 
 definition "MIN_REFILLS = 2"
 definition "MAX_REFILLS = 12"
@@ -440,9 +433,16 @@ definition
     sc_period = 0,
     sc_tcb = None,
     sc_refills = [\<lparr>r_time=0, r_amount=0\<rparr>],
-    sc_refill_max = 0
+    sc_refill_max = 0,
+    sc_replies = []
   \<rparr>"
 
+record reply =
+  reply_caller :: "obj_ref option"
+  reply_sc     :: "obj_ref option"
+
+definition
+  "default_reply = \<lparr> reply_caller = None, reply_sc = None \<rparr>"
 
 text {*
 All kernel objects are CNodes, TCBs, Endpoints, Notifications or architecture
@@ -454,6 +454,7 @@ datatype kernel_object
          | Endpoint endpoint
          | Notification notification
          | SchedContext sched_context
+         | Reply reply
          | ArchObj (the_arch_obj: arch_kernel_obj)
 
 lemmas kernel_object_cases =
@@ -478,6 +479,7 @@ where
 | "obj_bits (Endpoint ep) = endpoint_bits"
 | "obj_bits (Notification ntfn) = ntfn_bits"
 | "obj_bits (SchedContext sc) = 8"
+| "obj_bits (Reply r) = 4"
 | "obj_bits (ArchObj ao) = arch_kobj_size ao"
 
 primrec (nonexhaustive)
@@ -490,6 +492,7 @@ where
 | "obj_size (CNodeCap r bits g) = 1 << (cte_level_bits + bits)"
 | "obj_size (ThreadCap r) = 1 << obj_bits (TCB undefined)"
 | "obj_size (SchedContextCap r) = 1 << obj_bits (SchedContext undefined)"
+| "obj_size (ReplyCap r) = 1 << obj_bits (Reply undefined)"
 | "obj_size (Zombie r zb n) = (case zb of None \<Rightarrow> 1 << obj_bits (TCB undefined)
                                         | Some n \<Rightarrow> 1 << (cte_level_bits + n))"
 | "obj_size (ArchObjectCap a) = 1 << arch_obj_size a"
@@ -573,7 +576,7 @@ capability slots within a TCB.
 *}
 definition
   tcb_cnode_index :: "nat \<Rightarrow> cnode_index" where
-  "tcb_cnode_index n \<equiv> to_bl (of_nat n :: 3 word)"
+  "tcb_cnode_index n \<equiv> to_bl (of_nat n :: 2 word)"
 
 text {* Zombie capabilities store the bit size of the CNode cap they were
 created from or None if they were created from a TCB cap. This function
@@ -581,11 +584,11 @@ decodes the bit-length of cnode indices into the relevant kernel objects.
 *}
 definition
   zombie_cte_bits :: "nat option \<Rightarrow> nat" where
- "zombie_cte_bits N \<equiv> case N of Some n \<Rightarrow> n | None \<Rightarrow> 3"
+ "zombie_cte_bits N \<equiv> case N of Some n \<Rightarrow> n | None \<Rightarrow> 2"
 
 lemma zombie_cte_bits_simps[simp]:
  "zombie_cte_bits (Some n) = n"
- "zombie_cte_bits None     = 3"
+ "zombie_cte_bits None     = 2"
   by (simp add: zombie_cte_bits_def)+
 
 text {* The first capability slot of the relevant kernel object. *}
@@ -601,7 +604,7 @@ primrec
   obj_refs :: "cap \<Rightarrow> obj_ref set"
 where
   "obj_refs NullCap = {}"
-| "obj_refs (ReplyCap r m) = {}"
+| "obj_refs (ReplyCap r) = {r}"
 | "obj_refs IRQControlCap = {}"
 | "obj_refs (IRQHandlerCap irq) = {}"
 | "obj_refs (UntypedCap dev r s f) = {}"
@@ -617,14 +620,14 @@ where
 
 text {*
   The partial definition below is sometimes easier to work with.
-  It also provides cases for UntypedCap and ReplyCap which are not
-  true object references in the sense of the other caps.
+  It also provides a result for UntypedCap which does not contain
+  a true object reference in the sense of the other caps.
 *}
 primrec (nonexhaustive)
   obj_ref_of :: "cap \<Rightarrow> obj_ref"
 where
   "obj_ref_of (UntypedCap dev r s f) = r"
-| "obj_ref_of (ReplyCap r m) = r"
+| "obj_ref_of (ReplyCap r) = r"
 | "obj_ref_of (CNodeCap r bits guard) = r"
 | "obj_ref_of (EndpointCap r b cr) = r"
 | "obj_ref_of (NotificationCap r b cr) = r"
@@ -642,9 +645,7 @@ definition
   "tcb_cnode_map tcb \<equiv>
    [tcb_cnode_index 0 \<mapsto> tcb_ctable tcb,
     tcb_cnode_index 1 \<mapsto> tcb_vtable tcb,
-    tcb_cnode_index 2 \<mapsto> tcb_reply tcb,
-    tcb_cnode_index 3 \<mapsto> tcb_caller tcb,
-    tcb_cnode_index 4 \<mapsto> tcb_ipcframe tcb]"
+    tcb_cnode_index 2 \<mapsto> tcb_ipcframe tcb]"
 
 definition
   "cap_of kobj \<equiv>

@@ -78,6 +78,28 @@ EXCLUDE["X64"]=[
 if not set(L4V_ARCH_LIST) <= set(EXCLUDE.keys()):
     sys.exit("[INTERNAL ERROR] exclusion lists are non-exhaustive")
 
+# Export L4V_ARCH variable as ARM (Default)
+export L4V_ARCH="${L4V_ARCH:-ARM}"
+echo "Testing for L4V_ARCH=${L4V_ARCH}:"
+
+# Enable quick_and_dirty mode for various images
+if [ -n "${QUICK_AND_DIRTY}" ]
+   then
+       export INVS_QUICK_AND_DIRTY=1
+       export REFINE_QUICK_AND_DIRTY=1
+       export CREFINE_QUICK_AND_DIRTY=1
+       echo "Testing with QUICK_AND_DIRTY"
+fi
+
+# Enable skip_proofs mode for various images
+
+if [ -n "${REFINE_PROOFS}" ]
+then
+    export SKIP_REFINE_PROOFS=1
+    export SKIP_INVS_PROOFS=1
+    echo "Testing with SKIP_PROOFS"
+fi
+
 # Run the tests from the script directory.
 os.chdir(DIR)
 

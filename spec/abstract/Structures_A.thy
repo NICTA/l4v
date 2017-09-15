@@ -619,7 +619,7 @@ capability slots within a TCB.
 *}
 definition
   tcb_cnode_index :: "nat \<Rightarrow> cnode_index" where
-  "tcb_cnode_index n \<equiv> to_bl (of_nat n :: 2 word)"
+  "tcb_cnode_index n \<equiv> to_bl (of_nat n :: 3 word)"
 
 text {* Zombie capabilities store the bit size of the CNode cap they were
 created from or None if they were created from a TCB cap. This function

@@ -31,9 +31,6 @@ definition
   "init_tcb_ptr = kernel_base + 0x2000"
 
 definition
-  "idle_sc_ptr = kernel_base + 0x3000"
-
-definition
   init_irq_node_ptr :: word32 where
   "init_irq_node_ptr = kernel_base + 0x8000"
 

@@ -218,6 +218,7 @@ datatype reftype
      | TCBHypRef | HypTCBRef
      | TCBSchedContext | SCTcb | NTFNSchedContext | SCNtfn
      | TCBReply | ReplyCaller | SCReply | ReplySchedContext
+     | TCBYieldTo | SCYieldFrom
 
 primrec
  symreftype :: "reftype \<Rightarrow> reftype"
@@ -240,6 +241,8 @@ where
 | "symreftype ReplyCaller     = TCBReply"
 | "symreftype SCReply         = ReplySchedContext"
 | "symreftype ReplySchedContext = SCReply"
+| "symreftype TCBYieldTo      = SCYieldFrom"
+| "symreftype SCYieldFrom     = TCBYieldTo"
 
 
 definition

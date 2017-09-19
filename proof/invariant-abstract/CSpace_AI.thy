@@ -198,7 +198,7 @@ proof (induct args arbitrary: s rule: resolve_address_bits'.induct)
     apply (subst resolve_address_bits'.simps)
     apply (cases cap, simp_all split del: if_split)
             defer 6 (* CNode *)
-            apply (wp+)[11]
+            apply (wp+)[13]
     apply (simp add: split_def cong: if_cong split del: if_split)
     apply (rule hoare_pre_spec_validE)
      apply (wp P [OF "1.hyps"], (simp add: in_monad | rule conjI refl)+)
@@ -223,7 +223,7 @@ proof (induct args rule: resolve_address_bits'.induct)
     apply (subst (asm) resolve_address_bits'.simps)
     apply (cases cap)
               defer 6 (* cnode *)
-          apply (auto simp: in_monad)[11]
+          apply (auto simp: in_monad)[13]
     apply (rename_tac obj_ref nat list)
     apply (simp only: cap.simps)
     apply (case_tac "nat + length list = 0")
@@ -561,7 +561,9 @@ where
   | Structures_A.CNodeCap r bits guard \<Rightarrow> True
   | Structures_A.ThreadCap r \<Rightarrow> True
   | Structures_A.DomainCap \<Rightarrow> False
-  | Structures_A.ReplyCap r master \<Rightarrow> False
+  | Structures_A.SchedContextCap r n \<Rightarrow> False
+  | Structures_A.ReplyCap r \<Rightarrow> False
+  | Structures_A.SchedControlCap \<Rightarrow> False
   | Structures_A.IRQControlCap \<Rightarrow> False
   | Structures_A.IRQHandlerCap irq \<Rightarrow> True
   | Structures_A.Zombie r b n \<Rightarrow> True
@@ -902,9 +904,9 @@ where
   else
     (cap_master_cap cap = cap_master_cap cap') \<and>
     (cap_badge cap, cap_badge cap') \<in> capBadge_ordering False) \<and>
-    (is_master_reply_cap cap = is_reply_cap cap') \<and>
+(*    (is_master_reply_cap cap = is_reply_cap cap') \<and>*)
     is_derived_arch cap' cap \<and>
-    \<not> is_reply_cap cap \<and> \<not> is_master_reply_cap cap'"
+    \<not> is_reply_cap cap (*\<and> \<not> is_master_reply_cap cap'*)"  (* RT: FIXME *)
 
 
 lemma the_arch_cap_ArchObjectCap[simp]:
@@ -919,8 +921,10 @@ lemma cap_master_cap_simps:
   "cap_master_cap (cap.NullCap)           = cap.NullCap"
   "cap_master_cap (cap.DomainCap)         = cap.DomainCap"
   "cap_master_cap (cap.UntypedCap dev r n f)  = cap.UntypedCap dev r n 0"
-  "cap_master_cap (cap.ReplyCap r m)      = cap.ReplyCap r True"
+  "cap_master_cap (cap.ReplyCap r)        = cap.ReplyCap r"
   "cap_master_cap (cap.IRQControlCap)     = cap.IRQControlCap"
+  "cap_master_cap (cap.SchedContextCap r n) = cap.SchedContextCap r n"
+  "cap_master_cap (cap.SchedControlCap)   = cap.SchedControlCap"
   "cap_master_cap (cap.IRQHandlerCap irq) = cap.IRQHandlerCap irq"
   "cap_master_cap (cap.Zombie r a b)      = cap.Zombie r a b"
   "cap_master_cap (ArchObjectCap ac) = ArchObjectCap (cap_master_arch_cap ac)"
@@ -1184,8 +1188,8 @@ end
 definition
   copy_of :: "cap \<Rightarrow> cap \<Rightarrow> bool"
 where
-  "copy_of cap' cap \<equiv>
-  if (is_untyped_cap cap \<or> is_reply_cap cap \<or> is_master_reply_cap cap)
+  "copy_of cap' cap \<equiv> (* RT: check *)
+  if (is_untyped_cap cap(* \<or> is_reply_cap cap*))
      then cap = cap' else same_object_as cap cap'"
 
 definition

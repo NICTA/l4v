@@ -436,7 +436,7 @@ definition
   valid_tcb_state :: "thread_state \<Rightarrow> 'z::state_ext state \<Rightarrow> bool"
 where
   "valid_tcb_state ts s \<equiv> case ts of
-    BlockedOnReceive ref r \<Rightarrow> ep_at ref s
+    BlockedOnReceive ref r \<Rightarrow> ep_at ref s \<and> (case r of Some r' \<Rightarrow> reply_at r' s | _ \<Rightarrow> True)
   | BlockedOnSend ref sp \<Rightarrow> ep_at ref s
   | BlockedOnNotification ref \<Rightarrow> ntfn_at ref s
   | _ \<Rightarrow> True"
@@ -2284,9 +2284,10 @@ lemma valid_cap_typ:
 lemma valid_tcb_state_typ:
   assumes P: "\<And>T p. \<lbrace>typ_at T p\<rbrace> f \<lbrace>\<lambda>rv. typ_at T p\<rbrace>"
   shows      "\<lbrace>\<lambda>s. valid_tcb_state st s\<rbrace> f \<lbrace>\<lambda>rv s. valid_tcb_state st s\<rbrace>"
-  by (case_tac st,
-      simp_all add: valid_tcb_state_def hoare_post_taut
+  apply (case_tac st;
+      wpsimp simp: valid_tcb_state_def hoare_post_taut reply_at_typ
                     ep_at_typ P tcb_at_typ ntfn_at_typ)
+  sorry
 
 lemma ntfn_at_typ_at:
   "(\<And>T p. \<lbrace>typ_at T p\<rbrace> f \<lbrace>\<lambda>rv. typ_at T p\<rbrace>) \<Longrightarrow> \<lbrace>ntfn_at c\<rbrace> f \<lbrace>\<lambda>rv. ntfn_at c\<rbrace>"
@@ -3265,16 +3266,20 @@ lemma invs_valid_idle[elim!]:
   "invs s \<Longrightarrow> valid_idle s"
   by (fastforce simp: invs_def valid_state_def)
 
-
+(* not used anywhere
 lemma simple_st_tcb_at_state_refs_ofD:
   "st_tcb_at simple t s \<Longrightarrow> bound_tcb_at (\<lambda>x. get_refs TCBBound x = state_refs_of s t) t s"
   by (clarsimp simp: pred_tcb_at_def obj_at_def state_refs_of_def)
+*)
+lemma active_st_tcb_at_state_refs_ofD:
+  "st_tcb_at active t s \<Longrightarrow> st_tcb_at (\<lambda>x. tcb_st_refs_of x = {}) t s"
+  by (auto simp: pred_tcb_at_def obj_at_def split: thread_state.splits)
 
-
+(* need a new version? or the above lemma should suffice?
 lemma active_st_tcb_at_state_refs_ofD:
   "st_tcb_at active t s \<Longrightarrow> bound_tcb_at (\<lambda>x. get_refs TCBBound x = state_refs_of s t) t s"
   by (clarsimp simp: pred_tcb_at_def obj_at_def state_refs_of_def)
-
+*)
 lemma cur_tcb_revokable [iff]:
   "cur_tcb (is_original_cap_update f s) = cur_tcb s"
   by (simp add: cur_tcb_def)

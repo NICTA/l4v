@@ -901,7 +901,7 @@ definition
 
 definition
   "irq_revocable r cs \<equiv> \<forall>p. cs p = Some IRQControlCap \<longrightarrow> r p"
-
+(*
 definition (* RT: ? *)
   "reply_caps_mdb m cs \<equiv> \<forall>ptr t.
      cs ptr = Some (ReplyCap t) \<longrightarrow>
@@ -914,14 +914,14 @@ definition (* RT: ? *)
 
 definition (* RT: ? *)
   "reply_mdb m cs \<equiv> reply_caps_mdb m cs \<and> reply_masters_mdb m cs"
-
+*)
 definition
   "valid_mdb \<equiv> \<lambda>s. mdb_cte_at (swp (cte_wp_at (op \<noteq> NullCap)) s) (cdt s) \<and>
                    untyped_mdb (cdt s) (caps_of_state s) \<and> descendants_inc (cdt s) (caps_of_state s) \<and>
                    no_mloop (cdt s) \<and> untyped_inc (cdt s) (caps_of_state s) \<and>
                    ut_revocable (is_original_cap s) (caps_of_state s) \<and>
-                   irq_revocable (is_original_cap s) (caps_of_state s) \<and>
-                   reply_mdb (cdt s) (caps_of_state s)"
+                   irq_revocable (is_original_cap s) (caps_of_state s)(* \<and>
+                   reply_mdb (cdt s) (caps_of_state s)*)"
 
 abbreviation
   "idle_tcb_at \<equiv> pred_tcb_at (\<lambda>t. (itcb_state t, itcb_bound_notification t,
@@ -2628,8 +2628,8 @@ lemma valid_mdb_def2:
                     untyped_mdb (cdt s) (caps_of_state s) \<and> descendants_inc (cdt s) (caps_of_state s) \<and>
                     no_mloop (cdt s) \<and> untyped_inc (cdt s) (caps_of_state s) \<and>
                     ut_revocable (is_original_cap s) (caps_of_state s) \<and>
-                    irq_revocable (is_original_cap s) (caps_of_state s) \<and>
-                    reply_mdb (cdt s) (caps_of_state s))"
+                    irq_revocable (is_original_cap s) (caps_of_state s)(* \<and>
+                    reply_mdb (cdt s) (caps_of_state s)*))"
   by (auto simp add: valid_mdb_def swp_cte_at_caps_of)
 
 lemma cte_wp_valid_cap:

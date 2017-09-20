@@ -26,8 +26,8 @@ This module uses the C preprocessor to select a target architecture.
 >         refillHd, refillTl, minBudget, minBudgetUs, refillCapacity, refillBudgetCheck,
 >         refillSplitCheck, isCurDomainExpired, refillUnblockCheck,
 >         refillReadyTCB, refillReady, tcbReleaseEnqueue,
->         guardedSwitchTo, refillSufficient, postpone, replyUnbindSc,
->         schedContextDonate, schedContextClearReplies,
+>         guardedSwitchTo, refillSufficient, postpone,
+>         schedContextDonate,
 >         maybeDonateSc, maybeReturnSc,
 >         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn,
 >         isRoundRobin, getRefills, setRefills, refillFull, refillAbsoluteMax,
@@ -567,18 +567,6 @@ This module uses the C preprocessor to select a target architecture.
 >     sched <- isSchedulable tptr inq
 >     assert sched "guardedSwitchTo: thread must be schedulable"
 >     switchToThread tptr
-
-> replyUnbindSc :: PPtr SchedContext -> PPtr Reply -> Kernel ()
-> replyUnbindSc scPtr replyPtr = do
->     sc <- getSchedContext scPtr
->     reply <- getReply replyPtr
->     setReply replyPtr (reply { replySc = Nothing })
->     setSchedContext scPtr (sc { scReplies = delete replyPtr (scReplies sc) })
-
-> schedContextClearReplies :: PPtr SchedContext -> Kernel ()
-> schedContextClearReplies scPtr = do
->     replies <- liftM scReplies $ getSchedContext scPtr
->     mapM_ (replyUnbindSc scPtr) replies
 
 > schedContextBindNtfn :: PPtr SchedContext -> PPtr Notification -> Kernel ()
 > schedContextBindNtfn sc ntfn = do

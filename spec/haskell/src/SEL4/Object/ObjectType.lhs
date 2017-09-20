@@ -142,7 +142,13 @@ Threads are treated as special capability nodes; they also become zombies when t
 >     when final $ do
 >         schedContextUnbindNtfn scPtr
 >     when final $ do
->         schedContextClearReplies scPtr
+>         sc <- getSchedContext scPtr
+>         replyPtrOpt <- return $ scReply sc
+>         when (replyPtrOpt /= Nothing) $ do
+>             replyPtr <- return $ fromJust replyPtrOpt
+>             reply <- getReply replyPtr
+>             setReply replyPtr (reply { replyNext = Nothing, replySc = Nothing })
+>             setSchedContext scPtr (sc { scReply = Nothing })
 >     when final $ do
 >         sc <- getSchedContext scPtr
 >         when (scYieldFrom sc /= Nothing) $ do

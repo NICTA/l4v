@@ -212,7 +212,7 @@ list of pointers to waiting threads;
 >     scRefillMax :: Int,
 >     scRefillHead :: Int,
 >     scRefillTail :: Int,
->     scReplies :: Maybe (PPtr Reply) }
+>     scReply :: Maybe (PPtr Reply) }
 
 > data Reply = Reply {
 >     replyCaller :: Maybe (PPtr TCB),

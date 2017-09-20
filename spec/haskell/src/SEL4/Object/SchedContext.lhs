@@ -641,7 +641,10 @@ This module uses the C preprocessor to select a target architecture.
 >     when (scPtrOpt /= Nothing) $ do
 >         scPtr <- return $ fromJust scPtrOpt
 >         bufferOpt <- lookupIPCBuffer True tptr
->         setConsumed scPtr (fromJust bufferOpt)
->         schedContextCancelYieldTo tptr
->         setThreadState Running tptr
+>         case bufferOpt of
+>             Nothing -> fail "schedContextCompleteYieldTo: buffer must not be Nothing"
+>             Just buffer -> do
+>                 setConsumed scPtr buffer
+>                 schedContextCancelYieldTo tptr
+>                 setThreadState Running tptr
 

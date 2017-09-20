@@ -366,7 +366,7 @@ datatype thread_state
   = Running
   | Inactive
   | Restart
-  | YieldTo
+  | YieldTo obj_ref (* sc ref *)
   | BlockedOnReceive obj_ref "obj_ref option"
   | BlockedOnSend obj_ref sender_payload
   | BlockedOnReply
@@ -387,7 +387,6 @@ record tcb =
  tcb_bound_notification     :: "obj_ref option"
  tcb_mcpriority    :: priority
  tcb_sched_context :: "obj_ref option"
- tcb_yield_to      :: "obj_ref option"
  tcb_reply         :: "obj_ref option"
  tcb_arch          :: arch_tcb
 
@@ -398,7 +397,7 @@ where
   "runnable (Running)               = True"
 | "runnable (Inactive)              = False"
 | "runnable (Restart)               = True"
-| "runnable (YieldTo)               = True"
+| "runnable (YieldTo _)             = True"
 | "runnable (BlockedOnReceive _ _)  = False"
 | "runnable (BlockedOnSend x y)     = False"
 | "runnable (BlockedOnNotification x) = False"
@@ -419,7 +418,6 @@ definition
       tcb_bound_notification  = None,
       tcb_mcpriority = minBound,
       tcb_sched_context = None,
-      tcb_yield_to   = None,
       tcb_reply      = None,
       tcb_arch       = default_arch_tcb\<rparr>"
 

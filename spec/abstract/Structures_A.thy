@@ -160,6 +160,7 @@ definition
   bits_of :: "cap \<Rightarrow> nat" where
   "bits_of cap \<equiv> case cap of
     UntypedCap _ _ bits _ \<Rightarrow> bits
+  | SchedContextCap _ n \<Rightarrow> n
   | CNodeCap _ radix_bits _ \<Rightarrow> radix_bits"
 
 definition

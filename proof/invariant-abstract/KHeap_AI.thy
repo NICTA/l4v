@@ -1346,7 +1346,7 @@ crunch valid_irq_states[wp]: thread_set "valid_irq_states"
 (* RT: crunch?
 crunch valid_irq_states[wp]: set_thread_state "valid_irq_states"
   (wp: crunch_wps simp: crunch_simps) *)
-lemma set_thread_state_valid_irq_states: "\<lbrace>valid_irq_states and valid_irq_states\<rbrace>
+lemma set_thread_state_valid_irq_states[wp]: "\<lbrace>valid_irq_states and valid_irq_states\<rbrace>
             set_thread_state param_a param_b 
             \<lbrace>\<lambda>_. valid_irq_states\<rbrace>"
   apply (simp add: set_thread_state_def)

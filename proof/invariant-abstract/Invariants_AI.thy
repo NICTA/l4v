@@ -341,6 +341,7 @@ where
   | NotificationCap r badge rights \<Rightarrow> AllowGrant \<notin> rights
   | CNodeCap r bits guard \<Rightarrow> bits \<noteq> 0 \<and> length guard \<le> word_bits
   | IRQHandlerCap irq \<Rightarrow> irq \<le> maxIRQ
+  | SchedContextCap r n \<Rightarrow> n > 0  (* RT FIXME *)
   | Zombie r b n \<Rightarrow> (case b of None \<Rightarrow> n \<le> 5
                                           | Some b \<Rightarrow> n \<le> 2 ^ b \<and> b \<noteq> 0)
   | ArchObjectCap ac \<Rightarrow> wellformed_acap ac
@@ -381,7 +382,7 @@ where
   | ThreadCap r \<Rightarrow> tcb_at r s
   | DomainCap \<Rightarrow> True
   | ReplyCap r \<Rightarrow> reply_at r s
-  | SchedContextCap r n \<Rightarrow> sc_at r s
+  | SchedContextCap r n \<Rightarrow> sc_at r s \<and> n > 0 (* RT FIXME *)
   | SchedControlCap \<Rightarrow> True
   | IRQControlCap \<Rightarrow> True
   | IRQHandlerCap irq \<Rightarrow> irq \<le> maxIRQ
@@ -1176,7 +1177,7 @@ lemma valid_cap_def2:
           apply (simp_all add: valid_cap_simps wellformed_cap_simps
                                valid_cap_ref_simps
                         split: option.splits)
-    apply (fastforce+)[4]
+    apply (fastforce+)[5]
   by (simp add: valid_arch_cap_def2)
 
 lemma valid_capsD:
@@ -2409,6 +2410,7 @@ lemma is_cap_simps:
   "is_untyped_cap cap = (\<exists>dev r bits f. cap = UntypedCap dev r bits f)"
   "is_ep_cap cap = (\<exists>r b R. cap = EndpointCap r b R)"
   "is_ntfn_cap cap = (\<exists>r b R. cap = NotificationCap r b R)"
+  "is_sched_context_cap cap = (\<exists>r n. cap = SchedContextCap r n)"
   "is_zombie cap = (\<exists>r b n. cap = Zombie r b n)"
   "is_arch_cap cap = (\<exists>a. cap = ArchObjectCap a)"
   "is_reply_cap cap = (\<exists>x. cap = ReplyCap x)"

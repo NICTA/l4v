@@ -324,14 +324,15 @@ lemma mask_asid_low_bits_ucast_ucast:
 
 
 lemma set_asid_pool_cur [wp]:
-  "\<lbrace>\<lambda>s. P (cur_thread s)\<rbrace> do_extended_op (set_asid_pool p a) \<lbrace>\<lambda>_ s. P (cur_thread s)\<rbrace>"
-  unfolding set_asid_pool_def by (wpsimp wp: get_object_wp)
+  "\<lbrace>\<lambda>s. P (cur_thread s)\<rbrace> (set_asid_pool p a) \<lbrace>\<lambda>_ s. P (cur_thread s)\<rbrace>"
+  unfolding set_asid_pool_def
+  by (wpsimp wp: get_object_wp simp: set_object_def)
 
 
 lemma set_asid_pool_cur_tcb [wp]:
-  "\<lbrace>\<lambda>s. cur_tcb s\<rbrace> do_extended_op (set_asid_pool p a) \<lbrace>\<lambda>_ s. cur_tcb s\<rbrace>"
+  "\<lbrace>\<lambda>s. cur_tcb s\<rbrace> (set_asid_pool p a) \<lbrace>\<lambda>_ s. cur_tcb s\<rbrace>"
   unfolding cur_tcb_def
-  by (rule hoare_lift_Pf [where f=cur_thread]; wpsimp)
+  by (rule hoare_lift_Pf [where f=cur_thread]; wpsimp simp: set_object_def)
 
 crunch arch [wp]: set_asid_pool "\<lambda>s. P (arch_state s)"
   (wp: get_object_wp)

@@ -76,7 +76,7 @@ definition
   obj_reply_refs :: "cap \<Rightarrow> machine_word set"
 where
  "obj_reply_refs cap \<equiv> obj_refs cap \<union>
-   (case cap of cap.ReplyCap t m \<Rightarrow> {t} | _ \<Rightarrow> {})"
+   (case cap of cap.ReplyCap t \<Rightarrow> {t} | _ \<Rightarrow> {})"
 
 
 lemma ex_cte_cap_to_obj_ref_disj:
@@ -519,9 +519,6 @@ lemma non_null_caps:
 lemma vreply: "valid_reply_caps s"
   using invs by (simp add: invs_def valid_state_def)
 
-lemma vmaster: "valid_reply_masters s"
-  using invs by (simp add: invs_def valid_state_def)
-
 lemma valid_cap2:
     "\<And>cap'. \<lbrakk> \<exists>p. cte_wp_at (op = cap') p s \<rbrakk>
     \<Longrightarrow> obj_reply_refs cap' \<subseteq> (UNIV - untyped_range cap)"
@@ -535,8 +532,6 @@ lemma valid_cap2:
     apply (clarsimp split: cap.split_asm bool.split_asm)
     apply (rename_tac bool)
     apply (case_tac bool, simp_all)
-     apply (frule valid_reply_mastersD [OF _ vmaster])
-     apply (fastforce simp: cte_wp_at_caps_of_state dest: non_null_caps)
     apply (drule has_reply_cap_cte_wpD)
     apply (drule valid_reply_capsD [OF _ vreply])
     apply (simp add: pred_tcb_at_def)
@@ -578,7 +573,7 @@ lemma valid_obj: "\<And>p obj. \<lbrakk> valid_obj p obj s; ko_at obj p s \<rbra
         apply (clarsimp elim!: ranE)
         apply (erule valid_cap [OF _ valid_cap2])
         apply (fastforce intro!: cte_wp_at_tcbI)
-       apply (clarsimp simp: valid_tcb_state_def valid_bound_ntfn_def
+       apply (clarsimp simp: valid_tcb_state_def valid_bound_obj_def
                       split: Structures_A.thread_state.split_asm option.splits)
       apply (frule refs_of)
       apply (rename_tac endpoint)

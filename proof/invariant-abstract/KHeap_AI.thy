@@ -1202,13 +1202,6 @@ lemma set_notification_idle[wp]:
   done
 
 
-lemma set_notification_reply[wp]:
-  "\<lbrace>valid_reply_caps\<rbrace>
-   set_notification p ep
-   \<lbrace>\<lambda>_. valid_reply_caps\<rbrace>"
-  by (wp valid_reply_caps_st_cte_lift)
-
-
 lemma obj_at_ko_atE:
   "\<lbrakk> obj_at P ptr s; ko_at k ptr s; P k \<Longrightarrow> Q \<rbrakk> \<Longrightarrow> Q"
   by (clarsimp simp: obj_at_def)
@@ -1229,11 +1222,6 @@ crunch it[wp]: set_endpoint "\<lambda>s. P (idle_thread s)"
 lemma set_ep_global_refs [wp]:
   "\<lbrace>valid_global_refs\<rbrace> set_endpoint ep p \<lbrace>\<lambda>_. valid_global_refs\<rbrace>"
   by (rule valid_global_refs_cte_lift) wp+
-
-
-lemma set_endpoint_reply[wp]:
-  "\<lbrace>valid_reply_caps\<rbrace> set_endpoint ep p \<lbrace>\<lambda>rv. valid_reply_caps\<rbrace>"
-  by (wp valid_reply_caps_st_cte_lift)
 
 
 crunch interrupt_states[wp]: set_endpoint "\<lambda>s. P (interrupt_states s)"
@@ -1698,9 +1686,6 @@ crunch cte_wp_at[wp]: do_machine_op "\<lambda>s. P (cte_wp_at P' c s)"
 
 crunch valid_idle[wp]: do_machine_op "valid_idle"
   (wp: crunch_wps simp: crunch_simps)
-
-
-crunch reply[wp]: do_machine_op "valid_reply_caps"
 
 crunch valid_irq_handlers[wp]: do_machine_op "valid_irq_handlers"
 

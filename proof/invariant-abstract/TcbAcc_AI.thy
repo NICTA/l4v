@@ -376,14 +376,6 @@ lemma thread_set_global_refs_triv:
      apply (wp thread_set_caps_of_state_trivial x)+
   done
 
-lemma thread_set_valid_reply_caps_trivial:
-  assumes x: "\<And>tcb. tcb_state     (f tcb) = tcb_state      tcb"
-  assumes z: "\<And>tcb. \<forall>(getF, v) \<in> ran tcb_cap_cases.
-                  getF (f tcb) = getF tcb"
-  shows "\<lbrace>valid_reply_caps\<rbrace> thread_set f t \<lbrace>\<lambda>_. valid_reply_caps\<rbrace>"
-  by (wp valid_reply_caps_st_cte_lift  thread_set_caps_of_state_trivial
-         thread_set_no_change_tcb_state x z)
-
 crunch interrupt_states[wp]: thread_set "\<lambda>s. P (interrupt_states s)"
 
 lemma thread_set_obj_at_impossible:
@@ -503,7 +495,6 @@ lemma thread_set_invs_trivial:
              thread_set_zombies_trivial
              thread_set_valid_idle_trivial
              thread_set_global_refs_triv
-             thread_set_valid_reply_caps_trivial
              thread_set_valid_ioc_trivial
              valid_irq_node_typ valid_irq_handlers_lift
              thread_set_caps_of_state_trivial
@@ -645,13 +636,6 @@ lemma as_user_idle[wp]:
   apply (clarsimp simp: obj_at_def get_tcb_def valid_idle_def pred_tcb_at_def
                   split: option.splits Structures_A.kernel_object.splits)
   done
-
-
-lemma as_user_reply[wp]:
-  "\<lbrace>valid_reply_caps\<rbrace> as_user t f \<lbrace>\<lambda>_. valid_reply_caps\<rbrace>"
-  by (wp as_user_wp_thread_set_helper thread_set_valid_reply_caps_trivial
-         ball_tcb_cap_casesI | simp)+
-
 
 lemma as_user_arch[wp]:
   "\<lbrace>\<lambda>s. P (arch_state s)\<rbrace> as_user t f \<lbrace>\<lambda>_ s. P (arch_state s)\<rbrace>"
@@ -1294,31 +1278,6 @@ lemma sbn_st_tcb_at[wp]:
   apply wp
   apply (auto simp: pred_tcb_at_def obj_at_def get_tcb_def)
   done
-
-lemma sts_reply [wp]:
-  "\<lbrace>\<lambda>s. valid_reply_caps s \<and>
-       (\<not> awaiting_reply st \<longrightarrow> \<not> has_reply_cap p s)\<rbrace>
-   set_thread_state p st \<lbrace>\<lambda>_. valid_reply_caps\<rbrace>"
-  apply (simp only: valid_reply_caps_def imp_conv_disj
-                    cte_wp_at_caps_of_state has_reply_cap_def)
-  apply (rule hoare_pre, wp hoare_vcg_all_lift
-                            hoare_vcg_disj_lift
-                            sts_st_tcb_at_cases)
-  apply clarsimp
-  apply (frule_tac x=x in spec)
-  apply (elim disjE, simp_all)
-  done
-
-lemma sbn_reply [wp]:
-  "\<lbrace>valid_reply_caps\<rbrace>
-   set_bound_notification p ntfn \<lbrace>\<lambda>_. valid_reply_caps\<rbrace>"
-  apply (simp only: valid_reply_caps_def imp_conv_disj
-                    cte_wp_at_caps_of_state has_reply_cap_def)
-  apply (rule hoare_pre, wp hoare_vcg_all_lift
-                            hoare_vcg_disj_lift)
-  apply clarsimp
-  done
-
 
 lemma set_thread_state_mdb [wp]:
   "\<lbrace>valid_mdb\<rbrace> set_thread_state p st \<lbrace>\<lambda>_. valid_mdb\<rbrace>"

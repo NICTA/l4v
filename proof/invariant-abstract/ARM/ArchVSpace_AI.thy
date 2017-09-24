@@ -2104,7 +2104,7 @@ lemma set_pd_invs_map:
   apply (rule hoare_pre)
    apply (wp set_pd_valid_objs set_pd_iflive set_pd_zombies
              set_pd_zombies_state_refs set_pd_valid_mdb set_pd_zombies_state_hyp_refs
-             set_pd_valid_idle set_pd_ifunsafe set_pd_reply_caps
+             set_pd_valid_idle set_pd_ifunsafe
              set_pd_valid_arch set_pd_valid_global set_pd_cur
              valid_irq_node_typ
              set_pd_vspace_objs_map[where S=S and T="{}"]
@@ -2655,7 +2655,7 @@ lemma set_pd_invs_unmap':
    apply (wp set_pd_valid_objs set_pd_iflive set_pd_zombies
              set_pd_zombies_state_refs set_pd_valid_mdb
              set_pd_zombies_state_hyp_refs
-             set_pd_valid_idle set_pd_ifunsafe set_pd_reply_caps
+             set_pd_valid_idle set_pd_ifunsafe
              set_pd_valid_arch set_pd_valid_global set_pd_cur
              valid_irq_node_typ
              set_pd_vspace_objs_unmap set_pd_valid_vs_lookup_map[where T=T and S="{}" and T'=T' and S'=S']

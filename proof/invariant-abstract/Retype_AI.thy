@@ -1117,7 +1117,7 @@ abbreviation(input)
  "all_invs_but_equal_kernel_mappings_restricted S
     \<equiv> (\<lambda>s. equal_kernel_mappings (s \<lparr> kheap := restrict_map (kheap s) (- S) \<rparr>))
        and valid_pspace and valid_mdb and valid_idle and only_idle
-       and if_unsafe_then_cap and valid_reply_caps
+       and if_unsafe_then_cap
        and valid_global_refs and valid_arch_state
        and valid_irq_node and valid_irq_handlers and valid_vspace_objs
        and valid_irq_states and valid_global_objs
@@ -2032,18 +2032,6 @@ proof -
     by (simp add: cte_wp_at_caps_of_state)
 qed
 
-lemma unique_reply_caps:
-  "unique_reply_caps (caps_of_state s) \<Longrightarrow> unique_reply_caps (caps_of_state s')"
-  using caps_retype
-  by (fastforce simp add: is_cap_simps unique_reply_caps_def
-               simp del: split_paired_All
-                  elim!: allEI)
-
-lemma valid_reply_caps:
-  "valid_reply_caps s \<Longrightarrow> valid_reply_caps s'"
-  by (clarsimp simp: valid_reply_caps_def unique_reply_caps has_reply_cap_def
-                     pred_tcb_at_pres cte_retype)
-
 end
 
 
@@ -2272,12 +2260,6 @@ lemmas retype_region_valid_arch = use_retype_region_proofs
 lemmas retype_region_valid_globals = use_retype_region_proofs
   [where Q=valid_global_refs,
          OF retype_region_proofs_invs.valid_global_refs[OF retype_region_proofs_assms],
-         simplified]
-
-
-lemmas retype_region_valid_reply_caps = use_retype_region_proofs
-  [where Q=valid_reply_caps,
-         OF retype_region_proofs.valid_reply_caps,
          simplified]
 
 

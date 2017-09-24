@@ -775,13 +775,13 @@ lemma mdb_Null_None:
   apply (clarsimp simp add: valid_mdb_def cte_wp_at_caps_of_state swp_def)
   apply (erule(1) mdb_cte_at_Null_None)
   done
-
+(*
 lemma not_waiting_reply_slot_no_descendants:
   "\<lbrakk> st_tcb_at (Not \<circ> awaiting_reply) t s;
      valid_reply_caps s; valid_objs s; valid_mdb s \<rbrakk>
        \<Longrightarrow> descendants_of (t, tcb_cnode_index 2) (cdt s) = {}"
   apply (rule ccontr, erule nonemptyE)
-  apply (clarsimp simp: valid_mdb_def reply_mdb_def reply_masters_mdb_def)
+  apply (clarsimp simp: valid_mdb_def)
   apply (frule_tac ref="tcb_cnode_index 2" in tcb_at_cte_at[OF st_tcb_at_tcb_at])
    apply (simp add: domI)
   apply (clarsimp simp: cte_wp_at_caps_of_state)
@@ -799,7 +799,7 @@ lemma not_waiting_reply_slot_no_descendants:
   apply (frule mdb_Null_descendants[OF caps_of_state_cteD])
    apply (simp add: valid_mdb_def reply_mdb_def reply_masters_mdb_def)
   apply simp
-  done
+  done*) (* RT we don't need this probably *)
 
 
 crunch irq_node[wp]: set_thread_state "\<lambda>s. P (interrupt_irq_node s)"
@@ -1089,12 +1089,12 @@ lemma untyped_inc':
   done
 
 end
-
+(*
 lemma default_cap_replies[simp]:
   "\<not> is_reply_cap (default_cap otype oref sz dev)"
   "\<not> is_master_reply_cap (default_cap otype oref sz dev)"
   by (cases otype, simp_all add: is_cap_simps)+
-
+*)
 
 lemma inter_non_emptyD:
  "\<lbrakk>A \<subseteq> B; A \<inter> C \<noteq> {}\<rbrakk> \<Longrightarrow> B \<inter> C \<noteq> {}"
@@ -1196,19 +1196,6 @@ lemma create_cap_mdb[wp]:
           apply assumption+
      apply (simp add: ut_revocable_def del: split_paired_All)
     apply (simp add: irq_revocable_def del: split_paired_All)
-   apply (simp add: reply_master_revocable_def del: split_paired_All)
-  apply (simp add: reply_mdb_def)
-  apply (subgoal_tac "\<And>t m. default_cap tp oref sz dev \<noteq> cap.ReplyCap t m")
-   apply (rule conjI)
-    apply (fastforce simp: reply_caps_mdb_def descendants_of_def
-                          mdb_insert_abs.parency
-                simp del: split_paired_All split_paired_Ex
-                   elim!: allEI exEI)
-   apply (fastforce simp: reply_masters_mdb_def descendants_of_def
-                         mdb_insert_abs.parency
-               simp del: split_paired_All split_paired_Ex
-                  elim!: allEI)
-  apply (cases tp, simp_all)[1]
   done
 
 lemma create_cap_descendants_range[wp]:
@@ -1751,7 +1738,7 @@ lemma set_cap_valid_mdb_simple:
   apply (wps set_cap_rvk_cdt_ct_ms)
   apply wp
   apply (clarsimp simp: cte_wp_at_caps_of_state is_cap_simps
-    reply_master_revocable_def irq_revocable_def reply_mdb_def)
+     irq_revocable_def)
   unfolding fun_upd_def[symmetric]
   apply clarsimp
   proof(intro conjI impI)
@@ -1842,28 +1829,6 @@ lemma set_cap_valid_mdb_simple:
   thus "ut_revocable (is_original_cap s) (caps_of_state s(cref \<mapsto> cap.UntypedCap dev r bits idx))"
   using cstate
   by (fastforce simp: ut_revocable_def)
-  assume "reply_caps_mdb (cdt s) (caps_of_state s)"
-  thus "reply_caps_mdb (cdt s) (caps_of_state s(cref \<mapsto> cap.UntypedCap dev r bits idx))"
-  using cstate
-  apply (simp add: reply_caps_mdb_def del: split_paired_All split_paired_Ex)
-  apply (intro allI impI conjI)
-   apply (drule spec)+
-   apply (erule(1) impE)
-  apply (erule exE)
-  apply (rule_tac x = ptr' in exI)
-  apply simp+
-  apply clarsimp
-  done
-  assume "reply_masters_mdb (cdt s) (caps_of_state s)"
-  thus "reply_masters_mdb (cdt s) (caps_of_state s(cref \<mapsto> cap.UntypedCap dev r bits idx))"
-   apply (simp add: reply_masters_mdb_def del: split_paired_All split_paired_Ex)
-   apply (intro allI impI ballI)
-   apply (erule exE)
-   apply (elim allE impE)
-    apply simp
-   using cstate
-   apply clarsimp
-   done
   assume misc:
     "mdb_cte_at (swp (cte_wp_at (op \<noteq> cap.NullCap)) s) (cdt s)"
     "descendants_inc (cdt s) (caps_of_state s)"
@@ -1900,8 +1865,6 @@ lemma set_free_index_valid_pspace_simple:
   apply (drule(2) tcb_cap_slot_regular)
   apply (clarsimp simp: tcb_cap_cases_def split: if_splits)
     apply (fastforce simp: is_nondevice_page_cap_simps)
-   apply (clarsimp split: thread_state.splits simp: is_reply_cap_def)
-  apply (clarsimp simp: is_master_reply_cap_def)
   done
 
 lemma set_untyped_cap_refs_respects_device_simple:
@@ -2431,8 +2394,7 @@ lemma detype_descendants_range_in:
          apply (simp)
         using descendants_range
         apply (clarsimp simp: blah descendants_range_def2)
-        apply (simp add: invs_untyped_children blah
-              invs_valid_reply_caps invs_valid_reply_masters)+
+        apply (simp add: invs_untyped_children blah)+
   apply (subst valid_mdb_descendants_range_in)
    apply (clarsimp dest!:invs_mdb simp:detype_clear_um_independent)
   apply (frule detype_locale)
@@ -2451,8 +2413,7 @@ lemma detype_invs:
   apply clarsimp
   apply (frule detype_invariants, simp_all)
       apply (clarsimp simp:blah descendants_range_def2)
-      apply ((simp add: invs_untyped_children blah
-          invs_valid_reply_caps invs_valid_reply_masters)+)
+      apply ((simp add: invs_untyped_children blah)+)
   done
 
 lemmas simps
@@ -2532,7 +2493,7 @@ lemma tcb_cap_valid_untyped_cong:
    tcb_cap_valid (cap.UntypedCap dev2 a2 b2 c2)"
   apply (rule ext)+
   apply (clarsimp simp:tcb_cap_valid_def valid_ipc_buffer_cap_def split:option.splits)
-  apply (simp add: tcb_cap_cases_def is_master_reply_cap_def is_reply_cap_def
+  apply (simp add: tcb_cap_cases_def is_reply_cap_def
                    is_arch_cap_def is_nondevice_page_cap_simps
             split: thread_state.split)
   done
@@ -2542,7 +2503,7 @@ lemma tcb_cap_valid_untyped_to_thread:
    tcb_cap_valid (cap.ThreadCap 0)"
   apply (rule ext)+
   apply (clarsimp simp:tcb_cap_valid_def valid_ipc_buffer_cap_def split:option.splits)
-  apply (simp add: tcb_cap_cases_def is_master_reply_cap_def is_reply_cap_def
+  apply (simp add: tcb_cap_cases_def is_reply_cap_def
                    is_arch_cap_def is_nondevice_page_cap_simps
             split: thread_state.split)
   done
@@ -3028,36 +2989,6 @@ lemma create_cap_valid_idle[wp]:
 
 crunch it[wp]: create_cap "\<lambda>s. P (idle_thread s)"
   (simp: crunch_simps)
-
-
-lemma default_cap_reply:
-  "default_cap tp ptr sz dev \<noteq> cap.ReplyCap ptr' bool"
-  by (cases tp; simp)
-
-lemma create_cap_valid_reply_caps[wp]:
-  "\<lbrace>valid_reply_caps\<rbrace>
-     create_cap tp sz p dev (cref, oref)
-   \<lbrace>\<lambda>rv. valid_reply_caps\<rbrace>"
-  apply (simp add: valid_reply_caps_def has_reply_cap_def
-                   cte_wp_at_caps_of_state create_cap_def
-                   set_cdt_def)
-  apply (simp only: imp_conv_disj)
-  apply (rule hoare_pre)
-   apply (wp hoare_vcg_all_lift hoare_vcg_disj_lift | simp)+
-  apply (clarsimp simp: default_cap_reply)
-  apply (erule conjI [OF allEI], clarsimp)
-  apply (simp add: unique_reply_caps_def)
-  done
-
-
-lemma create_cap_valid_reply_masters[wp]:
-  "\<lbrace>valid_reply_masters\<rbrace>
-     create_cap tp sz p dev (cref, oref)
-   \<lbrace>\<lambda>rv. valid_reply_masters\<rbrace>"
-  apply (simp add: valid_reply_masters_def cte_wp_at_caps_of_state
-                   create_cap_def)
-  apply (wp | simp add: default_cap_reply)+
-  done
 
 
 lemma create_cap_valid_global_refs[wp]:

@@ -896,27 +896,13 @@ definition
 
 definition
   "irq_revocable r cs \<equiv> \<forall>p. cs p = Some IRQControlCap \<longrightarrow> r p"
-(*
-definition (* RT: ? *)
-  "reply_caps_mdb m cs \<equiv> \<forall>ptr t.
-     cs ptr = Some (ReplyCap t) \<longrightarrow>
-     (\<exists>ptr'. m ptr = Some ptr' \<and> cs ptr' = Some (ReplyCap t))"
 
-definition (* RT: ? *)
-  "reply_masters_mdb m cs \<equiv> \<forall>ptr t.
-     cs ptr = Some (ReplyCap t) \<longrightarrow> m ptr = None \<and>
-     (\<forall>ptr'\<in>descendants_of ptr m. cs ptr' = Some (ReplyCap t))"
-
-definition (* RT: ? *)
-  "reply_mdb m cs \<equiv> reply_caps_mdb m cs \<and> reply_masters_mdb m cs"
-*)
 definition
   "valid_mdb \<equiv> \<lambda>s. mdb_cte_at (swp (cte_wp_at (op \<noteq> NullCap)) s) (cdt s) \<and>
                    untyped_mdb (cdt s) (caps_of_state s) \<and> descendants_inc (cdt s) (caps_of_state s) \<and>
                    no_mloop (cdt s) \<and> untyped_inc (cdt s) (caps_of_state s) \<and>
                    ut_revocable (is_original_cap s) (caps_of_state s) \<and>
-                   irq_revocable (is_original_cap s) (caps_of_state s)(* \<and>
-                   reply_mdb (cdt s) (caps_of_state s)*)"
+                   irq_revocable (is_original_cap s) (caps_of_state s)"
 
 abbreviation
   "idle_tcb_at \<equiv> pred_tcb_at (\<lambda>t. (itcb_state t, itcb_bound_notification t,
@@ -929,17 +915,6 @@ definition
 
 definition
   "only_idle \<equiv> \<lambda>s. \<forall>t. st_tcb_at idle t s \<longrightarrow> t = idle_thread s"
-
-definition
-  "unique_reply_caps cs \<equiv>
-   \<forall>ptr ptr' cap cap'.
-       cs ptr = Some cap \<longrightarrow> is_reply_cap cap \<longrightarrow>
-       cs ptr' = Some cap' \<longrightarrow> cap = cap' \<longrightarrow> ptr = ptr'"
-
-definition
-  "valid_reply_caps \<equiv> \<lambda>s.
-       (\<forall>t. has_reply_cap t s \<longrightarrow> st_tcb_at awaiting_reply t s) \<and>
-       unique_reply_caps (caps_of_state s)"
 
 definition
   valid_refs :: "obj_ref set \<Rightarrow> 'z::state_ext state \<Rightarrow> bool"
@@ -1004,7 +979,6 @@ where
                   and valid_idle
                   and only_idle
                   and if_unsafe_then_cap
-                  and valid_reply_caps
                   and valid_global_refs
                   and valid_arch_state
                   and valid_irq_node
@@ -1088,7 +1062,7 @@ abbreviation(input)
     \<equiv> valid_objs and pspace_aligned and pspace_distinct and valid_ioc
        and if_live_then_nonz_cap and zombies_final
        and valid_mdb and valid_idle and only_idle and if_unsafe_then_cap
-       and valid_reply_caps and valid_global_refs
+       and valid_global_refs
        and valid_arch_state and valid_machine_state and valid_irq_states
        and valid_irq_node and valid_irq_handlers and valid_vspace_objs
        and valid_arch_caps and valid_global_objs and valid_kernel_mappings
@@ -1614,21 +1588,9 @@ lemma valid_ioc_def2:
   apply fastforce
   done
 
-lemma valid_reply_capsD:
-  "\<lbrakk> has_reply_cap t s; valid_reply_caps s \<rbrakk>
-    \<Longrightarrow> st_tcb_at awaiting_reply t s"
-  unfolding valid_reply_caps_def
-  by simp
-
 lemma has_reply_cap_cte_wpD:
   "\<And>t sl. cte_wp_at (op = (ReplyCap t)) sl s \<Longrightarrow> has_reply_cap t s"
   by (fastforce simp: has_reply_cap_def)
-
-lemma reply_cap_doesnt_exist_strg:
-  "(valid_reply_caps s \<and> st_tcb_at (Not \<circ> awaiting_reply) t s)
-      \<longrightarrow> \<not> has_reply_cap t s"
-  by (clarsimp dest!: valid_reply_capsD
-                simp: st_tcb_def2)
 
 lemma mdb_cte_atD:
   "\<lbrakk> m c = Some p; mdb_cte_at ct_at m \<rbrakk>
@@ -2713,10 +2675,6 @@ lemma has_reply_cap_update [iff]:
   "has_reply_cap t (f s) = has_reply_cap t s"
   by (simp add: has_reply_cap_def)
 
-lemma valid_reply_caps_update [iff]:
-  "valid_reply_caps (f s) = valid_reply_caps s"
-  by (simp add: valid_reply_caps_def)
-
 lemmas in_user_frame_update[iff] = in_user_frame_update
 lemmas in_device_frame_update[iff] = in_device_frame_update
 lemmas equal_kernel_mappings_update[iff] = equal_kernel_mappings_update
@@ -2921,21 +2879,6 @@ lemma has_reply_cap_cte_lift:
   shows "\<lbrace>\<lambda>s. P (has_reply_cap t s)\<rbrace> f \<lbrace>\<lambda>_ s. P (has_reply_cap t s)\<rbrace>"
   unfolding has_reply_cap_def
   by (simp add: cte_wp_at_caps_of_state, rule ctes)
-
-lemma valid_reply_caps_st_cte_lift:
-  assumes ctes: "\<And>P. \<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> f \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>"
-  assumes tcbs: "\<And>P t. \<lbrace>st_tcb_at P t\<rbrace> f \<lbrace>\<lambda>_. st_tcb_at P t\<rbrace>"
-  shows "\<lbrace>valid_reply_caps\<rbrace> f \<lbrace>\<lambda>_. valid_reply_caps\<rbrace>"
-  unfolding valid_reply_caps_def
-  apply (rule hoare_vcg_conj_lift)
-   apply (rule hoare_vcg_all_lift)
-   apply (subst disj_not1 [THEN sym])+
-   apply (rule hoare_vcg_disj_lift)
-    apply (rule has_reply_cap_cte_lift)
-    apply (rule ctes)
-   apply (rule tcbs)
-  apply (rule ctes)
-  done
 
 lemma pred_tcb_at_disj:
   "(pred_tcb_at proj P t s \<or> pred_tcb_at proj Q t s) = pred_tcb_at proj (\<lambda>a. P a \<or> Q a) t s"
@@ -3293,10 +3236,6 @@ lemma invs_sym_refs [elim!]:
 lemma invs_hyp_sym_refs [elim!]: (* ARMHYP move and requalify *)
   "invs s \<Longrightarrow> sym_refs (state_hyp_refs_of s)"
   by (simp add: invs_def valid_state_def valid_pspace_def)
-
-lemma invs_valid_reply_caps [elim!]:
-  "invs s \<Longrightarrow> valid_reply_caps s"
-  by (simp add: invs_def valid_state_def)
 
 lemma invs_vobjs_strgs:
   "invs s \<longrightarrow> valid_objs s"

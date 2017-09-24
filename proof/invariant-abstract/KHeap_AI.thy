@@ -1450,9 +1450,6 @@ crunch cte_wp_at[wp]: do_machine_op "\<lambda>s. P (cte_wp_at P' c s)"
 crunch valid_idle[wp]: do_machine_op "valid_idle"
   (wp: crunch_wps simp: crunch_simps)
 
-
-crunch reply[wp]: do_machine_op "valid_reply_caps"
-
 crunch valid_irq_handlers[wp]: do_machine_op "valid_irq_handlers"
 
 crunch valid_global_objs[wp]: do_machine_op "valid_global_objs"

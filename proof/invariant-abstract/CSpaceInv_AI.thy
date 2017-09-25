@@ -1694,7 +1694,7 @@ lemma cur_mdb [simp]:
   "cur_tcb (cdt_update f s) = cur_tcb s"
   by (simp add: cur_tcb_def)
 
-crunch cur[wp]: cap_insert cur_tcb (wp: hoare_drop_imps simp: cur_tcb_more_update)
+crunch cur[wp]: cap_insert cur_tcb (wp: hoare_drop_imps)
 
 
 lemma update_cdt_ifunsafe[wp]:

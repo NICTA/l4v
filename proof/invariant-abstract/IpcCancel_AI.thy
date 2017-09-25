@@ -20,7 +20,7 @@ locale IpcCancel_AI =
     "\<And>a b. \<lbrace>valid_kernel_mappings\<rbrace> (set_endpoint a b :: (unit, 'a) s_monad) \<lbrace>\<lambda>_. valid_kernel_mappings\<rbrace>"
 
 lemma blocked_cancel_ipc_simple:
-  "\<lbrace>tcb_at t\<rbrace> blocked_cancel_ipc ts t \<lbrace>\<lambda>rv. st_tcb_at simple t\<rbrace>"
+  "\<lbrace>tcb_at t\<rbrace> blocked_cancel_ipc ts t r \<lbrace>\<lambda>rv. st_tcb_at simple t\<rbrace>"
   by (simp add: blocked_cancel_ipc_def | wp sts_st_tcb_at')+
 
 lemma cancel_signal_simple:
@@ -61,13 +61,18 @@ lemma cancel_all_ipc_valid_objs:
                          valid_ep_def)+
   done
 
+lemma possible_switch_to_to_typ_at:
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> possible_switch_to param_a param_b \<lbrace>\<lambda>_ s. P (typ_at T p s)\<rbrace>"
+  sorry
 
-crunch typ_at: cancel_all_signals "\<lambda>s. P (typ_at T p s)" (wp: crunch_wps mapM_x_wp)
-
+crunch typ_at: switch_if_required_to "\<lambda>s. P (typ_at T p s)"
+  (wp: crunch_wps mapM_x_wp possible_switch_to_to_typ_at)
+crunch typ_at: cancel_all_signals "\<lambda>s. P (typ_at T p s)"
+  (wp: crunch_wps mapM_x_wp switch_if_required_to_typ_at)
 
 lemma unbind_notification_valid_objs_helper:
   "valid_ntfn ntfn s \<longrightarrow> valid_ntfn (ntfn_set_bound_tcb ntfn None) s "
-  by (clarsimp simp: valid_bound_tcb_def valid_ntfn_def
+  by (clarsimp simp:  valid_ntfn_def
                   split: option.splits ntfn.splits)
 
 lemma unbind_notification_valid_objs:
@@ -82,6 +87,10 @@ lemma unbind_notification_valid_objs:
    apply (clarsimp simp:valid_obj_def valid_tcb_def)+
   done
 
+lemma switch_if_required_to_valid_objs:
+  "\<lbrace>valid_objs and (\<lambda>s. sym_refs (state_refs_of s))\<rbrace>
+   switch_if_required_to ptr \<lbrace>\<lambda>rv. valid_objs\<rbrace>"
+  sorry
 
 lemma cancel_all_signals_valid_objs:
   "\<lbrace>valid_objs and (\<lambda>s. sym_refs (state_refs_of s))\<rbrace>
@@ -90,15 +99,16 @@ lemma cancel_all_signals_valid_objs:
   apply (rule hoare_seq_ext [OF _ get_ntfn_sp])
   apply (rule hoare_pre)
    apply (wp unbind_notification_valid_objs | wpc | simp_all add:unbind_maybe_notification_def)+
-    apply (wp cancel_all_helper hoare_vcg_const_Ball_lift
+sorry
+(*    apply (wp cancel_all_helper hoare_vcg_const_Ball_lift switch_if_required_to_valid_objs
              set_ntfn_valid_objs unbind_notification_valid_objs
         | clarsimp simp: ntfn_queued_st_tcb_at obj_at_def
-                         valid_ntfn_def valid_bound_tcb_def
+                         valid_ntfn_def valid_bound_obj_def
         | wpc)+
   apply (clarsimp split: option.splits)
   apply (erule (1) valid_objsE)
   apply (simp add:valid_obj_def valid_ntfn_def)
-  done
+  done*)
 
 
 lemma get_ep_queue_inv[wp]:
@@ -130,12 +140,18 @@ lemma unbind_maybe_notification_st_tcb_at[wp]:
   apply (wp  thread_set_no_change_tcb_state hoare_drop_imps| wpc | simp)+
   done
 
+
+lemma switch_if_required_to_st_tcb_at:
+  "\<lbrace>st_tcb_at P t\<rbrace> switch_if_required_to tptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the precondition; might need to change the lemma below *)
+
+
 lemma cancel_all_signals_st_tcb_at:
   assumes x[simp]: "P Structures_A.Restart" shows
   "\<lbrace>st_tcb_at P t\<rbrace> cancel_all_signals ntfnptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
   unfolding cancel_all_signals_def unbind_maybe_notification_def
   by (wp ntfn_cases_weak_wp mapM_x_wp' sts_st_tcb_at_cases
-         hoare_drop_imps unbind_notification_st_tcb_at
+         hoare_drop_imps unbind_notification_st_tcb_at switch_if_required_to_st_tcb_at
     | simp | wpc)+
 
 
@@ -143,21 +159,26 @@ lemmas cancel_all_signals_makes_simple[wp] =
        cancel_all_signals_st_tcb_at[where P=simple, simplified]
 
 
-
-
 lemma get_blocking_object_inv[wp]:
   "\<lbrace>P\<rbrace> get_blocking_object st \<lbrace>\<lambda>_. P\<rbrace>"
-  by (cases st, simp_all add: get_blocking_object_def)
+  by (cases st, simp_all add: get_blocking_object_def ep_blocked_def assert_opt_def)
 
+lemma reply_remove_st_tcb_at[wp]:
+  "\<lbrace>st_tcb_at P t\<rbrace> reply_remove rptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the precondition; might need to change the lemma below *)
 
 lemma blocked_ipc_st_tcb_at_general:
   "\<lbrace>st_tcb_at P t' and K (t = t' \<longrightarrow> P Structures_A.Inactive)\<rbrace>
-     blocked_cancel_ipc st t
+     blocked_cancel_ipc st t r
    \<lbrace>\<lambda>rv. st_tcb_at P t'\<rbrace>"
   apply (simp add: blocked_cancel_ipc_def)
-  apply (wp sts_st_tcb_at_cases static_imp_wp, simp+)
+  apply (wpsimp wp: sts_st_tcb_at_cases static_imp_wp)
   done
 
+
+lemma maybeM_inv[wp]:
+  "\<forall>a. \<lbrace>P\<rbrace> f a \<lbrace>\<lambda>_. P\<rbrace> \<Longrightarrow> \<lbrace>P\<rbrace> maybeM f opt \<lbrace>\<lambda>_. P\<rbrace>"
+  by (wpsimp simp: maybeM_def; fastforce)
 
 lemma cancel_signal_st_tcb_at_general:
   "\<lbrace>st_tcb_at P t' and K (t = t' \<longrightarrow> (P Structures_A.Running \<and> P Structures_A.Inactive))\<rbrace>
@@ -169,6 +190,26 @@ lemma cancel_signal_st_tcb_at_general:
   done
 
 
+lemma sched_context_maybe_unbind_ntfn_st_tcb_at[wp]:
+  "\<lbrace>st_tcb_at P t\<rbrace> sched_context_maybe_unbind_ntfn ntfnptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the pre/postconditions; might need to change the lemma below *)
+
+lemma sched_context_unbind_ntfn_st_tcb_at[wp]:
+  "\<lbrace>st_tcb_at P t\<rbrace> sched_context_unbind_ntfn scptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the pre/postconditions; might need to change the lemma below *)
+
+lemma sched_context_unbind_yield_from_st_tcb_at[wp]:
+  "\<lbrace>st_tcb_at P t\<rbrace> sched_context_unbind_yield_from scptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the pre/postconditions; might need to change the lemma below *)
+
+lemma sched_context_clear_replies_st_tcb_at[wp]:
+  "\<lbrace>st_tcb_at P t\<rbrace> sched_context_clear_replies scptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the pre/postconditions; might need to change the lemma below *)
+
+lemma sched_context_unbind_all_tcbs_st_tcb_at[wp]:
+  "\<lbrace>st_tcb_at P t\<rbrace> sched_context_unbind_all_tcbs scptr \<lbrace>\<lambda>rv. st_tcb_at P t\<rbrace>"
+  sorry  (* RT: check the pre/postconditions; might need to change the lemma below *)
+
 lemma fast_finalise_misc[wp]:
 "\<lbrace>st_tcb_at simple t \<rbrace> fast_finalise a b \<lbrace>\<lambda>_. st_tcb_at simple t\<rbrace>"
   apply (case_tac a,simp_all)
@@ -177,7 +218,7 @@ lemma fast_finalise_misc[wp]:
 
 
 crunch st_tcb_at_simple[wp]: reply_cancel_ipc "st_tcb_at simple t"
-  (wp: crunch_wps select_wp sts_st_tcb_at_cases thread_set_no_change_tcb_state
+  (wp: crunch_wps select_wp sts_st_tcb_at_cases thread_set_no_change_tcb_state maybeM_inv
    simp: crunch_simps unless_def fast_finalise.simps)
 
 

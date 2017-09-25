@@ -2822,6 +2822,7 @@ lemma dom_empty_cnode: "dom (empty_cnode us) = {x. length x = us}"
 lemma obj_at_default_cap_valid:
   "\<lbrakk>obj_at (\<lambda>ko. ko = default_object ty dev us) x s;
    ty = CapTableObject \<Longrightarrow> 0 < us;
+   ty = SchedContextObject \<Longrightarrow> 0 < us; (* RT Check *)
    ty \<noteq> Untyped; ty \<noteq> ArchObject ASIDPoolObj;
    cap_aligned (default_cap ty x us dev)\<rbrakk>
   \<Longrightarrow> s \<turnstile> default_cap ty x us dev"

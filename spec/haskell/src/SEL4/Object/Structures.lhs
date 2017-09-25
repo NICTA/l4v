@@ -431,8 +431,6 @@ A user thread may be in the following states:
 
 >     | Restart
 
->     | YieldTo
-
 >     deriving (Show, Eq)
 
 \end{itemize}

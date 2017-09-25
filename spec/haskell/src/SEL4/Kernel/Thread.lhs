@@ -85,10 +85,12 @@ The "activateThread" function is used to prepare a thread to run. If the thread 
 > activateThread = do
 >         thread <- getCurThread
 >         state <- getThreadState thread
+>         scPtrOpt <- threadGet tcbYieldTo thread
+>         when (scPtrOpt /= Nothing) $ do
+>             schedContextCompleteYieldTo thread
+>             assert (state == Running) "activateThread: thread state must be Running when tcbYieldTo is not Nothing"
 >         case state of
 >             Running -> return ()
->             YieldTo -> do
->                 schedContextCompleteYieldTo thread
 >             Restart -> do
 >                 pc <- asUser thread $ getRestartPC
 >                 asUser thread $ setNextPC pc
@@ -120,7 +122,6 @@ Note that the idle thread is not considered runnable; this is to prevent it bein
 >         return $ case state of
 >             Running -> True
 >             Restart -> True
->             YieldTo -> True
 >             _ -> False
 
 > isSchedulable :: PPtr TCB -> Bool -> Kernel Bool

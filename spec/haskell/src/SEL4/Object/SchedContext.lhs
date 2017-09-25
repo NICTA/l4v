@@ -458,7 +458,6 @@ This module uses the C preprocessor to select a target architecture.
 >                 yieldToScPtr <- return $ fromJust $ tcbYieldTo tcb
 >                 setSchedContext yieldToScPtr sc
 >                 attemptSwitchTo $ fromJust $ scTCB sc
->                 setThreadState YieldTo ctPtr
 >             else setConsumed scPtr (PPtr (head buffer))
 
 > invokeSchedControlConfigure :: SchedControlInvocation -> KernelF SyscallError ()

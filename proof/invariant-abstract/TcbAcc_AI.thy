@@ -160,6 +160,9 @@ lemmas thread_set_no_change_tcb_bound_notification_converse =
 lemmas thread_set_no_change_tcb_sched_context_converse =
   thread_set_no_change_tcb_pred_converse[where proj="itcb_sched_context", simplified]
 
+lemmas thread_set_no_change_tcb_reply_converse =
+  thread_set_no_change_tcb_pred_converse[where proj="itcb_reply", simplified]
+
 lemma pspace_valid_objsE:
   assumes p: "kheap s p = Some ko"
   assumes v: "valid_objs s"

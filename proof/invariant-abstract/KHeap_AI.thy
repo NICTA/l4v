@@ -1367,6 +1367,10 @@ lemma shows
     "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> set_thread_state t st \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>" and
   set_bound_caps_of_state[wp]:
     "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> set_tcb_obj_ref tcb_bound_notification_update t e \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>" and
+  set_tcb_sc_caps_of_state[wp]:
+    "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> set_tcb_obj_ref tcb_sched_context_update t sc \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>" and
+  set_tcb_reply_caps_of_state[wp]:
+    "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> set_tcb_obj_ref tcb_reply_update t sc \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>" and
   as_user_caps_of_state[wp]:
     "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> as_user p f \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>"
 
@@ -1396,6 +1400,8 @@ interpretation
   sbn: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_bound_notification_update p b" +
   as_user: non_aobj_non_cap_non_mem_op "as_user p g" +
   thread_set: non_aobj_non_mem_op "thread_set f p" +
+  set_sched_context: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_sched_context_update p sc" +
+  set_reply: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_reply_update p reply" +
   set_cap: non_aobj_non_mem_op "set_cap cap p'"
   apply (all \<open>unfold_locales; (wp ; fail)?\<close>)
   unfolding set_endpoint_def set_notification_def set_thread_state_def
@@ -1404,7 +1410,7 @@ interpretation
   apply -
   apply (all \<open>(wp set_object_non_arch get_object_wp | wpc | simp split del: if_split)+\<close>)
   by (fastforce simp: obj_at_def[abs_def] a_type_def
-               split: Structures_A.kernel_object.splits)+
+               split: Structures_A.kernel_object.splits option.splits)+
 
 interpretation
   store_word_offs: non_aobj_non_cap_op "store_word_offs a b c"
@@ -1583,14 +1589,18 @@ crunch valid_irq_states[wp]: thread_set "valid_irq_states"
 (* RT: crunch?
 crunch valid_irq_states[wp]: set_thread_state "valid_irq_states"
   (wp: crunch_wps simp: crunch_simps) *)
-lemma set_thread_state_valid_irq_states[wp]: "\<lbrace>valid_irq_states and valid_irq_states\<rbrace>
-            set_thread_state param_a param_b 
-            \<lbrace>\<lambda>_. valid_irq_states\<rbrace>"
+lemma set_thread_state_valid_irq_states[wp]:
+     "\<lbrace>valid_irq_states\<rbrace>
+            set_thread_state t st \<lbrace>\<lambda>_. valid_irq_states\<rbrace>"
   apply (simp add: set_thread_state_def)
   apply (wp | simp add: set_object_def)+
   done
 
 crunch valid_irq_states[wp]: set_tcb_obj_ref "valid_irq_states"
+  (wp: crunch_wps simp: crunch_simps)
+crunch valid_irq_states[wp]: set_sched_context,set_reply "valid_irq_states"
+  (wp: crunch_wps simp: crunch_simps)
+crunch valid_irq_states[wp]: set_sched_context,set_reply "valid_irq_states"
   (wp: crunch_wps simp: crunch_simps)
 
 lemma set_ntfn_minor_invs:

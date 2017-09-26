@@ -70,6 +70,14 @@ lemma get_tcb_obj_ref_inv[simp]:
   apply (wp, simp)
   done
 
+lemma get_sched_context_inv[simp]:
+  "\<lbrace>P\<rbrace> get_sched_context t \<lbrace>\<lambda>r. P\<rbrace>"
+  by (wpsimp simp: get_sched_context_def get_object_def)
+
+lemma get_reply_inv[simp]:
+  "\<lbrace>P\<rbrace> get_reply t \<lbrace>\<lambda>r. P\<rbrace>"
+  by (wpsimp simp: get_reply_def get_object_def)
+
 lemma assert_get_tcb_sp:
   assumes "\<And>s. Q s \<Longrightarrow> valid_objs s"
   shows "\<lbrace> Q \<rbrace> gets_the (get_tcb thread)
@@ -252,7 +260,7 @@ lemma tcb_state_same_refs:
 lemma valid_idle_tcb_update:
   "\<lbrakk>valid_idle s; ko_at (TCB t) p s;
     tcb_state t = tcb_state t'; tcb_bound_notification t = tcb_bound_notification t';
-    tcb_sched_context t = tcb_sched_context t'; tcb_yield_to t = tcb_yield_to t';
+    tcb_sched_context t = tcb_sched_context t';
     tcb_reply t = tcb_reply t'; valid_tcb p t' s \<rbrakk>
    \<Longrightarrow> valid_idle (s\<lparr>kheap := kheap s(p \<mapsto> TCB t')\<rparr>)"
   by (clarsimp simp: valid_idle_def pred_tcb_at_def obj_at_def)
@@ -1267,7 +1275,7 @@ lemma set_object_idle [wp]:
      (\<lambda>s. ko_at ko p s \<and> (\<not>is_tcb ko \<or>
                    (ko = (TCB t) \<and> ko' = (TCB t') \<and>
                     tcb_state t = tcb_state t' \<and> tcb_bound_notification t = tcb_bound_notification t'
-                    \<and> tcb_sched_context t = tcb_sched_context t' \<and> tcb_yield_to t = tcb_yield_to t'
+                    \<and> tcb_sched_context t = tcb_sched_context t'
                     \<and> tcb_reply t = tcb_reply t')))\<rbrace>
    set_object p ko'
    \<lbrace>\<lambda>rv. valid_idle\<rbrace>"

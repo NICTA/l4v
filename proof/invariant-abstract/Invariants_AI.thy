@@ -988,7 +988,7 @@ abbreviation (* RT: should YieldTo be added here? *)
 abbreviation (* RT: should YieldTo be added here? probably no *)
   "simple st \<equiv> st = Inactive \<or>
                  st = Running \<or>
-                 st = Restart \<or>
+                 st = Restart \<or> (\<exists>t. st = YieldTo t) \<or>
                  idle st \<or> awaiting_reply st"
 abbreviation
   "ct_active \<equiv> ct_in_state active"

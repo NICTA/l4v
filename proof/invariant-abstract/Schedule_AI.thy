@@ -9,7 +9,7 @@
  *)
 
 theory Schedule_AI
-imports VSpace_AI
+imports RealTime_AI
 begin
 
 abbreviation

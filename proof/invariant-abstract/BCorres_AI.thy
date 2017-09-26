@@ -184,6 +184,7 @@ lemma unbind_notification_bcorres[wp]:
   apply (wpsimp simp: unbind_notification_def)+
   sorry
 
+crunch (bcorres)bcorres[wp]: set_sched_context,set_reply truncate_state (simp: gets_the_def ignore: gets_the)
 (*
 crunch (bcorres)bcorres[wp]: cancel_all_signals truncate_state (simp: gets_the_def ignore: gets_the)
 *)

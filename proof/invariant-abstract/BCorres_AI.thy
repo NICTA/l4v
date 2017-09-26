@@ -163,7 +163,27 @@ lemma get_tcb_truncate[simp]: "get_tcb a (truncate_state s) = get_tcb a s"
   apply (simp add: get_tcb_def)
   done
 
-crunch (bcorres)bcorres[wp]: cancel_all_ipc,unbind_maybe_notification,unbind_notification, bind_notification truncate_state (simp: gets_the_def ignore: gets_the)
+lemma maybeM_bcorres[wp, simp]:
+  "\<forall>x. bcorres (f x) (f x) \<Longrightarrow> bcorres (maybeM f a) (maybeM f a)"
+  apply (wpsimp simp: maybeM_def )+
+  done
+
+crunch (bcorres)bcorres[wp]: cancel_all_ipc, bind_notification truncate_state
+  (simp: gets_the_def ignore: gets_the)
+
+crunch (bcorres)bcorres[wp]: get_tcb_obj_ref, get_ntfn_obj_ref truncate_state
+  (simp: gets_the_def ignore: gets_the)
+
+lemma unbind_maybe_notification_bcorres[wp]:
+  "bcorres (unbind_maybe_notification a) (unbind_maybe_notification a)"
+  apply (wpsimp simp: unbind_maybe_notification_def)+
+  sorry
+
+lemma unbind_notification_bcorres[wp]:
+  "bcorres (unbind_notification a) (unbind_notification a)"
+  apply (wpsimp simp: unbind_notification_def)+
+  sorry
+
 (*
 crunch (bcorres)bcorres[wp]: cancel_all_signals truncate_state (simp: gets_the_def ignore: gets_the)
 *)

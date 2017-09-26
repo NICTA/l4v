@@ -64,9 +64,9 @@ lemma get_thread_state_inv [simp]:
   apply simp
   done
 
-lemma get_bound_notification_inv[simp]:
-  "\<lbrace>P\<rbrace> get_bound_notification t \<lbrace>\<lambda>r. P\<rbrace>"
-  apply (simp add: get_bound_notification_def thread_get_def gets_the_def)
+lemma get_tcb_obj_ref_inv[simp]:
+  "\<lbrace>P\<rbrace> get_tcb_obj_ref f t \<lbrace>\<lambda>r. P\<rbrace>"
+  apply (simp add: get_tcb_obj_ref_def thread_get_def gets_the_def)
   apply (wp, simp)
   done
 
@@ -321,8 +321,15 @@ lemma gts_st_tcb:
   done
 
 lemma gbn_bound_tcb:
-  "\<lbrace>\<top>\<rbrace> get_bound_notification t \<lbrace>\<lambda>rv. bound_tcb_at (\<lambda>ntfn. rv = ntfn) t\<rbrace>"
-  apply (simp add: get_bound_notification_def thread_get_def)
+  "\<lbrace>\<top>\<rbrace> get_tcb_obj_ref tcb_bound_notification t \<lbrace>\<lambda>rv. bound_tcb_at (\<lambda>ntfn. rv = ntfn) t\<rbrace>"
+  apply (simp add: get_tcb_obj_ref_def thread_get_def)
+  apply wp
+  apply (clarsimp simp: pred_tcb_at_def)
+  done
+
+lemma gbsc_bound_tcb:
+  "\<lbrace>\<top>\<rbrace> get_tcb_obj_ref tcb_sched_context t \<lbrace>\<lambda>rv. bound_sc_tcb_at (\<lambda>sc. rv = sc) t\<rbrace>"
+  apply (simp add: get_tcb_obj_ref_def thread_get_def)
   apply wp
   apply (clarsimp simp: pred_tcb_at_def)
   done

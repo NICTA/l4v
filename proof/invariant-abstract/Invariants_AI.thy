@@ -227,6 +227,7 @@ where
 
 abbreviation "st_tcb_at \<equiv> pred_tcb_at itcb_state"
 abbreviation "bound_tcb_at \<equiv> pred_tcb_at itcb_bound_notification"
+abbreviation "bound_sc_tcb_at \<equiv> pred_tcb_at itcb_sched_context"
 abbreviation "mcpriority_tcb_at \<equiv> pred_tcb_at itcb_mcpriority"
 
 (* sseefried: 'st_tcb_at_def' only exists to make existing proofs go through. Use 'pred_tcb_at_def' from now on. *)

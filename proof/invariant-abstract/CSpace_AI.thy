@@ -40,11 +40,12 @@ requalify_facts
   valid_global_refsD2
   arch_derived_is_device
   update_cnode_cap_data_def
-
+  lookup_ipc_buffer_inv
 end
 
 (* Proofs don't want to see these details. *)
 declare update_cnode_cap_data_def [simp]
+declare lookup_ipc_buffer_inv[wp]
 
 definition
   capBadge_ordering :: "bool \<Rightarrow> (badge option \<times> badge option) set"

@@ -74,6 +74,12 @@ lemma get_sched_context_inv[simp]:
   "\<lbrace>P\<rbrace> get_sched_context t \<lbrace>\<lambda>r. P\<rbrace>"
   by (wpsimp simp: get_sched_context_def get_object_def)
 
+lemma get_sc_obj_ref_inv[simp]:
+  "\<lbrace>P\<rbrace> get_sc_obj_ref f t \<lbrace>\<lambda>r. P\<rbrace>"
+  apply (simp add: get_sc_obj_ref_def get_sched_context_def get_object_def)
+  apply wpsimp
+  done
+
 lemma get_reply_inv[simp]:
   "\<lbrace>P\<rbrace> get_reply t \<lbrace>\<lambda>r. P\<rbrace>"
   by (wpsimp simp: get_reply_def get_object_def)

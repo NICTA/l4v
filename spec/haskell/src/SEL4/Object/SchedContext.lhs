@@ -32,7 +32,7 @@ This module uses the C preprocessor to select a target architecture.
 >         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn,
 >         isRoundRobin, getRefills, setRefills, refillFull, refillAbsoluteMax,
 >         schedContextCompleteYieldTo, schedContextCancelYieldTo,
->         schedContextUpdateConsumed
+>         schedContextUpdateConsumed, setConsumed
 >     ) where
 
 \begin{impdetails}

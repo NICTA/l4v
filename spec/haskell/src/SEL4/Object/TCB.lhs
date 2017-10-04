@@ -645,8 +645,8 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 > decodeSchedContextInvocation label scPtr excaps args = do
 >     case invocationType label of
 >         SchedContextConsumed -> do
->             tptr <- withoutFailure $ getCurThread
->             withoutFailure $ setThreadState Restart tptr
+>             ctPtr <- withoutFailure $ getCurThread
+>             withoutFailure $ setThreadState Restart ctPtr
 >             return $ InvokeSchedContextConsumed scPtr args
 >         SchedContextBind -> do
 >             when (length excaps == 0) $ throw TruncatedMessage
@@ -661,6 +661,8 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >                     scPtrOpt <- withoutFailure $ liftM ntfnSc $ getNotification ntfnPtr
 >                     when (scPtrOpt /= Nothing) $ throw IllegalOperation
 >                 _ -> throw (InvalidCapability 1)
+>             ctPtr <- withoutFailure $ getCurThread
+>             withoutFailure $ setThreadState Restart ctPtr
 >             return $ InvokeSchedContextBind scPtr cap
 >         SchedContextUnbindObject -> do
 >             when (length excaps == 0) $ throw TruncatedMessage
@@ -673,13 +675,18 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >                     scPtrOpt <- withoutFailure $ liftM ntfnSc $ getNotification ntfnPtr
 >                     when (scPtrOpt /= Just scPtr) $ throw IllegalOperation
 >                 _ -> throw (InvalidCapability 1)
+>             ctPtr <- withoutFailure $ getCurThread
+>             withoutFailure $ setThreadState Restart ctPtr
 >             return $ InvokeSchedContextUnbindObject scPtr cap
->         SchedContextUnbind -> return $! InvokeSchedContextUnbind scPtr
+>         SchedContextUnbind -> do
+>             ctPtr <- withoutFailure $ getCurThread
+>             withoutFailure $ setThreadState Restart ctPtr
+>             return $! InvokeSchedContextUnbind scPtr
 >         SchedContextYieldTo -> do
 >             sc <- withoutFailure $ getSchedContext scPtr
+>             when (scTCB sc == Nothing) $ throw IllegalOperation
 >             ctPtr <- withoutFailure $ getCurThread
 >             ct <- withoutFailure $ getObject ctPtr
->             when (scTCB sc == Nothing) $ throw IllegalOperation
 >             when (fromJust (scTCB sc) == ctPtr) $ throw IllegalOperation
 >             tcb <- withoutFailure $ getObject $ fromJust $ scTCB sc
 >             when (tcbPriority tcb > tcbMCP ct) $ throw IllegalOperation
@@ -716,6 +723,8 @@ Unlike the C code, setTimeArg does not set the message registers.
 >         throw (RangeError (fromIntegral minBudgetUs) (fromIntegral periodUs))
 >     when (fromIntegral extraRefills + minRefills > refillAbsoluteMax(targetCap)) $
 >         throw (RangeError 0 (fromIntegral (refillAbsoluteMax(targetCap) - minRefills)))
+>     ctPtr <- withoutFailure $ getCurThread
+>     withoutFailure $ setThreadState Restart ctPtr
 >     return $! InvokeSchedControlConfigure scPtr
 >         (usToTicks budgetUs) (usToTicks periodUs) (fromIntegral extraRefills + minRefills) badge
 

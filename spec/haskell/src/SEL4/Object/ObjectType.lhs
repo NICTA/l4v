@@ -129,9 +129,12 @@ Threads are treated as special capability nodes; they also become zombies when t
 >     cte_ptr <- getThreadCSpaceRoot tptr
 >     unbindNotification tptr
 >     tcb <- getObject tptr
->     sc <- getSchedContext $ fromJust $ tcbSchedContext tcb
->     schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
->     unbindFromSc tptr
+>     when (tcbSchedContext tcb /= Nothing) $ do
+>         sc <- getSchedContext $ fromJust $ tcbSchedContext tcb
+>         schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
+>         unbindFromSc tptr
+>     when (tcbReply tcb /= Nothing) $ do
+>         replyRemove (fromJust $ tcbReply tcb)
 >     suspend tptr
 >     Arch.prepareThreadDelete tptr
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)

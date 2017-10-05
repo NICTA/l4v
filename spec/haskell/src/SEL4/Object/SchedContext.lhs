@@ -386,6 +386,7 @@ This module uses the C preprocessor to select a target architecture.
 >     tcbSchedDequeue tptr
 >     tcbReleaseRemove tptr
 >     threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) tptr
+>     setSchedContext scPtr $ sc { scTCB = Nothing }
 >     cur <- getCurThread
 >     when (tptr == cur) $ rescheduleRequired
 

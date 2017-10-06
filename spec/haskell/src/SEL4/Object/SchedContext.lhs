@@ -415,6 +415,25 @@ This module uses the C preprocessor to select a target architecture.
 >             setSchedContext scPtr $ sc { scConsumed = 0 }
 >             return $ ticksToUs consumed
 
+> schedContextYieldTo :: PPtr SchedContext -> [Word] -> Kernel ()
+> schedContextYieldTo scPtr buffer = do
+>     refillUnblockCheck scPtr
+>     sc <- getSchedContext scPtr
+>     tptr <- return $ fromJust $ scTCB sc
+>     inq <- inReleaseQueue tptr
+>     schedulable <- isSchedulable tptr inq
+>     if schedulable
+>         then do
+>             sufficient <- refillSufficient scPtr 0
+>             ready <- refillReady scPtr
+>             assert (sufficient && ready) "schedContextYieldTo: refill must be sufficient and ready"
+>             ctPtr <- getCurThread
+>             threadSet (\tcb -> tcb { tcbYieldTo = Just scPtr }) ctPtr
+>             setSchedContext scPtr (sc { scYieldFrom = Just ctPtr })
+>             attemptSwitchTo $ fromJust $ scTCB sc
+>             setThreadState (YieldTo scPtr) ctPtr
+>         else setConsumed scPtr (PPtr (head buffer))
+
 > unbindFromSc :: PPtr TCB -> Kernel ()
 > unbindFromSc tcbPtr = do
 >     scPtrOpt <- threadGet tcbSchedContext tcbPtr
@@ -444,22 +463,7 @@ This module uses the C preprocessor to select a target architecture.
 >         schedContextUnbindAllTCBs scPtr
 >         schedContextUnbindNtfn scPtr
 >     InvokeSchedContextYieldTo scPtr buffer -> do
->         refillUnblockCheck scPtr
->         sc <- getSchedContext scPtr
->         tptr <- return $ fromJust $ scTCB sc
->         inq <- inReleaseQueue tptr
->         schedulable <- isSchedulable tptr inq
->         if schedulable
->             then do
->                 sufficient <- refillSufficient scPtr 0
->                 ready <- refillReady scPtr
->                 assert (sufficient && ready) "invokeSchedContext: error for InvokeSchedContextYieldTo"
->                 ctPtr <- getCurThread
->                 tcb <- getObject ctPtr
->                 yieldToScPtr <- return $ fromJust $ tcbYieldTo tcb
->                 setSchedContext yieldToScPtr sc
->                 attemptSwitchTo $ fromJust $ scTCB sc
->             else setConsumed scPtr (PPtr (head buffer))
+>         schedContextYieldTo scPtr buffer
 
 > invokeSchedControlConfigure :: SchedControlInvocation -> KernelF SyscallError ()
 > invokeSchedControlConfigure iv = case iv of
@@ -487,8 +491,8 @@ This module uses the C preprocessor to select a target architecture.
 >                 then do
 >                     when runnable $ refillUpdate scPtr period budget mRefills
 >                     schedContextResume scPtr
->                     ct <- getCurThread
->                     if (tptr == ct)
+>                     ctPtr <- getCurThread
+>                     if (tptr == ctPtr)
 >                         then rescheduleRequired
 >                         else when runnable $ switchIfRequiredTo tptr
 >                 else

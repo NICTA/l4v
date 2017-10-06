@@ -431,6 +431,9 @@ A user thread may be in the following states:
 
 >     | Restart
 
+>     | YieldTo {
+>         schedContext :: PPtr SchedContext }
+
 >     deriving (Show, Eq)
 
 \end{itemize}

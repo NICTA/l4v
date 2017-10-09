@@ -88,6 +88,8 @@ This module uses the C preprocessor to select a target architecture.
 >     times <- mapM getScTime qs
 >     qst <- return $ zip qs times
 >     qst' <- return $ filter (\(_,t') -> t' <= time) qst ++ [(tcbPtr, time)] ++ filter (\(_,t') -> not (t' <= time)) qst
+>     when (head qst /= head qst') $
+>         setReprogramTimer True
 >     setReleaseQueue (map fst qst')
 
 > refillsCapacity :: Time -> [Refill] -> Int -> Time
@@ -95,6 +97,12 @@ This module uses the C preprocessor to select a target architecture.
 >     if rAmount (refills !! headIndex) < usage
 >         then 0
 >         else rAmount (refills !! headIndex) - usage
+
+> refillCapacity :: PPtr SchedContext -> Time -> Kernel Time
+> refillCapacity scPtr usage = do
+>     refills <- getRefills scPtr
+>     sc <- getSchedContext scPtr
+>     return $ refillsCapacity usage refills (scRefillHead sc)
 
 > sufficientRefills :: Time -> [Refill] -> Int -> Bool
 > sufficientRefills usage refills headIndex = minBudget <= refillsCapacity usage refills headIndex
@@ -158,8 +166,7 @@ This module uses the C preprocessor to select a target architecture.
 >         then 0
 >         else scRefillTail sc + 1
 >     refills' <- return $ replaceAt newTail refills rfl
->     setRefills scPtr refills'
->     setSchedContext scPtr (sc { scRefillTail = newTail })
+>     setSchedContext scPtr (sc { scRefills = refills', scRefillTail = newTail })
 
 > maybeAddEmptyTail :: PPtr SchedContext -> Kernel ()
 > maybeAddEmptyTail scPtr = do
@@ -551,12 +558,6 @@ This module uses the C preprocessor to select a target architecture.
 >     curTime' <- doMachineOp getCurrentTime
 >     setCurTime curTime'
 >     setConsumedTime (curTime' - prevTime)
-
-> refillCapacity :: PPtr SchedContext -> Time -> Kernel Time
-> refillCapacity scPtr usage = do
->     refills <- getRefills scPtr
->     sc <- getSchedContext scPtr
->     return $ refillsCapacity usage refills (scRefillHead sc)
 
 > refillReadyTCB :: PPtr TCB -> Kernel Bool
 > refillReadyTCB tptr = do

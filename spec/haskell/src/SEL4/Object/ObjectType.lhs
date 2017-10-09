@@ -139,23 +139,21 @@ Threads are treated as special capability nodes; they also become zombies when t
 >     Arch.prepareThreadDelete tptr
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)
 
-> finaliseCap (SchedContextCap { capSchedContextPtr = scPtr }) final _ = do
->     when final $ do
->         schedContextUnbindAllTCBs scPtr
->     when final $ do
->         schedContextUnbindNtfn scPtr
->     when final $ do
->         sc <- getSchedContext scPtr
->         replyPtrOpt <- return $ scReply sc
->         when (replyPtrOpt /= Nothing) $ do
->             replyPtr <- return $ fromJust replyPtrOpt
->             reply <- getReply replyPtr
->             setReply replyPtr (reply { replyNext = Nothing, replySc = Nothing })
->             setSchedContext scPtr (sc { scReply = Nothing })
->     when final $ do
->         sc <- getSchedContext scPtr
->         when (scYieldFrom sc /= Nothing) $ do
->             schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
+> finaliseCap (SchedContextCap { capSchedContextPtr = scPtr }) True _ = do
+>     schedContextUnbindAllTCBs scPtr
+>     schedContextUnbindNtfn scPtr
+
+>     sc <- getSchedContext scPtr
+>     replyPtrOpt <- return $ scReply sc
+>     when (replyPtrOpt /= Nothing) $ do
+>         replyPtr <- return $ fromJust replyPtrOpt
+>         reply <- getReply replyPtr
+>         setReply replyPtr (reply { replyNext = Nothing, replySc = Nothing })
+>         setSchedContext scPtr (sc { scReply = Nothing })
+
+>     sc <- getSchedContext scPtr
+>     when (scYieldFrom sc /= Nothing) $ do
+>         schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
 >     return (NullCap, NullCap)
 
 > finaliseCap SchedControlCap _ _ = return (NullCap, NullCap)
@@ -232,7 +230,7 @@ This function assumes that its arguments are in MDB order.
 >     capTCBPtr a == capTCBPtr b
 
 > sameRegionAs (a@SchedContextCap {}) (b@SchedContextCap {}) =
->     capSchedContextPtr a == capSchedContextPtr b
+>     capSchedContextPtr a == capSchedContextPtr b && capSCSize a == capSCSize b
 
 > sameRegionAs SchedControlCap SchedControlCap = True
 

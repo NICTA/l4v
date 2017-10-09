@@ -704,6 +704,8 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 > tcbReleaseRemove :: PPtr TCB -> Kernel ()
 > tcbReleaseRemove tcbPtr = do
 >     releaseQueue <- getReleaseQueue
+>     when (head releaseQueue == tcbPtr) $
+>         setReprogramTimer True
 >     setReleaseQueue (filter (/=tcbPtr) releaseQueue)
 
 > switchIfRequiredTo :: PPtr TCB -> Kernel ()

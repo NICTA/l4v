@@ -1059,11 +1059,20 @@ NB: the argument order is different from the abstract spec.
 > awaken :: Kernel ()
 > awaken = do
 >     rq <- getReleaseQueue
->     rq1 <- takeWhileM refillReadyTCB rq
->     setReleaseQueue rq
->     mapM_ (\t -> do
->         switchIfRequiredTo t
->         setReprogramTimer True) rq1
+>     when (rq /= []) $ do
+>         ready <- refillReadyTCB (head rq)
+>         when ready $ do
+>             awakened <- return $ head rq
+>             ctPtr <- getCurThread
+>             assert (awakened /= ctPtr) "awaken: the currently running thread cannot have just woken up"
+>             awakenedSCPtrOpt <- threadGet tcbSchedContext awakened
+>             awakenedSCPtr <- return $ fromJust awakenedSCPtrOpt
+>             roundRobin <- isRoundRobin awakenedSCPtr
+>             assert (not roundRobin) "awaken: round robin threads should not be in the release queue"
+>             sufficient <- refillSufficient awakenedSCPtr 0
+>             assert sufficient "threads HEAD refill should always be > MIN_BUDGET"
+>             switchIfRequiredTo awakened
+>             setReprogramTimer True
 
 > tcbEPFindIndex :: PPtr TCB -> [PPtr TCB] -> Int -> Kernel Int
 > tcbEPFindIndex tptr queue curIndex = do

@@ -1013,11 +1013,10 @@ On some architectures, the thread context may include registers that may be modi
 >     ct <- getCurThread
 >     runnable <- isRunnable ct
 >     when (not result && runnable) $ do
->         cur <- getCurThread
 
 NB: the argument order is different from the abstract spec.
 
->         setThreadState Restart cur
+>         setThreadState Restart ct
 
 >     return result
 
@@ -1063,6 +1062,7 @@ NB: the argument order is different from the abstract spec.
 >         ready <- refillReadyTCB (head rq)
 >         when ready $ do
 >             awakened <- return $ head rq
+>             setReleaseQueue $ tail rq
 >             ctPtr <- getCurThread
 >             assert (awakened /= ctPtr) "awaken: the currently running thread cannot have just woken up"
 >             awakenedSCPtrOpt <- threadGet tcbSchedContext awakened
@@ -1073,6 +1073,7 @@ NB: the argument order is different from the abstract spec.
 >             assert sufficient "threads HEAD refill should always be > MIN_BUDGET"
 >             switchIfRequiredTo awakened
 >             setReprogramTimer True
+>             awaken
 
 > tcbEPFindIndex :: PPtr TCB -> [PPtr TCB] -> Int -> Kernel Int
 > tcbEPFindIndex tptr queue curIndex = do

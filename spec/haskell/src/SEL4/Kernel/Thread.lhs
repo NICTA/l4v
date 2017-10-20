@@ -510,9 +510,12 @@ The following function is used to alter the priority of a thread.
 >     ts <- getThreadState tptr
 >     runnable <- isRunnable tptr
 >     when runnable $ do
->         tcbSchedEnqueue tptr
->         cur <- getCurThread
->         when (tptr == cur) rescheduleRequired
+>         inRlsQueue <- inReleaseQueue tptr
+>         schedulable <- isSchedulable tptr inRlsQueue
+>         when schedulable $ do
+>             tcbSchedEnqueue tptr
+>             cur <- getCurThread
+>             when (tptr == cur) rescheduleRequired
 >     case (epBlocked ts) of
 >         Just ep -> reorderEp ep tptr
 >         _ -> return ()

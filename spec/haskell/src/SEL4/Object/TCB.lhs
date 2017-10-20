@@ -30,14 +30,14 @@ This module uses the C preprocessor to select a target architecture.
 >         archThreadSet, archThreadGet,
 >         decodeSchedContextInvocation, decodeSchedControlInvocation,
 >         checkBudget, chargeBudget, scAndTimer,
->         checkBudgetRestart, commitTime, awaken, replyUnbindCaller,
+>         checkBudgetRestart, commitTime, awaken,
 >         replaceAt, tcbEPAppend, tcbEPDequeue, setTimeArg
 >     ) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.API.Types SEL4.API.Failures SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Invocation #-}
-% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget chargeBudget replyUnbindCaller replaceAt tcbEPAppend tcbEPDequeue setTimeArg #-}
+% {-# BOOT-EXPORTS: threadGet threadSet asUser setMRs setMessageInfo getThreadCSpaceRoot getThreadVSpaceRoot decodeTCBInvocation invokeTCB getThreadBufferSlot decodeDomainInvocation archThreadSet archThreadGet sanitiseRegister decodeSchedContextInvocation decodeSchedControlInvocation checkBudget chargeBudget replaceAt tcbEPAppend tcbEPDequeue setTimeArg #-}
 
 > import SEL4.Config (numDomains, timeArgSize)
 > import SEL4.API.Types
@@ -1095,10 +1095,4 @@ NB: the argument order is different from the abstract spec.
 > tcbEPDequeue tptr queue = do
 >     index <- return $ fromJust $ findIndex (\x -> x == tptr) queue
 >     return $ take index queue ++ drop (index + 1) queue
-
-> replyUnbindCaller :: PPtr TCB -> PPtr Reply -> Kernel ()
-> replyUnbindCaller tcbPtr replyPtr = do
->     reply <- getReply replyPtr
->     setReply replyPtr (reply { replyCaller = Nothing })
->     threadSet (\tcb -> tcb { tcbReply = Nothing }) tcbPtr
 

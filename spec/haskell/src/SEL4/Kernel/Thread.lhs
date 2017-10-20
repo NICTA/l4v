@@ -208,26 +208,11 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                 Nothing -> do
 >                     doIPCTransfer sender Nothing 0 True receiver
 >                     setThreadState Running receiver
->                 Just (Timeout badge) -> do
+>                 _ -> do
 >                     mi <- getMessageInfo sender
 >                     buf <- lookupIPCBuffer False sender
 >                     mrs <- getMRs sender buf mi
->                     restart <- handleFaultReply (Timeout badge) receiver (msgLabel mi) mrs
->                     threadSet (\tcb -> tcb { tcbFault = Nothing }) receiver
->                     setThreadState (if restart then Restart else Inactive) receiver
->                     runnable <- isRunnable receiver
->                     tcb <- getObject receiver
->                     when (tcbSchedContext tcb /= Nothing && runnable) $ do
->                         ready <- refillReady $ fromJust $ tcbSchedContext tcb
->                         sufficient <- refillSufficient (fromJust $ tcbSchedContext tcb) 0
->                         if ready && sufficient
->                             then attemptSwitchTo receiver
->                             else postpone (fromJust $ tcbSchedContext tcb)
->                 Just f -> do
->                     mi <- getMessageInfo sender
->                     buf <- lookupIPCBuffer False sender
->                     mrs <- getMRs sender buf mi
->                     restart <- handleFaultReply f receiver (msgLabel mi) mrs
+>                     restart <- handleFaultReply (fromJust fault) receiver (msgLabel mi) mrs
 >                     threadSet (\tcb -> tcb { tcbFault = Nothing }) receiver
 >                     setThreadState (if restart then Restart else Inactive) receiver
 >                     runnable <- isRunnable receiver
@@ -240,9 +225,11 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                             else do
 >                                 isHandlerValid <- validTimeoutHandler receiver
 >                                 if isHandlerValid
->                                     then handleTimeout receiver
->                                     else do
->                                         postpone (fromJust $ tcbSchedContext tcb)
+>                                     then
+>                                         case fault of
+>                                             Just (Timeout _) -> postpone (fromJust $ tcbSchedContext tcb)
+>                                             _ -> handleTimeout receiver
+>                                     else postpone (fromJust $ tcbSchedContext tcb)
 
 \subsubsection{Ordinary IPC}
 

@@ -181,7 +181,7 @@ This module uses the C preprocessor to select a target architecture.
 >     assert (minBudget < budget) "Budget must be greater than the minimum"
 >     curTime <- getCurTime
 >     refills <- return $ scRefills sc
->     refills' <- return $ replaceAt (scRefillHead sc) refills (Refill { rTime = curTime, rAmount = budget })
+>     refills' <- return $ replaceAt 0 refills (Refill { rTime = curTime, rAmount = budget })
 >     sc' <- return $ sc { scPeriod = period,
 >                          scRefills = refills',
 >                          scRefillMax = maxRefills,
@@ -207,8 +207,7 @@ This module uses the C preprocessor to select a target architecture.
 >                     refills' <- return $ replaceAt (scRefillTail sc) refills (refillTail { rAmount = rAmount refillTail + rAmount new })
 >                     setRefills scPtr refills'
 >                 else do
->                     refills' <- return $ replaceAt ((scRefillTail sc + 1) `mod` scRefillMax sc) refills new
->                     setSchedContext scPtr (sc { scRefills = refills', scRefillTail = (scRefillTail sc + 1) `mod` scRefillMax sc })
+>                     refillAddTail scPtr new
 
 > mergeRefill :: Refill -> Refill -> Refill
 > mergeRefill r1 r2 =
@@ -501,8 +500,8 @@ This module uses the C preprocessor to select a target architecture.
 >             when (curSc == scPtr) $ do
 >                 consumed <- getConsumedTime
 >                 capacity <- refillCapacity scPtr consumed
->                 result <- checkBudget
->                 if result
+>                 budgetEnough <- checkBudget
+>                 if budgetEnough
 >                     then commitTime
 >                     else chargeBudget capacity consumed False
 >             (period, mRefills) <- return (if budget == period then (0, minRefills) else (period, mRefills))
@@ -552,7 +551,8 @@ This module uses the C preprocessor to select a target architecture.
 >                 setRefills csc refills''
 >             else refillSplitCheck csc consumed
 >     commitDomainTime
->     setSchedContext csc (sc { scConsumed = scConsumed sc + consumed })
+>     sc' <- getSchedContext csc
+>     setSchedContext csc (sc' { scConsumed = scConsumed sc' + consumed })
 >     setConsumedTime 0
 
 > rollbackTime :: Kernel ()
@@ -616,9 +616,9 @@ This module uses the C preprocessor to select a target architecture.
 >         scPtrOpt <- liftM ntfnSc (getNotification ntfnPtr)
 >         case scPtrOpt of
 >             Nothing -> return ()
->             Just scPtr -> (\scPtr -> do
+>             Just scPtr -> do
 >                 scTCB <- liftM scTCB $ getSchedContext scPtr
->                 when (scTCB == Nothing) $ schedContextDonate scPtr tcbPtr) scPtr
+>                 when (scTCB == Nothing) $ schedContextDonate scPtr tcbPtr
 
 > maybeReturnSc :: PPtr Notification -> PPtr TCB -> Kernel ()
 > maybeReturnSc ntfnPtr tcbPtr = do

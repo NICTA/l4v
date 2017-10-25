@@ -36,7 +36,7 @@ We use the C preprocessor to select a target architecture.
 > import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Kernel.VSpace
-> import {-# SOURCE #-} SEL4.Kernel.FaultHandler(handleTimeout, validTimeoutHandler)
+> import {-# SOURCE #-} SEL4.Kernel.FaultHandler(handleTimeout, isValidTimeoutHandler)
 > import {-# SOURCE #-} SEL4.Kernel.Init
 
 > import Data.Bits
@@ -223,7 +223,7 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                         if ready && sufficient
 >                             then attemptSwitchTo receiver
 >                             else do
->                                 isHandlerValid <- validTimeoutHandler receiver
+>                                 isHandlerValid <- isValidTimeoutHandler receiver
 >                                 if isHandlerValid
 >                                     then
 >                                         case fault of
@@ -676,7 +676,7 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 >         scPtr <- getCurSc
 >         ready <- refillReady scPtr
 >         sufficient <- refillSufficient scPtr 0
->         valid <- validTimeoutHandler ct
+>         valid <- isValidTimeoutHandler ct
 >         if (canTimeoutFault && valid)
 >             then handleTimeout ct
 >             else

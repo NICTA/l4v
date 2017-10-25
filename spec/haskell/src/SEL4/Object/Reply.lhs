@@ -130,7 +130,7 @@ This module specifies the behavior of reply objects.
 >         when (oldReplyPtrOpt /= Nothing) $ do
 >             oldReplyPtr <- return $ fromJust oldReplyPtrOpt
 >             oldReply <- getReply oldReplyPtr
->             setReply oldReplyPtr (oldReply { replyNext = Just replyPtr })
+>             setReply oldReplyPtr (oldReply { replyNext = Just replyPtr, replySc = Nothing })
 >         setSchedContext (fromJust scPtrOptDonated) (scDonated { scReply = Just replyPtr })
 >         schedContextDonate (fromJust scPtrOptDonated) calleePtr
 

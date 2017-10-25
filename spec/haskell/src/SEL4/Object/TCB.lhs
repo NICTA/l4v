@@ -44,6 +44,7 @@ This module uses the C preprocessor to select a target architecture.
 > import SEL4.API.Failures
 > import SEL4.API.Invocation
 > import SEL4.API.InvocationLabels
+> import {-# SOURCE #-} SEL4.Kernel.FaultHandler
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object.Structures
@@ -336,31 +337,14 @@ This is to ensure that the source capability is not made invalid by the deletion
 >     vRoot <- if isValidVTableRoot vRootCap'
 >         then return (vRootCap', vRootSlot)
 >         else throw IllegalOperation
-
->     fhCap <- return $! fst fhArg
->     fhSlot <- return $! snd fhArg
->     fhCap' <- deriveCap fhSlot $ fhCap
->     faultHandler <-
->         (case fhCap' of
->              EndpointCap _ _ canSend _ canGrant ->
->                  if canSend && canGrant
->                      then return $! (fhCap', fhSlot)
->                      else throw $ InvalidCapability 1
->              NullCap -> return (fhCap', fhSlot)
->              _ -> throw $ InvalidCapability 1)
-
->     thCap <- return $! fst thArg
->     thSlot <- return $! snd thArg
->     thCap' <- deriveCap thSlot $ thCap
->     timeoutHandler <-
->         (case thCap' of
->              EndpointCap _ _ canSend _ canGrant ->
->                  if canSend && canGrant
->                      then return $! (thCap', thSlot)
->                      else throw $ InvalidCapability 2
->              NullCap -> return (thCap', thSlot)
->              _ -> throw $ InvalidCapability 2)
->              
+>     let (fhCap, fhSlot) = fhArg
+>     faultHandler <- if isValidFaultHandler fhCap
+>         then return (fhCap, fhSlot)
+>         else throw $ InvalidCapability 1
+>     let (thCap, thSlot) = thArg
+>     timeoutHandler <- if isValidFaultHandler thCap
+>         then return (thCap, thSlot)
+>         else throw $ InvalidCapability 2
 >     return $ ThreadControl {
 >         tcThread = capTCBPtr cap,
 >         tcThreadCapSlot = slot,
@@ -452,6 +436,9 @@ This is to ensure that the source capability is not made invalid by the deletion
 > installTCBCap :: PPtr TCB -> Capability -> PPtr CTE -> Int -> Maybe (Capability, PPtr CTE) -> KernelP ()
 > installTCBCap _ _ _ _ Nothing = return ()
 > installTCBCap target tcap slot n (Just (newCap, srcSlot)) = do
+
+Using case instead of if-then-else will make the code compact, but we prefer the latter due to the current Haskell translator.
+
 >     rootSlot <-
 >         if n == 0
 >             then withoutPreemption $ getThreadCSpaceRoot target
@@ -459,7 +446,9 @@ This is to ensure that the source capability is not made invalid by the deletion
 >                  then withoutPreemption $ getThreadVSpaceRoot target
 >                  else if n == 3
 >                       then withoutPreemption $ getThreadFaultHandlerSlot target
->                       else fail "installTCBCap: improper index"
+>                       else if n == 4
+>                            then withoutPreemption $ getThreadTimeoutHandlerSlot target
+>                            else fail "installTCBCap: improper index"
 >     cteDelete rootSlot True
 >     withoutPreemption
 >         $ checkCapAt newCap srcSlot
@@ -977,7 +966,8 @@ On some architectures, the thread context may include registers that may be modi
 >             refills'' <- return $ replaceAt tailIndex refills' (rftl { rAmount = 0 })
 >             setRefills scPtr refills''
 >         else refillBudgetCheck scPtr consumed capacity
->     setSchedContext scPtr (sc { scConsumed = scConsumed sc + consumed })
+>     sc' <- getSchedContext scPtr
+>     setSchedContext scPtr (sc' { scConsumed = scConsumed sc' + consumed })
 >     setConsumedTime 0
 >     ct <- getCurThread
 >     runnable <- isRunnable ct
@@ -1080,7 +1070,10 @@ NB: the argument order is different from the abstract spec.
 >     prio <- threadGet tcbPriority tptr
 >     curPrio <- threadGet tcbPriority (queue !! curIndex)
 >     if prio > curPrio
->         then tcbEPFindIndex tptr queue (curIndex - 1)
+>         then
+>             if curIndex == 0
+>                 then return (-1)
+>                 else tcbEPFindIndex tptr queue (curIndex - 1)
 >         else return curIndex
 
 > tcbEPAppend :: PPtr TCB -> [PPtr TCB] -> Kernel [PPtr TCB]

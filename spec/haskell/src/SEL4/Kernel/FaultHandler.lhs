@@ -10,26 +10,33 @@
 
 This module contains functions that determine how recoverable faults encountered by user-level threads are propagated to the appropriate fault handlers.
 
-> module SEL4.Kernel.FaultHandler (handleFault, handleTimeout, validTimeoutHandler) where
+> module SEL4.Kernel.FaultHandler (handleFault, handleTimeout, isValidTimeoutHandler, isValidFaultHandler) where
 
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.Machine SEL4.Model SEL4.Object.Structures SEL4.API.Failures #-}
-% {-# BOOT-EXPORTS: handleFault handleTimeout validTimeoutHandler #-}
+% {-# BOOT-EXPORTS: handleFault handleTimeout isValidFaultHandler isValidTimeoutHandler #-}
 
 > import SEL4.API.Failures
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object
 > import SEL4.Object.Structures(TCB(..), CTE(..))
-> import SEL4.Kernel.Thread
+> import {-# SOURCE #-} SEL4.Kernel.Thread
 
 > import Data.Maybe(fromJust)
 
 \end{impdetails}
 
-> validTimeoutHandler :: PPtr TCB -> Kernel Bool
-> validTimeoutHandler tptr = do
+> isValidFaultHandler :: Capability -> Bool
+> isValidFaultHandler cap =
+>     case cap of
+>         EndpointCap _ _ canSend _ canGrant -> canSend && canGrant
+>         NullCap -> True
+>         _ -> False
+
+> isValidTimeoutHandler :: PPtr TCB -> Kernel Bool
+> isValidTimeoutHandler tptr = do
 >     tcb <- getObject tptr
 >     case cteCap (tcbTimeoutHandler tcb) of
 >         EndpointCap {} -> return True
@@ -47,14 +54,14 @@ When a thread faults, the kernel attempts to send a fault IPC to the fault handl
 
 > handleFault tptr ex = do
 >     tcb <- getObject tptr
->     hasFh <- (sendFaultIPC tptr (cteCap (tcbFaultHandler tcb)) ex True `catchFailure` const (return False))
->     unless hasFh $ (handleNoFault tptr)
+>     hasFh <- sendFaultIPC tptr (cteCap (tcbFaultHandler tcb)) ex True `catchFailure` const (return False)
+>     unless hasFh $ (handleNoFaultHandler tptr)
 
 \subsection{Sending Fault IPC}
 
 > handleTimeout :: PPtr TCB -> Kernel ()
 > handleTimeout tptr = do
->     valid <- validTimeoutHandler tptr
+>     valid <- isValidTimeoutHandler tptr
 >     assert valid "no valid timeout handler"
 >     tcb <- getObject tptr
 >     sendFaultIPC tptr (cteCap (tcbFaultHandler tcb)) (fromJust $ tcbFault tcb) False `catchFailure` const (return False)
@@ -79,8 +86,8 @@ The kernel stores a copy of the fault in the thread's TCB, and performs an IPC s
 >         NullCap -> withoutFailure $ return False
 >         _ -> fail "no proper cap"
 
-\subsection{No Fault}
+\subsection{No Fault Handler}
 
-> handleNoFault :: PPtr TCB -> Kernel ()
-> handleNoFault tptr = setThreadState Inactive tptr
+> handleNoFaultHandler :: PPtr TCB -> Kernel ()
+> handleNoFaultHandler tptr = setThreadState Inactive tptr
 

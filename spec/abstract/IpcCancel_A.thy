@@ -314,13 +314,19 @@ where
   "cancel_all_ipc epptr \<equiv> do
      ep \<leftarrow> get_endpoint epptr;
      case ep of IdleEP \<Rightarrow> return ()
-               | _ \<Rightarrow> do
-                        queue \<leftarrow> get_ep_queue ep;
-                        set_endpoint epptr IdleEP;
-                        mapM_x (\<lambda>t. do set_thread_state t Restart;
-                                       do_extended_op (tcb_sched_action (tcb_sched_enqueue) t) od) $ queue;
-                        do_extended_op (reschedule_required)
-                     od
+       | _ \<Rightarrow> do
+         queue \<leftarrow> get_ep_queue ep;
+         set_endpoint epptr IdleEP;
+         mapM_x (\<lambda>t.
+           do st \<leftarrow> get_thread_state t;
+              reply_opt \<leftarrow> case st of BlockedOnReceive _ r_opt \<Rightarrow> return r_opt
+                                    | _ \<Rightarrow> return None;
+              when (reply_opt \<noteq> None) $ reply_remove (the reply_opt);
+              set_thread_state t Restart;
+              do_extended_op (possible_switch_to t)
+            od) $ queue;
+         do_extended_op (reschedule_required)
+      od
    od"
 
 text {* The badge stored by thread waiting on a message send operation. *}

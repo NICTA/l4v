@@ -268,8 +268,14 @@ where
    od"
 
 abbreviation
+  "get_reply_tcb r \<equiv> liftM reply_tcb (get_reply r)"
+(*
+abbreviation
   "get_reply_caller r \<equiv> liftM reply_caller (get_reply r)"
 
+abbreviation
+  "get_reply_callee r \<equiv> liftM reply_callee (get_reply r)"
+*)
 
 section {* IRQ State and Slot *}
 

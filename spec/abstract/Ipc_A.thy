@@ -304,7 +304,7 @@ where
                   if can_grant \<and> reply \<noteq> None
                   then do
                     reply_push thread dest (the reply) can_donate;
-                    set_thread_state thread BlockedOnReply
+                    set_thread_state thread (BlockedOnReply reply)
                   od
                   else set_thread_state thread Inactive
                 else when (can_donate \<and> sc_opt = None) $ sched_context_donate (the sc_opt) dest;
@@ -399,7 +399,7 @@ where
                   sender_sc \<leftarrow> get_tcb_obj_ref tcb_sched_context sender;
                   donate \<leftarrow> return (sender_sc \<noteq> None);
                   reply_push sender thread (the reply) donate;
-                  set_thread_state sender BlockedOnReply
+                  set_thread_state sender (BlockedOnReply reply)
                 od
                 else set_thread_state sender Inactive
               else do
@@ -565,10 +565,10 @@ definition
   do_reply_transfer :: "obj_ref \<Rightarrow> obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
 where
  "do_reply_transfer sender reply \<equiv> do
-    recv_opt \<leftarrow> get_reply_caller reply;
+    recv_opt \<leftarrow> get_reply_tcb reply;
     swp maybeM recv_opt (\<lambda>receiver. do
       state \<leftarrow> get_thread_state receiver;
-      assert (state = BlockedOnReply);
+      assert (state = BlockedOnReply (Some reply));
       reply_remove reply;
       fault \<leftarrow> thread_get tcb_fault receiver;
       case fault of

@@ -333,7 +333,19 @@ fun
 where
   "fast_finalise NullCap                 final = return ()"
 | "fast_finalise (ReplyCap r)            final =
-      (when final $ reply_remove r)"
+      (when final $ do
+          reply \<leftarrow> get_reply r;
+          tptr \<leftarrow> return (reply_tcb reply);
+          when (tptr \<noteq> None) $ do
+             ts \<leftarrow> get_thread_state (the tptr);
+             case ts of BlockedOnReply _ \<Rightarrow> reply_remove r
+                  | BlockedOnReceive n _ \<Rightarrow> do
+                         set_reply r (reply\<lparr> reply_tcb := None \<rparr>);
+                         set_thread_state (the tptr) (BlockedOnReceive n None)
+                    od
+                   | _ \<Rightarrow> return ()
+              od
+           od)"   (* case distinction on thread state *)
 | "fast_finalise (EndpointCap r b R)     final =
       (when final $ cancel_all_ipc r)"
 | "fast_finalise (NotificationCap r b R) final =
@@ -486,7 +498,22 @@ where
   "finalise_cap NullCap                  final = return (NullCap, NullCap)"
 | "finalise_cap (UntypedCap dev r bits f)    final = return (NullCap, NullCap)"
 | "finalise_cap (ReplyCap r)             final =
-      (liftM (K (NullCap, NullCap)) $ when final $ reply_remove r)"
+      (liftM (K (NullCap, NullCap)) $ when final $ do
+         reply \<leftarrow> get_reply r;
+         tptr \<leftarrow> return (reply_tcb reply);
+         when (tptr \<noteq> None) $ do
+           ts \<leftarrow> get_thread_state (the tptr);
+           case ts of BlockedOnReply rp \<Rightarrow> reply_remove r (* (r = Some reply) should hold *)
+                    | BlockedOnReceive n rp \<Rightarrow> do
+                         set_reply r (reply\<lparr> reply_tcb := None \<rparr>);
+                         set_thread_state (the tptr) (BlockedOnReceive n None)
+                        od 
+                    | _ \<Rightarrow> return ()
+         od
+           (* current PR#916 doesn't change the TS of the caller/callee thread
+              what is the TS of the caller/callee thread when its reply object is removed?
+              Or just setting it to None would do? *) (* FIXME *)
+       od)"
 | "finalise_cap (EndpointCap r b R)      final =
       (liftM (K (NullCap, NullCap)) $ when final $ cancel_all_ipc r)"
 | "finalise_cap (NotificationCap r b R) final =
@@ -498,11 +525,11 @@ where
 | "finalise_cap (CNodeCap r bits g)  final =
       return (if final then Zombie r (Some bits) (2 ^ bits) else NullCap, NullCap)"
 | "finalise_cap (ThreadCap r)            final =
-      do
+      do (* can be in any thread state *)
          when final $ unbind_notification r;
          when final $ unbind_from_sc r;
-         when final $ unbind_from_reply r;
-         when final $ suspend r;
+         when final $ unbind_from_reply r; (* this line is not in the current PR #916 *)
+         when final $ suspend r; (* suspend sets the TS to Inactive *)
          when final $ prepare_thread_delete r;
          return (if final then (Zombie r None 5) else NullCap, NullCap)
       od"

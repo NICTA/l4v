@@ -658,11 +658,11 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >             cap <- return $! head excaps
 >             case cap of
 >                 ThreadCap tcbPtr -> do
->                     scPtrOpt <- withoutFailure $ threadGet tcbSchedContext tcbPtr
->                     when (scPtrOpt /= Just scPtr) $ throw IllegalOperation
+>                     sc <- withoutFailure $ getSchedContext scPtr
+>                     when (scTCB sc /= Just tcbPtr) $ throw IllegalOperation
 >                 NotificationCap ntfnPtr _ _ _ -> do
->                     scPtrOpt <- withoutFailure $ liftM ntfnSc $ getNotification ntfnPtr
->                     when (scPtrOpt /= Just scPtr) $ throw IllegalOperation
+>                     sc <- withoutFailure $ getSchedContext scPtr
+>                     when (scNtfn sc /= Just ntfnPtr) $ throw IllegalOperation
 >                 _ -> throw (InvalidCapability 1)
 >             ctPtr <- withoutFailure $ getCurThread
 >             withoutFailure $ setThreadState Restart ctPtr
@@ -677,8 +677,8 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >             ctPtr <- withoutFailure $ getCurThread
 >             ct <- withoutFailure $ getObject ctPtr
 >             when (fromJust (scTCB sc) == ctPtr) $ throw IllegalOperation
->             tcb <- withoutFailure $ getObject $ fromJust $ scTCB sc
->             when (tcbPriority tcb > tcbMCP ct) $ throw IllegalOperation
+>             priority <- withoutFailure $ threadGet tcbPriority $ fromJust $ scTCB sc
+>             when (priority > tcbMCP ct) $ throw IllegalOperation
 >             withoutFailure $ setThreadState Restart ctPtr
 >             return $ InvokeSchedContextYieldTo scPtr args
 >         _ -> throw IllegalOperation

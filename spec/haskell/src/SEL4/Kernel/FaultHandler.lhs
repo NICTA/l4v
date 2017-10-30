@@ -31,7 +31,7 @@ This module contains functions that determine how recoverable faults encountered
 > isValidFaultHandler :: Capability -> Bool
 > isValidFaultHandler cap =
 >     case cap of
->         EndpointCap _ _ canSend _ canGrant -> canSend && canGrant
+>         EndpointCap _ _ True _ True -> True
 >         NullCap -> True
 >         _ -> False
 

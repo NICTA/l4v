@@ -473,7 +473,7 @@ This module uses the C preprocessor to select a target architecture.
 >     InvokeSchedContextConsumed scPtr buffer -> setConsumed scPtr (PPtr (head buffer))
 >     InvokeSchedContextBind scPtr cap -> case cap of
 >         ThreadCap tcbPtr -> schedContextBindTCB scPtr tcbPtr
->         NotificationCap ntfn _ _ _ -> schedContextBindNtfn scPtr ntfn
+>         NotificationCap ntfnPtr _ _ _ -> schedContextBindNtfn scPtr ntfnPtr
 >         _ -> fail "invokeSchedContext: cap must be ThreadCap or NotificationCap"
 >     InvokeSchedContextUnbindObject scPtr cap -> case cap of
 >         ThreadCap _ -> schedContextUnbindTCB scPtr

@@ -130,9 +130,10 @@ Threads are treated as special capability nodes; they also become zombies when t
 >     unbindNotification tptr
 >     tcb <- getObject tptr
 >     when (tcbSchedContext tcb /= Nothing) $ do
->         sc <- getSchedContext $ fromJust $ tcbSchedContext tcb
+>         let scPtr = fromJust $ tcbSchedContext tcb
+>         sc <- getSchedContext scPtr
 >         schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
->         unbindFromSc tptr
+>         schedContextUnbindTCB scPtr
 >     when (tcbReply tcb /= Nothing) $ do
 >         replyRemove (fromJust $ tcbReply tcb)
 >     suspend tptr

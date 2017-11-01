@@ -1007,7 +1007,6 @@ On some architectures, the thread context may include registers that may be modi
 NB: the argument order is different from the abstract spec.
 
 >         setThreadState Restart ct
-
 >     return result
 
 > switchSchedContext :: Kernel ()

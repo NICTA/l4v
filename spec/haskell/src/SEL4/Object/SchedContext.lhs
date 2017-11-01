@@ -19,7 +19,7 @@ This module uses the C preprocessor to select a target architecture.
 \end{impdetails}
 
 > module SEL4.Object.SchedContext (
->         schedContextUnbindAllTCBs, unbindFromSc, invokeSchedContext,
+>         schedContextUnbindAllTCBs, invokeSchedContext,
 >         invokeSchedControlConfigure, getSchedContext,
 >         schedContextUnbindTCB, schedContextBindTCB, schedContextResume,
 >         setSchedContext, updateTimeStamp, commitTime, rollbackTime,
@@ -392,9 +392,9 @@ This module uses the C preprocessor to select a target architecture.
 > schedContextUnbindTCB :: PPtr SchedContext -> Kernel ()
 > schedContextUnbindTCB scPtr = do
 >     sc <- getSchedContext scPtr
->     tptrOpt <- return $ scTCB sc
+>     let tptrOpt = scTCB sc
 >     assert (tptrOpt /= Nothing) "schedContextUnbind: option of TCB pointer must not be Nothing"
->     tptr <- return $ fromJust tptrOpt
+>     let tptr = fromJust tptrOpt
 >     tcbSchedDequeue tptr
 >     tcbReleaseRemove tptr
 >     threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) tptr
@@ -454,13 +454,6 @@ This module uses the C preprocessor to select a target architecture.
 >             setThreadState (YieldTo scPtr) ctPtr
 >         else setConsumed scPtr (PPtr (head buffer))
 
-> unbindFromSc :: PPtr TCB -> Kernel ()
-> unbindFromSc tcbPtr = do
->     scPtrOpt <- threadGet tcbSchedContext tcbPtr
->     case scPtrOpt of
->         Nothing -> return ()
->         Just scPtr -> schedContextUnbindTCB scPtr
-
 > setConsumed :: PPtr SchedContext -> PPtr Word -> Kernel ()
 > setConsumed scPtr buffer = do
 >     consumed <- schedContextUpdateConsumed scPtr
@@ -489,11 +482,10 @@ This module uses the C preprocessor to select a target architecture.
 > invokeSchedControlConfigure iv = case iv of
 >     InvokeSchedControlConfigure scPtr budget period mRefills badge -> withoutFailure $ do
 >         sc <- getSchedContext scPtr
->         tptrOpt <- return $ scTCB sc
+>         let tptrOpt = scTCB sc
 >         setSchedContext scPtr $ sc { scBadge = badge }
 >         when (tptrOpt /= Nothing) $ do
->             assert (tptrOpt /= Nothing) "invokeSchedControlConfigure: option of TCB pointer must not be Nothing"
->             tptr <- return $ fromJust tptrOpt
+>             let tptr = fromJust tptrOpt
 >             tcbReleaseRemove tptr
 >             tcbSchedDequeue tptr
 >             curSc <- getCurSc
@@ -504,7 +496,7 @@ This module uses the C preprocessor to select a target architecture.
 >                 if budgetEnough
 >                     then commitTime
 >                     else chargeBudget capacity consumed False
->             (period, mRefills) <- return (if budget == period then (0, minRefills) else (period, mRefills))
+>             let (period, mRefills) = if budget == period then (0, minRefills) else (period, mRefills)
 >             runnable <- isRunnable tptr
 >             if scRefillMax sc > 0 && runnable
 >                 then refillUpdate scPtr period budget mRefills
@@ -537,22 +529,22 @@ This module uses the C preprocessor to select a target architecture.
 > commitTime :: Kernel ()
 > commitTime = do
 >     consumed <- getConsumedTime
->     csc <- getCurSc
->     sc <- getSchedContext csc
+>     scPtr <- getCurSc
+>     sc <- getSchedContext scPtr
 >     when (0 < consumed) $ do
->         robin <- isRoundRobin csc
+>         robin <- isRoundRobin scPtr
 >         if robin
 >             then do
->                 newHd <- return $ ((refillHd sc) { rTime = rTime (refillHd sc) - consumed })
->                 newTl <- return $ ((refillTl sc) { rTime = rTime (refillTl sc) + consumed })
->                 refills <- getRefills csc
->                 refills' <- return $ replaceAt (scRefillHead sc) refills newHd
->                 refills'' <- return $ replaceAt (scRefillTail sc) refills' newTl
->                 setRefills csc refills''
->             else refillSplitCheck csc consumed
+>                 refills <- getRefills scPtr
+>                 let newHd = (refillHd sc) { rAmount = rAmount (refillHd sc) - consumed }
+>                     newTl = (refillTl sc) { rAmount = rAmount (refillTl sc) + consumed }
+>                     refills' = replaceAt (scRefillHead sc) refills newHd
+>                     refills'' = replaceAt (scRefillTail sc) refills' newTl
+>                 setRefills scPtr refills''
+>             else refillSplitCheck scPtr consumed
 >     commitDomainTime
->     sc' <- getSchedContext csc
->     setSchedContext csc (sc' { scConsumed = scConsumed sc' + consumed })
+>     sc' <- getSchedContext scPtr
+>     setSchedContext scPtr (sc' { scConsumed = scConsumed sc' + consumed })
 >     setConsumedTime 0
 
 > rollbackTime :: Kernel ()

@@ -59,12 +59,12 @@ When a thread faults, the kernel attempts to send a fault IPC to the fault handl
 
 \subsection{Sending Fault IPC}
 
-> handleTimeout :: PPtr TCB -> Kernel ()
-> handleTimeout tptr = do
+> handleTimeout :: PPtr TCB -> Fault -> Kernel ()
+> handleTimeout tptr timeout = do
 >     valid <- isValidTimeoutHandler tptr
 >     assert valid "no valid timeout handler"
 >     tcb <- getObject tptr
->     sendFaultIPC tptr (cteCap (tcbFaultHandler tcb)) (fromJust $ tcbFault tcb) False `catchFailure` const (return False)
+>     sendFaultIPC tptr (cteCap (tcbTimeoutHandler tcb)) timeout False `catchFailure` const (return False)
 >     return ()
 
 If a thread causes a fault, then an IPC containing details of the fault is sent to a fault handler endpoint specified in the thread's TCB.
@@ -75,14 +75,12 @@ If a thread causes a fault, then an IPC containing details of the fault is sent 
 
 The kernel stores a copy of the fault in the thread's TCB, and performs an IPC send operation to the fault handler endpoint on behalf of the faulting thread. When the IPC completes, the fault will be retrieved from the TCB and sent instead of the message registers.
 
->         EndpointCap _ _ capEPCanSend _ capEPCanGrant ->
->           if capEPCanSend && capEPCanGrant
->               then withoutFailure $ do
->                        threadSet (\tcb -> tcb {tcbFault = Just fault}) tptr
->                        sendIPC True False (capEPBadge handlerCap)
->                            True canDonate tptr (capEPPtr handlerCap)
->                        return True
->               else fail "no proper rights"
+>         EndpointCap _ _ True _ True ->
+>             withoutFailure $ do
+>                 threadSet (\tcb -> tcb {tcbFault = Just fault}) tptr
+>                 sendIPC True False (capEPBadge handlerCap)
+>                     True canDonate tptr (capEPPtr handlerCap)
+>                 return True
 >         NullCap -> withoutFailure $ return False
 >         _ -> fail "no proper cap"
 

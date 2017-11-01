@@ -143,6 +143,7 @@ When a thread is suspended, either explicitly by a TCB invocation or implicitly 
 >     cancelIPC target
 >     setThreadState Inactive target
 >     tcbSchedDequeue target
+>     tcbReleaseRemove target
 >     schedContextCancelYieldTo target
 
 \subsubsection{Restarting a Blocked Thread}
@@ -203,33 +204,35 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >             state <- getThreadState receiver
 >             assert (state == BlockedOnReply) "doReplyTransfer: thread state must be BlockedOnReply"
 >             replyRemove reply
->             fault <- threadGet tcbFault receiver
->             case fault of
+>             faultOpt <- threadGet tcbFault receiver
+>             case faultOpt of
 >                 Nothing -> do
 >                     doIPCTransfer sender Nothing 0 True receiver
 >                     setThreadState Running receiver
->                 _ -> do
+>                 Just fault -> do
 >                     mi <- getMessageInfo sender
 >                     buf <- lookupIPCBuffer False sender
 >                     mrs <- getMRs sender buf mi
->                     restart <- handleFaultReply (fromJust fault) receiver (msgLabel mi) mrs
+>                     restart <- handleFaultReply fault receiver (msgLabel mi) mrs
 >                     threadSet (\tcb -> tcb { tcbFault = Nothing }) receiver
 >                     setThreadState (if restart then Restart else Inactive) receiver
 >                     runnable <- isRunnable receiver
->                     tcb <- getObject receiver
->                     when (tcbSchedContext tcb /= Nothing && runnable) $ do
->                         ready <- refillReady $ fromJust $ tcbSchedContext tcb
->                         sufficient <- refillSufficient (fromJust $ tcbSchedContext tcb) 0
+>                     scPtrOpt <- threadGet tcbSchedContext receiver
+>                     when (scPtrOpt /= Nothing && runnable) $ do
+>                         let scPtr = fromJust scPtrOpt
+>                         ready <- refillReady scPtr
+>                         sufficient <- refillSufficient scPtr 0
 >                         if ready && sufficient
 >                             then attemptSwitchTo receiver
 >                             else do
+>                                 sc <- getSchedContext scPtr
 >                                 isHandlerValid <- isValidTimeoutHandler receiver
 >                                 if isHandlerValid
 >                                     then
 >                                         case fault of
->                                             Just (Timeout _) -> postpone (fromJust $ tcbSchedContext tcb)
->                                             _ -> handleTimeout receiver
->                                     else postpone (fromJust $ tcbSchedContext tcb)
+>                                             Timeout _ -> postpone scPtr
+>                                             _ -> handleTimeout receiver $ Timeout $ scBadge sc
+>                                     else postpone scPtr
 
 \subsubsection{Ordinary IPC}
 
@@ -674,11 +677,12 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 >     it <- getIdleThread
 >     when (ct /= it) $ do
 >         scPtr <- getCurSc
+>         sc <- getSchedContext scPtr
 >         ready <- refillReady scPtr
 >         sufficient <- refillSufficient scPtr 0
 >         valid <- isValidTimeoutHandler ct
 >         if (canTimeoutFault && valid)
->             then handleTimeout ct
+>             then handleTimeout ct $ Timeout $ scBadge sc
 >             else
 >                 if ready && sufficient
 >                     then do
@@ -694,7 +698,7 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 > tcbReleaseRemove :: PPtr TCB -> Kernel ()
 > tcbReleaseRemove tcbPtr = do
 >     releaseQueue <- getReleaseQueue
->     when (head releaseQueue == tcbPtr) $
+>     when (releaseQueue /= [] && head releaseQueue == tcbPtr) $
 >         setReprogramTimer True
 >     setReleaseQueue (filter (/=tcbPtr) releaseQueue)
 

@@ -451,7 +451,6 @@ This module uses the C preprocessor to select a target architecture.
 >             threadSet (\tcb -> tcb { tcbYieldTo = Just scPtr }) ctPtr
 >             setSchedContext scPtr (sc { scYieldFrom = Just ctPtr })
 >             attemptSwitchTo $ fromJust $ scTCB sc
->             setThreadState (YieldTo scPtr) ctPtr
 >         else setConsumed scPtr (PPtr (head buffer))
 
 > setConsumed :: PPtr SchedContext -> PPtr Word -> Kernel ()
@@ -635,8 +634,7 @@ This module uses the C preprocessor to select a target architecture.
 
 > schedContextCancelYieldTo :: PPtr TCB -> Kernel ()
 > schedContextCancelYieldTo tptr = do
->     tcb <- getObject tptr
->     scPtrOpt <- return $ tcbYieldTo tcb
+>     scPtrOpt <- threadGet tcbYieldTo tptr
 >     when (scPtrOpt /= Nothing) $ do
 >         scPtr <- return $ fromJust scPtrOpt
 >         sc <- getSchedContext scPtr
@@ -645,8 +643,7 @@ This module uses the C preprocessor to select a target architecture.
 
 > schedContextCompleteYieldTo :: PPtr TCB -> Kernel ()
 > schedContextCompleteYieldTo tptr = do
->     tcb <- getObject tptr
->     scPtrOpt <- return $ tcbYieldTo tcb
+>     scPtrOpt <- threadGet tcbYieldTo tptr
 >     when (scPtrOpt /= Nothing) $ do
 >         scPtr <- return $ fromJust scPtrOpt
 >         bufferOpt <- lookupIPCBuffer True tptr

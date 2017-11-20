@@ -277,6 +277,27 @@ abbreviation
   "get_reply_callee r \<equiv> liftM reply_callee (get_reply r)"
 *)
 
+
+section {* Synchronous and Asyncronous Endpoints *}
+
+
+abbreviation
+  get_endpoint :: "obj_ref \<Rightarrow> (endpoint,'z::state_ext) s_monad" where
+  "get_endpoint \<equiv> get_simple_ko Endpoint"
+
+abbreviation
+  set_endpoint :: "obj_ref \<Rightarrow> endpoint \<Rightarrow> (unit,'z::state_ext) s_monad" where
+  "set_endpoint \<equiv> set_simple_ko Endpoint"
+
+abbreviation
+  get_notification :: "obj_ref \<Rightarrow> (notification,'z::state_ext) s_monad" where
+  "get_notification \<equiv> get_simple_ko Notification"
+
+abbreviation
+  set_notification :: "obj_ref \<Rightarrow> notification \<Rightarrow> (unit,'z::state_ext) s_monad" where
+  "set_notification \<equiv> set_simple_ko Notification"
+
+
 section {* IRQ State and Slot *}
 
 definition

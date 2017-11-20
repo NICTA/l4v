@@ -2695,7 +2695,7 @@ lemma ri_invs':
     apply (simp add: idle_not_queued')
    apply (simp add: invs_def valid_state_def valid_pspace_def)
    apply (rule hoare_pre)
-    apply (wp hoare_vcg_const_Ball_lift valid_irq_node_typ sts_only_idle
+    apply (wp hoare_vcg_const_Ball_lift valid_irq_node_typ sts_only_idle 
               sts_ep_at_inv[simplified ep_at_def2, simplified]
               failed_transfer_Q[unfolded do_nbrecv_failed_transfer_def, simplified]
               | simp add: live_def valid_ep_def do_nbrecv_failed_transfer_def
@@ -3037,7 +3037,7 @@ lemma si_invs':
    apply (subgoal_tac "state_refs_of s t = {r \<in> state_refs_of s t. snd r = TCBBound}")
     apply (subst fun_upd_idem[where x=t], force simp: conj_commute)
     apply (subgoal_tac "sym_refs ((state_refs_of s)(ep := set lista \<times> {EPRecv}, a := {r \<in> state_refs_of s a. snd r = TCBBound}))")
-     apply (fastforce elim!: pred_tcb_weakenE st_tcb_at_reply_cap_valid simp: conj_commute)
+     apply (fastforce elim!: pred_tcb_weakenE st_tcb_at_reply_cap_valid simp: conj_commute simp del: ntfn_at_def2)
 
     apply (erule delta_sym_refs)
      apply (clarsimp simp: fun_upd_def split: if_split_asm)

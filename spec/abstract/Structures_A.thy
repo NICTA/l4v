@@ -518,28 +518,6 @@ where
 | "obj_size (ArchObjectCap a) = 1 << arch_obj_size a"
 
 
-text {* An alternative formulation that allows abstraction over type: *}
-
-datatype a_type =
-    ATCB
-  | AEndpoint
-  | ANTFN
-  | ACapTable nat
-  | AGarbage nat -- "number of bytes of garbage"
-  | AArch aa_type
-
-definition
-  a_type :: "kernel_object \<Rightarrow> a_type"
-where
- "a_type ob \<equiv> case ob of
-           CNode sz cspace           \<Rightarrow> if well_formed_cnode_n sz cspace
-                                        then ACapTable sz else AGarbage (cte_level_bits + sz)
-         | TCB tcb                   \<Rightarrow> ATCB
-         | Endpoint endpoint         \<Rightarrow> AEndpoint
-         | Notification notification \<Rightarrow> ANTFN
-         | ArchObj ao                \<Rightarrow> AArch (aa_type ao)"
-
-
 section {* Kernel State *}
 
 text {* The kernel's heap is a partial function containing kernel objects. *}

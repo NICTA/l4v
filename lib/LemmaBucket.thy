@@ -464,4 +464,8 @@ lemma strenghten_False_imp:
   "\<not>P \<Longrightarrow> P \<longrightarrow> Q"
   by blast
 
+lemma foldl_conj_Cons:
+  "foldl op \<and> s (x # xs) = (x \<and> foldl op \<and> s xs)"
+  by (induct xs arbitrary: x, auto)
+
 end

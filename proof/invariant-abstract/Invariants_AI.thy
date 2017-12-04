@@ -2368,25 +2368,14 @@ lemma valid_ntfn_typ:
   apply (rule hoare_vcg_conj_lift; simp add: P Q)
   done
 
-lemma foldl_conj:
-  "foldl conj x xs = (x \<and> foldl conj True xs)"
-  apply (case_tac x)
-   apply simp
-  apply (induct xs)
-   apply auto
-  done
-
 lemma valid_sc_typ_foldl_reply:
   assumes r: "\<And>p. \<lbrace>typ_at AReply p\<rbrace> f \<lbrace>\<lambda>rv. typ_at AReply p\<rbrace>"
   shows      "\<lbrace>\<lambda>s. foldl conj True (map (\<lambda>r. reply_at r s) xs)\<rbrace> f
               \<lbrace>\<lambda>rv s. foldl conj True (map (\<lambda>r. reply_at r s) xs)\<rbrace>"
-  apply (induct xs)
-   apply (simp add: wp_post_taut)
-  apply simp
-  apply (subst (1 2) foldl_conj)
-  apply (rule hoare_vcg_conj_lift)
-   apply (auto simp: r[simplified reply_at_typ[symmetric]])
-  done
+  by (induct xs)
+     (auto intro: hoare_vcg_conj_lift
+            simp: r[simplified reply_at_typ[symmetric]] foldl_conj_Cons wp_post_taut
+        simp del: foldl_Cons)
 
 lemma valid_sc_typ:
   (* typ_at or tcb_at, latter is more common due to being an obj_at *)

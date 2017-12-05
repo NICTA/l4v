@@ -365,7 +365,7 @@ New threads are placed in the current security domain, which must be the domain 
 >     case toAPIType t of
 >         Just TCBObject -> do
 >             placeNewObject regionBase (makeObject :: TCB) 0
->             curdom <- curDomain
+>             curdom <- getCurDomain
 >             threadSet (\t -> t { tcbDomain = curdom })
 >                 (PPtr $ fromPPtr regionBase)
 >             return $! ThreadCap (PPtr $ fromPPtr regionBase)

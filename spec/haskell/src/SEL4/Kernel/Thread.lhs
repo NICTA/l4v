@@ -433,7 +433,7 @@ Note also that the level 2 bitmap array is stored in reverse in order to get bet
 
 > chooseThread :: Kernel ()
 > chooseThread = do
->     curdom <- if numDomains > 1 then curDomain else return 0
+>     curdom <- if numDomains > 1 then getCurDomain else return 0
 >     l1 <- getReadyQueuesL1Bitmap curdom
 >     if l1 /= 0
 >         then do

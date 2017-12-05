@@ -23,7 +23,7 @@ We use the C preprocessor to select a target architecture.
 \begin{impdetails}
 
 % {-# BOOT-IMPORTS: SEL4.Model SEL4.Machine SEL4.Object.Structures SEL4.Object.Instances() SEL4.API.Types #-}
-% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer tcbSchedEnqueue tcbSchedDequeue rescheduleRequired timerTick possibleSwitchTo #-}
+% {-# BOOT-EXPORTS: setDomain setMCPriority setPriority getThreadState setThreadState setBoundNotification getBoundNotification doIPCTransfer isRunnable restart suspend  doReplyTransfer tcbSchedEnqueue tcbSchedDequeue rescheduleRequired timerTick scheduleTcb isSchedulable possibleSwitchTo #-}
 
 > import SEL4.Config
 > import SEL4.API.Types
@@ -31,6 +31,7 @@ We use the C preprocessor to select a target architecture.
 > import SEL4.Machine
 > import SEL4.Model
 > import SEL4.Object
+> import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Kernel.VSpace
 > import {-# SOURCE #-} SEL4.Kernel.Init
@@ -38,6 +39,8 @@ We use the C preprocessor to select a target architecture.
 > import Data.Bits
 > import Data.Array
 > import Data.WordLib
+
+> import Data.Maybe
 
 \end{impdetails}
 
@@ -115,6 +118,12 @@ Note that the idle thread is not considered runnable; this is to prevent it bein
 >             Restart -> True
 >             _ -> False
 
+> isSchedulable :: PPtr TCB -> Kernel Bool
+> isSchedulable thread = do
+>         runnable <- isRunnable thread
+>         context <- threadGet tcbSchedContext thread
+>         return $ runnable && isJust context
+
 \subsubsection{Suspending a Thread}
 
 When a thread is suspended, either explicitly by a TCB invocation or implicitly when it is being destroyed, any operation that it is currently performing must be cancelled.
@@ -134,12 +143,12 @@ The invoked thread will return to the instruction that caused it to enter the ke
 > restart :: PPtr TCB -> Kernel ()
 > restart target = do
 >     blocked <- isBlocked target
+>     scOpt <- threadGet tcbSchedContext target
 >     when blocked $ do
 >         cancelIPC target
 >         setupReplyMaster target
 >         setThreadState Restart target
->         tcbSchedEnqueue target
->         possibleSwitchTo target
+>         when (scOpt /= Nothing) $ schedContextResume (fromJust scOpt)
 
 \subsection{IPC Transfers}
 
@@ -355,8 +364,8 @@ We check here that the candidate has the highest priority in the system.
 If the current thread is no longer runnable, has used its entire timeslice, an IPC cancellation has potentially woken multiple higher priority threads, or the domain timeslice is exhausted, then we scan the scheduler queues to choose a new thread. In the last case, we switch to the next domain beforehand.
 
 >             ChooseNewThread -> do
->                 curRunnable <- isRunnable curThread
->                 when curRunnable $ tcbSchedEnqueue curThread
+>                 curSchedulable <- isSchedulable curThread
+>                 when curSchedulable $ tcbSchedEnqueue curThread
 >                 scheduleChooseNewThread
 
 Threads are scheduled using a simple multiple-priority round robin algorithm.
@@ -509,7 +518,10 @@ This function is called when the system state has changed sufficiently that the 
 >     action <- getSchedulerAction
 >     case action of
 >         SwitchToThread target -> do
->             tcbSchedEnqueue target
+
+TODO: Fix me later
+
+>              tcbSchedEnqueue target 
 >         _ -> return ()
 >     setSchedulerAction ChooseNewThread
 
@@ -526,10 +538,10 @@ When setting the scheduler state, we check for blocking of the current thread; i
 > setThreadState :: ThreadState -> PPtr TCB -> Kernel ()
 > setThreadState st tptr = do
 >         threadSet (\t -> t { tcbState = st }) tptr
->         runnable <- isRunnable tptr
+>         schedulable <- isSchedulable tptr
 >         curThread <- getCurThread
 >         action <- getSchedulerAction
->         when (not runnable && curThread == tptr && action == ResumeCurrentThread) $
+>         when (not schedulable && curThread == tptr && action == ResumeCurrentThread) $
 >             rescheduleRequired
 
 \subsubsection{Bound Notificaion objects}
@@ -637,15 +649,17 @@ When the kernel's timer ticks, we decrement the timeslices of both the current t
 >   state <- getThreadState thread
 >   case state of
 >     Running -> do
->       ts <- threadGet tcbTimeSlice thread
+>       scPtr <- threadGet (fromJust . tcbSchedContext) thread
+>       sc <- getSchedContext scPtr
+>       ts <- return $! scRemaining sc
 >       let ts' = ts - 1
 >       if (ts' > 0)
->         then threadSet (\t -> t { tcbTimeSlice = ts' }) thread
+>         then setSchedContext scPtr (sc { scRemaining = ts' })
 >         else do
 
 If the thread timeslice has expired, we reset it, move the thread to the end of its scheduler queue, and tell the scheduler to choose a new thread.
 
->           threadSet (\t -> t { tcbTimeSlice = timeSlice }) thread
+>           recharge scPtr
 >           tcbSchedAppend thread
 >           rescheduleRequired
 >     _ -> return ()

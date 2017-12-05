@@ -32,11 +32,12 @@ We use the C preprocessor to select a target architecture.
 > import SEL4.Model
 > import SEL4.Object.Structures
 > import SEL4.Object.Instances()
+> import SEL4.Object.SchedContext
 > import SEL4.Object.Untyped
-> import {-# SOURCE #-} SEL4.Object.CNode
 > import SEL4.Object.Endpoint
 > import SEL4.Object.Notification
 > import SEL4.Object.Interrupt
+> import {-# SOURCE #-} SEL4.Object.CNode
 > import {-# SOURCE #-} SEL4.Object.TCB
 > import {-# SOURCE #-} SEL4.Kernel.Thread
 
@@ -126,9 +127,19 @@ Threads are treated as special capability nodes; they also become zombies when t
 > finaliseCap (ThreadCap { capTCBPtr = tcb}) True _ = do
 >     cte_ptr <- getThreadCSpaceRoot tcb
 >     unbindNotification tcb
+>     unbindFromSc tcb
 >     suspend tcb
 >     Arch.prepareThreadDelete tcb
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)
+
+TODO: Define schedContextUnbindAllTcbs
+
+> finaliseCap (SchedContextCap { capSchedContextPtr = sc }) final _ = do
+>     when final $ do
+>         schedContextUnbindAllTcbs sc
+>     return (NullCap, Nothing)
+
+> finaliseCap SchedControlCap _ _ = return (NullCap, Nothing)
 
 Zombies have already been finalised.
 
@@ -167,7 +178,6 @@ the bitmask bit that will allow the reissue of an IRQHandlerCap to this IRQ.
 >     _ -> return ()
 
 
-
 > hasCancelSendRights :: Capability -> Bool
 > hasCancelSendRights (EndpointCap { capEPCanSend = True,
 >                                 capEPCanReceive = True,
@@ -175,7 +185,6 @@ the bitmask bit that will allow the reissue of an IRQHandlerCap to this IRQ.
 > hasCancelSendRights _ = False
 
 \subsection{Comparing Capabilities}
-
 
 > sameRegionAs :: Capability -> Capability -> Bool
 
@@ -203,6 +212,11 @@ This function assumes that its arguments are in MDB order.
 > sameRegionAs (a@ThreadCap {}) (b@ThreadCap {}) =
 >     capTCBPtr a == capTCBPtr b
 
+> sameRegionAs (a@SchedContextCap {}) (b@SchedContextCap {}) =
+>     capSchedContextPtr a == capSchedContextPtr b
+
+> sameRegionAs SchedControlCap SchedControlCap = True
+
 > sameRegionAs (a@ReplyCap {}) (b@ReplyCap {}) =
 >     capTCBPtr a == capTCBPtr b
 
@@ -227,6 +241,7 @@ This helper function to "sameRegionAs" checks that we have a physical capability
 > isPhysicalCap DomainCap = False
 > isPhysicalCap (IRQHandlerCap {}) = False
 > isPhysicalCap (ReplyCap {}) = False
+> isPhysicalCap SchedControlCap = False
 > isPhysicalCap (ArchObjectCap a) = Arch.isPhysicalCap a
 > isPhysicalCap _ = True
 
@@ -310,6 +325,14 @@ The "maskCapRights" function restricts the operations that can be performed on a
 
 > maskCapRights _ c@(IRQHandlerCap {}) = c
 
+TODO: Is it correct?
+
+> maskCapRights _ c@(SchedContextCap {}) = c
+
+TODO: Is it correct?
+
+> maskCapRights _ c@SchedControlCap = c
+
 > maskCapRights r (ArchObjectCap {capCap = aoCap}) = Arch.maskCapRights r aoCap
 
 > maskCapRights _ c@(Zombie {}) = c
@@ -340,6 +363,9 @@ New threads are placed in the current security domain, which must be the domain 
 >         Just NotificationObject -> do
 >             placeNewObject (PPtr $ fromPPtr regionBase) (makeObject :: Notification) 0
 >             return $! NotificationCap (PPtr $ fromPPtr regionBase) 0 True True
+>         Just SchedContextObject -> do
+>             placeNewObject regionBase (makeObject :: SchedContext) 0
+>             return $! SchedContextCap (PPtr $ fromPPtr regionBase)
 >         Just CapTableObject -> do
 >             placeNewObject (PPtr $ fromPPtr regionBase) (makeObject :: CTE) userSize
 >             modify (\ks -> ks { gsCNodes =
@@ -377,6 +403,12 @@ The "decodeInvocation" function parses the message, determines the operation tha
 >
 > decodeInvocation label args _ _ DomainCap extraCaps =
 >     liftM (uncurry InvokeDomain) $ decodeDomainInvocation label args extraCaps
+>
+> decodeInvocation label _ _ _ (SchedContextCap {capSchedContextPtr=sc}) extraCaps =
+>     liftM InvokeSchedContext $ decodeSchedContextInvocation label sc (map fst extraCaps)
+>
+> decodeInvocation label args _ _ SchedControlCap extraCaps =
+>     liftM InvokeSchedControl $ decodeSchedControlInvocation label args (map fst extraCaps)
 >
 > decodeInvocation
 >         label args _ _ cap@(CNodeCap {}) extraCaps =
@@ -445,6 +477,14 @@ This function just dispatches invocations to the type-specific invocation functi
 > performInvocation _ _ (InvokeIRQHandler invok) = do
 >     withoutPreemption $ invokeIRQHandler invok
 >     return $! []
+> 
+> performInvocation _ _ (InvokeSchedContext invok) = do
+>     withoutPreemption $ ignoreFailure (invokeSchedContext invok)
+>     return $! []
+>
+> performInvocation _ _ (InvokeSchedControl invok) = do
+>     withoutPreemption $ ignoreFailure (invokeSchedControlConfigure invok)
+>     return $! []
 >
 > performInvocation _ _ (InvokeArchObject invok) = Arch.performInvocation invok
 
@@ -460,6 +500,8 @@ The following two functions returns the base and size of the object a capability
 > capUntypedPtr (ReplyCap { capTCBPtr = PPtr p }) = PPtr p
 > capUntypedPtr (CNodeCap { capCNodePtr = PPtr p }) = PPtr p
 > capUntypedPtr (ThreadCap { capTCBPtr = PPtr p }) = PPtr p
+> capUntypedPtr (SchedContextCap { capSchedContextPtr = PPtr p }) = PPtr p
+> capUntypedPtr SchedControlCap = error "Schedule control has no pointer"
 > capUntypedPtr DomainCap = error "Domain control has no pointer"
 > capUntypedPtr (Zombie { capZombiePtr = PPtr p }) = PPtr p
 > capUntypedPtr IRQControlCap = error "IRQ control has no pointer"
@@ -477,6 +519,9 @@ The following two functions returns the base and size of the object a capability
 >     = 1 `shiftL` objBits (undefined::Notification)
 > capUntypedSize (ThreadCap {})
 >     = 1 `shiftL` objBits (undefined::TCB)
+> capUntypedSize (SchedContextCap {})
+>     = 1 `shiftL` objBits (undefined::SchedContext)
+> capUntypedSize SchedControlCap = 1
 > capUntypedSize (DomainCap {})
 >     = 1 -- error in haskell
 > capUntypedSize (ArchObjectCap a)
@@ -491,5 +536,4 @@ The following two functions returns the base and size of the object a capability
 >     = 1 -- error in haskell
 > capUntypedSize (IRQHandlerCap {})
 >     = 1 -- error in haskell
-
 

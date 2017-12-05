@@ -33,11 +33,6 @@ The size of the root node of the initial capability space determines the area of
 
 \subsection{Timing Parameters}
 
-The default number of timer ticks between scheduling and preemption. Note that the real time that elapses between timer ticks is implementation-defined.
-
-> timeSlice :: Int
-> timeSlice = 5
-
 The default number of security domains.
 
 > numDomains :: Int
@@ -57,4 +52,7 @@ Also related to interrupt latency, clearing of memory before "Retype" is done on
 
 > resetChunkBits :: Int
 > resetChunkBits = 8
+
+> timeArgSize :: Int
+> timeArgSize = 2
 

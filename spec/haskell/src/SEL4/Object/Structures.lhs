@@ -39,6 +39,8 @@ This module uses the C preprocessor to select a target architecture.
 > import Data.Bits
 > import Data.WordLib
 
+> import Data.Word(Word64)
+
 \end{impdetails}
 
 \subsection{Capabilities}
@@ -81,6 +83,9 @@ This is the type used to represent a capability.
 >             capCNodeGuard :: Word,
 >             capCNodeGuardSize :: Int }
 >         | IRQControlCap
+>         | SchedContextCap {
+>             capSchedContextPtr :: PPtr SchedContext }
+>         | SchedControlCap
 >         deriving Show
 
 > data ZombieType = ZombieTCB | ZombieCNode { zombieCTEBits :: Int }
@@ -102,6 +107,10 @@ This is the type used to represent a capability.
 > isReplyCap (ReplyCap {}) = True
 > isReplyCap _ = False
 
+> isThreadCap :: Capability -> Bool
+> isThreadCap (ThreadCap {}) = True
+> isThreadCap _ = False
+
 > isUntypedCap :: Capability -> Bool
 > isUntypedCap (UntypedCap {}) = True
 > isUntypedCap _ = False
@@ -109,6 +118,10 @@ This is the type used to represent a capability.
 > isNotificationCap :: Capability -> Bool
 > isNotificationCap (NotificationCap {}) = True
 > isNotificationCap _ = False
+
+> isSchedContextCap :: Capability -> Bool
+> isSchedContextCap (SchedContextCap {}) = True
+> isSchedContextCap _ = False
 
 \subsection{Kernel Objects}
 
@@ -123,6 +136,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 >     | KOTCB       TCB
 >     | KOCTE       CTE
 >     | KOArch      ArchKernelObject
+>     | KOSchedContext SchedContext
 
 > kernelObjectTypeName :: KernelObject -> String
 > kernelObjectTypeName o =
@@ -135,6 +149,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 >         KOTCB        _ -> "TCB"
 >         KOCTE        _ -> "CTE"
 >         KOArch       _ -> "Arch Specific"
+>         KOSchedContext _ -> "SchedContext"
 
 > objBitsKO :: KernelObject -> Int
 > objBitsKO (KOEndpoint _) = epSizeBits
@@ -145,6 +160,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 > objBitsKO (KOUserDataDevice) = pageBits
 > objBitsKO (KOKernelData) = pageBits
 > objBitsKO (KOArch a) = archObjSize a
+> objBitsKO (KOSchedContext _) = 4 -- FIXME LATER
 
 \subsubsection{Synchronous Endpoint}
 
@@ -172,6 +188,15 @@ list of pointers to waiting threads;
 >     deriving Show
 
 \end{itemize}
+
+\subsubsection{SchedContext Objects}
+
+> type Ticks = Word64
+
+> data SchedContext = SchedContext {
+>     scBudget :: Ticks,
+>     scRemaining :: Ticks,
+>     scTcb :: Maybe (PPtr TCB) }
 
 \subsubsection{Notification Objects}
 
@@ -255,10 +280,6 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbFault :: Maybe Fault,
 
-\item the amount of time remaining in this thread's timeslice;
-
->         tcbTimeSlice :: Int,
-
 \item a capability pointer to the fault handler endpoint, which receives an IPC from the kernel whenever this thread generates a fault;
 
 >         tcbFaultHandler :: CPtr,
@@ -271,9 +292,14 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbBoundNotification :: Maybe (PPtr Notification),
 
-\item and any arch-specific TCB contents
+\item any arch-specific TCB contents;
 
->         tcbArch :: ArchTCB }
+>         tcbArch :: ArchTCB,
+
+\item and the thread's schedule context object
+
+>         tcbSchedContext :: Maybe (PPtr SchedContext) }
+
 >     deriving Show
 
 \end{itemize}

@@ -94,22 +94,13 @@ where
      set_object ref (TCB (tcb \<lparr> tcb_bound_notification := ntfn \<rparr>))
    od"
 
-definition set_thread_state_ext :: "obj_ref \<Rightarrow> unit det_ext_monad" where
-  "set_thread_state_ext t \<equiv> do
-     inq \<leftarrow> gets $ in_release_queue t;
-     sched \<leftarrow> is_schedulable t inq;
-     cur \<leftarrow> gets cur_thread;
-     action \<leftarrow> gets scheduler_action;
-     when (\<not>sched \<and> cur = t \<and> action = resume_cur_thread) (set_scheduler_action choose_new_thread)
-   od"
-
 definition
   set_thread_state :: "obj_ref \<Rightarrow> thread_state \<Rightarrow> (unit,'z::state_ext) s_monad"
 where
   "set_thread_state ref ts \<equiv> do
      tcb \<leftarrow> gets_the $ get_tcb ref;
      set_object ref (TCB (tcb \<lparr> tcb_state := ts \<rparr>));
-     do_extended_op (set_thread_state_ext ref)
+     do_extended_op (schedule_tcb ref)
    od"
 
 definition
@@ -166,6 +157,8 @@ where
      set_object ptr (f ep)
    od"
 
+section {* Scheduling Contexts *}
+
 definition
   get_sched_context :: "obj_ref \<Rightarrow> (sched_context,'z::state_ext) s_monad"
 where
@@ -185,25 +178,28 @@ where
    od"
 
 
+section {* Reply Objects *}
 
-section {* Synchronous and Asyncronous Endpoints *}
-
+definition
+  get_reply :: "obj_ref \<Rightarrow> reply det_ext_monad"
+where
+  "get_reply ptr \<equiv> do
+     kobj \<leftarrow> get_object ptr;
+     (case kobj of Reply r \<Rightarrow> return r
+                 | _ \<Rightarrow> fail)
+   od"
+  
+definition
+  set_reply :: "obj_ref \<Rightarrow> reply \<Rightarrow> (unit,'z::state_ext) s_monad"
+where
+  "set_reply ptr r \<equiv> do
+     obj \<leftarrow> get_object ptr;
+     assert (case obj of Reply _ \<Rightarrow> True | _ \<Rightarrow> False);
+     set_object ptr (Reply r)
+   od"
 
 abbreviation
-  get_endpoint :: "obj_ref \<Rightarrow> (endpoint,'z::state_ext) s_monad" where
-  "get_endpoint \<equiv> get_simple_ko Endpoint"
-
-abbreviation
-  set_endpoint :: "obj_ref \<Rightarrow> endpoint \<Rightarrow> (unit,'z::state_ext) s_monad" where
-  "set_endpoint \<equiv> set_simple_ko Endpoint"
-
-abbreviation
-  get_notification :: "obj_ref \<Rightarrow> (notification,'z::state_ext) s_monad" where
-  "get_notification \<equiv> get_simple_ko Notification"
-
-abbreviation
-  set_notification :: "obj_ref \<Rightarrow> notification \<Rightarrow> (unit,'z::state_ext) s_monad" where
-  "set_notification \<equiv> set_simple_ko Notification"
+  "get_reply_caller r \<equiv> liftM reply_caller (get_reply r)"
 
 
 section {* IRQ State and Slot *}

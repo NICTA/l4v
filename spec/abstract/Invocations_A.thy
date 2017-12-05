@@ -39,7 +39,6 @@ datatype cnode_invocation =
   | RevokeCall cslot_ptr
   | DeleteCall cslot_ptr
   | RotateCall cap cap cslot_ptr cslot_ptr cslot_ptr
-  | SaveCall cslot_ptr
   | CancelBadgedSendsCall cap
 
 datatype untyped_invocation =
@@ -82,7 +81,7 @@ datatype invocation =
     InvokeUntyped untyped_invocation
   | InvokeEndpoint obj_ref machine_word bool
   | InvokeNotification obj_ref machine_word
-  | InvokeReply obj_ref cslot_ptr
+  | InvokeReply obj_ref
   | InvokeTCB tcb_invocation
   | InvokeDomain obj_ref word8
   | InvokeSchedContext sched_context_invocation

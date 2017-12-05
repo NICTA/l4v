@@ -117,7 +117,6 @@ derive_cap :: "cslot_ptr \<Rightarrow> cap \<Rightarrow> (cap,'z::state_ext) se_
     ArchObjectCap c \<Rightarrow> liftME ArchObjectCap $ arch_derive_cap c
     | UntypedCap dev ptr sz f \<Rightarrow> doE ensure_no_children slot; returnOk cap odE
     | Zombie ptr n sz \<Rightarrow> returnOk NullCap
-    | ReplyCap ptr m \<Rightarrow> returnOk NullCap
     | IRQControlCap \<Rightarrow> returnOk NullCap
     | _ \<Rightarrow> returnOk cap"
 
@@ -429,7 +428,7 @@ definition
 
 text {* Actions to be taken after deleting an IRQ Handler capability. *}
 definition
-  deleting_irq_handler :: "irq \<Rightarrow> (unit,'z::state_ext) s_monad"
+  deleting_irq_handler :: "irq \<Rightarrow> unit det_ext_monad"
 where
  "deleting_irq_handler irq \<equiv> do
     slot \<leftarrow> get_irq_slot irq;
@@ -450,7 +449,8 @@ fun
 where
   "finalise_cap NullCap                  final = return (NullCap, NullCap)"
 | "finalise_cap (UntypedCap dev r bits f)    final = return (NullCap, NullCap)"
-| "finalise_cap (ReplyCap r m)           final = return (NullCap, NullCap)"
+| "finalise_cap (ReplyCap r)             final =
+      (liftM (K (NullCap, NullCap)) $ when final $ reply_remove r)"
 | "finalise_cap (EndpointCap r b R)      final =
       (liftM (K (NullCap, NullCap)) $ when final $ cancel_all_ipc r)"
 | "finalise_cap (NotificationCap r b R) final =
@@ -472,6 +472,7 @@ where
 | "finalise_cap (SchedContextCap sc)     final =
       do
          when final $ sched_context_unbind_all_tcbs sc;
+         when final $ sched_context_clear_replies sc;
          return (NullCap, NullCap)
       od"
 | "finalise_cap SchedControlCap          final = return (NullCap, NullCap)"
@@ -490,9 +491,10 @@ where
 definition
   can_fast_finalise :: "cap \<Rightarrow> bool" where
  "can_fast_finalise cap \<equiv> case cap of
-    ReplyCap r m \<Rightarrow> True
+    ReplyCap r \<Rightarrow> True
   | EndpointCap r b R \<Rightarrow> True
   | NotificationCap r b R \<Rightarrow> True
+  | SchedContextCap _ \<Rightarrow> True
   | NullCap \<Rightarrow> True
   | _ \<Rightarrow> False"
 
@@ -501,14 +503,15 @@ long-running operation is impossible. It is equivalent to calling the regular
 finalisation operation. It cannot be defined in that way as doing so
 would create a circular definition. *}
 
-
 lemma fast_finalise_def2:
   "fast_finalise cap final = do
      assert (can_fast_finalise cap);
      result \<leftarrow> finalise_cap cap final;
      assert (result = (NullCap, NullCap))
    od"
-  by (cases cap, simp_all add: liftM_def K_def assert_def can_fast_finalise_def)
+  by (cases cap; simp add: liftM_def K_def assert_def
+                           whenE_def when_def bind_assoc
+                           can_fast_finalise_def)
 
 text {* The finalisation process on a Zombie or Null capability is finished for
 all Null capabilities and for Zombies that cover no slots or only the slot they
@@ -519,6 +522,7 @@ where
   "cap_removeable NullCap slot = True"
 | "cap_removeable (Zombie slot' bits n) slot =
     ((n = 0) \<or> (n = 1 \<and> (slot', replicate (zombie_cte_bits bits) False) = slot))"
+| "cap_removeable _ _ = False"
 
 text {* Checks for Zombie capabilities that refer to the CNode or TCB they are
 stored in. *}
@@ -530,7 +534,7 @@ definition
 
 text {* The complete recursive delete operation. *}
 function (sequential)
-  rec_del :: "rec_del_call \<Rightarrow> (bool * cap,'z::state_ext) p_monad"
+  rec_del :: "rec_del_call \<Rightarrow> (bool * cap,det_ext) p_monad"
 where
   "rec_del (CTEDeleteCall slot exposed) s =
  (doE
@@ -604,12 +608,12 @@ where
 
 text {* Delete a capability by calling the recursive delete operation. *}
 definition
-  cap_delete :: "cslot_ptr \<Rightarrow> (unit,'z::state_ext) p_monad" where
+  cap_delete :: "cslot_ptr \<Rightarrow> (unit, det_ext) p_monad" where
  "cap_delete slot \<equiv> doE rec_del (CTEDeleteCall slot True); returnOk () odE"
 
 text {* Prepare the capability in a slot for deletion but do not delete it. *}
 definition
-  finalise_slot :: "cslot_ptr \<Rightarrow> bool \<Rightarrow> (bool * cap,'z::state_ext) p_monad"
+  finalise_slot :: "cslot_ptr \<Rightarrow> bool \<Rightarrow> (bool * cap,det_ext) p_monad"
 where
   "finalise_slot p e \<equiv> rec_del (FinaliseSlotCall p e)"
 
@@ -638,7 +642,7 @@ where
 text {* Revoke the derived capabilities of a given capability, deleting them
 all. *}
 
-function cap_revoke :: "cslot_ptr \<Rightarrow> (unit,'z::state_ext) p_monad"
+function cap_revoke :: "cslot_ptr \<Rightarrow> (unit, det_ext) p_monad"
 where
 "cap_revoke slot s = (doE
     cap \<leftarrow> without_preemption $ get_cap slot;
@@ -673,7 +677,6 @@ definition
   | SchedControlCap \<Rightarrow> False
   | IRQControlCap \<Rightarrow> False
   | IRQHandlerCap _ \<Rightarrow> False
-  | ReplyCap _ _ \<Rightarrow> False
   | ArchObjectCap c \<Rightarrow> arch_is_physical c
   | _ \<Rightarrow> True"
 
@@ -692,7 +695,7 @@ where
     (is_ntfn_cap c' \<and> obj_ref_of c' = r)"
 | "same_region_as (CNodeCap r bits g) c' =
     (is_cnode_cap c' \<and> obj_ref_of c' = r \<and> bits_of c' = bits)"
-| "same_region_as (ReplyCap n m) c' = (\<exists>m'. c' = ReplyCap n m')"
+| "same_region_as (ReplyCap n) c' = (c' = ReplyCap n)"
 | "same_region_as (ThreadCap r) c' =
     (is_thread_cap c' \<and> obj_ref_of c' = r)"
 | "same_region_as (SchedContextCap sc) c' =
@@ -829,8 +832,6 @@ where
  "tcb_registers_caps_merge regtcb captcb \<equiv>
   regtcb \<lparr> tcb_ctable := tcb_ctable captcb,
            tcb_vtable := tcb_vtable captcb,
-           tcb_reply := tcb_reply captcb,
-           tcb_caller := tcb_caller captcb,
            tcb_ipcframe := tcb_ipcframe captcb \<rparr>"
 
 section {* Invoking CNode capabilities *}
@@ -845,7 +846,7 @@ with Save.  The Revoke, Delete and Recycle methods may also be
 invoked on the capabilities stored in the CNode. *}
 
 definition
-  invoke_cnode :: "cnode_invocation \<Rightarrow> (unit,'z::state_ext) p_monad" where
+  invoke_cnode :: "cnode_invocation \<Rightarrow> (unit, det_ext) p_monad" where
   "invoke_cnode i \<equiv> case i of
     RevokeCall dest_slot \<Rightarrow> cap_revoke dest_slot
   | DeleteCall dest_slot \<Rightarrow> cap_delete dest_slot
@@ -859,15 +860,7 @@ definition
          cap_swap cap1 slot1 cap2 slot2
        else
          do cap_move cap2 slot2 slot3; cap_move cap1 slot1 slot2 od
-  | SaveCall slot \<Rightarrow> without_preemption $ do
-    thread \<leftarrow> gets cur_thread;
-    src_slot \<leftarrow> return (thread, tcb_cnode_index 3);
-    cap \<leftarrow> get_cap src_slot;
-    (case cap of
-          NullCap \<Rightarrow> return ()
-        | ReplyCap _ False \<Rightarrow> cap_move cap src_slot slot
-        | _ \<Rightarrow> fail) od
-  | CancelBadgedSendsCall (EndpointCap ep b R) \<Rightarrow>
+  | CancelBadgedSendsCall (EndpointCap ep b R) \<Rightarrow> 
     without_preemption $ when (b \<noteq> 0) $ cancel_badged_sends ep b
   | CancelBadgedSendsCall _ \<Rightarrow> fail"
 

@@ -387,7 +387,7 @@ This module uses the C preprocessor to select a target architecture.
 >     schedContextResume scPtr
 >     inq <- inReleaseQueue tcbPtr
 >     sched <- isSchedulable tcbPtr inq
->     when sched $ switchIfRequiredTo tcbPtr
+>     when sched $ possibleSwitchTo tcbPtr
 
 > schedContextUnbindTCB :: PPtr SchedContext -> Kernel ()
 > schedContextUnbindTCB scPtr = do
@@ -450,7 +450,7 @@ This module uses the C preprocessor to select a target architecture.
 >             ctPtr <- getCurThread
 >             threadSet (\tcb -> tcb { tcbYieldTo = Just scPtr }) ctPtr
 >             setSchedContext scPtr (sc { scYieldFrom = Just ctPtr })
->             attemptSwitchTo $ fromJust $ scTCB sc
+>             possibleSwitchTo $ fromJust $ scTCB sc
 >         else setConsumed scPtr (PPtr (head buffer))
 
 > setConsumed :: PPtr SchedContext -> PPtr Word -> Kernel ()
@@ -505,7 +505,7 @@ This module uses the C preprocessor to select a target architecture.
 >                 ctPtr <- getCurThread
 >                 if (tptr == ctPtr)
 >                     then rescheduleRequired
->                     else when runnable $ switchIfRequiredTo tptr
+>                     else when runnable $ possibleSwitchTo tptr
 
 > isCurDomainExpired :: Kernel Bool
 > isCurDomainExpired = do

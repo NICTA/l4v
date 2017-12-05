@@ -1033,9 +1033,6 @@ NB: the argument order is different from the abstract spec.
 >         setNextInterrupt
 >         setReprogramTimer False
 
-> attemptSwitchTo :: PPtr TCB -> Kernel ()
-> attemptSwitchTo target = possibleSwitchTo target True
-
 > takeWhileM :: Monad m => (a -> m Bool) -> [a] -> m [a]
 > takeWhileM _ [] = return []
 > takeWhileM p (x:xs) = do
@@ -1060,7 +1057,7 @@ NB: the argument order is different from the abstract spec.
 >             assert (not roundRobin) "awaken: round robin threads should not be in the release queue"
 >             sufficient <- refillSufficient awakenedSCPtr 0
 >             assert sufficient "threads HEAD refill should always be > MIN_BUDGET"
->             switchIfRequiredTo awakened
+>             possibleSwitchTo awakened
 >             setReprogramTimer True
 >             awaken
 

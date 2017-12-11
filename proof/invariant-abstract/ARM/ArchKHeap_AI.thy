@@ -876,5 +876,9 @@ lemma valid_arch_tcb_same_type:
    \<Longrightarrow> valid_arch_tcb t (s\<lparr>kheap := kheap s(p \<mapsto> k)\<rparr>)"
   by (auto simp: valid_arch_tcb_def obj_at_def)
 
+lemma set_tcb_obj_ref_asid_map[wp]:
+  "\<lbrace>valid_asid_map\<rbrace> set_tcb_obj_ref f t ko \<lbrace>\<lambda>_. valid_asid_map\<rbrace>"
+  by (wpsimp wp: set_object_asid_map simp: set_tcb_obj_ref_def vs_refs_def)
+
 end
 end

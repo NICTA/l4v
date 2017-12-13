@@ -411,22 +411,12 @@ This module uses the C preprocessor to select a target architecture.
 >         threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) from
 >         cur <- getCurThread
 >         action <- getSchedulerAction
->         if (from == cur)
->             then rescheduleRequired
->             else
->                 case action of
->                     ResumeCurrentThread -> do
->                         runnable <- isRunnable from
->                         when runnable $ tcbSchedDequeue from
->                     SwitchToThread candidate ->
->                         if (candidate == from)
->                             then rescheduleRequired
->                             else do
->                                 runnable <- isRunnable from
->                                 when runnable $ tcbSchedDequeue from
->                     ChooseNewThread -> do
->                         runnable <- isRunnable from
->                         when runnable $ tcbSchedDequeue from
+>         case action of
+>             SwitchToThread candidate | candidate == from -> rescheduleRequired
+>             _ | from == cur -> rescheduleRequired
+>             _ -> do
+>                 runnable <- isRunnable from
+>                 when runnable $ tcbSchedDequeue from
 >     setSchedContext scPtr (sc { scTCB = Just tcbPtr })
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
 

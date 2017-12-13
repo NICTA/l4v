@@ -106,7 +106,9 @@ When the last capability to an endpoint is deleted, any IPC operations currently
 >     return (NullCap, NullCap)
 
 > finaliseCap (ReplyCap { capReplyPtr = ptr }) final _ = do
->     when final $ replyRemove ptr
+>     when final $ do
+>         tptrOpt <- getReplyTCB ptr
+>         when (tptrOpt /= Nothing) $ replyClear ptr
 >     return (NullCap, NullCap)
 
 No action need be taken for Null or Domain capabilities.
@@ -134,8 +136,6 @@ Threads are treated as special capability nodes; they also become zombies when t
 >         sc <- getSchedContext scPtr
 >         schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
 >         schedContextUnbindTCB scPtr
->     when (tcbReply tcb /= Nothing) $ do
->         replyRemove (fromJust $ tcbReply tcb)
 >     suspend tptr
 >     Arch.prepareThreadDelete tptr
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)

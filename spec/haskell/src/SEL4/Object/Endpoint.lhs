@@ -21,10 +21,12 @@ This module specifies the contents and behaviour of a synchronous IPC endpoint.
 % {-# BOOT-IMPORTS: SEL4.Machine SEL4.Model SEL4.Object.Structures #-}
 % {-# BOOT-EXPORTS: cancelIPC #-}
 
+> import SEL4.API.Failures
 > import SEL4.API.Types
 > import SEL4.Machine
 > import SEL4.Model
-> import SEL4.Object.Reply(replyPush, replyRemove)
+> import SEL4.Object.Reply(getReplyTCB, replyClear, replyPush, replyRemove, replyUnlink,
+>                          replyRemoveTCB, setReplyTCB)
 > import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Object.Instances()
@@ -87,17 +89,20 @@ If the endpoint is receiving, then a thread is removed from its queue, and an IP
 >                 assert (isReceive recvState)
 >                        "TCB in receive endpoint queue must be blocked on send"
 >                 doIPCTransfer thread (Just epptr) badge canGrant dest
->                 scOpt <- threadGet tcbSchedContext dest
+>                 scOptDest <- threadGet tcbSchedContext dest
+>                 scOptSrc <- threadGet tcbSchedContext thread
 >                 fault <- threadGet tcbFault thread
 >                 let replyOpt = replyObject recvState
+>                 case replyOpt of
+>                     Just reply -> replyUnlink reply
+>                     _ -> return ()
 >                 case (call, fault, canGrant, replyOpt) of
 >                     (False, Nothing, _, _) -> do
->                         when (canDonate && scOpt == Nothing) $
->                             schedContextDonate (fromJust scOpt) dest
+>                         when (canDonate && scOptDest == Nothing) $
+>                             schedContextDonate (fromJust scOptSrc) dest
 >                     (_, _, True, Just reply) -> do
 >                         replyPush thread dest reply canDonate
->                         setThreadState BlockedOnReply thread
->                     _ -> setThreadState Inactive thread
+>                     _ -> return ()
 
 The receiving thread has now completed its blocking operation and can run. If the receiving thread has higher priority than the current thread, the scheduler is instructed to switch to it immediately.
 
@@ -122,6 +127,15 @@ The IPC receive operation is essentially the same as the send operation, but wit
 >             ReplyCap r -> return (Just r)
 >             NullCap -> return Nothing
 >             _ -> fail "receiveIPC: replyCap must be ReplyCap or NullCap")
+>         when (replyOpt /= Nothing) $ do
+>             let rptr = fromJust replyOpt
+>             tptrOpt <- getReplyTCB rptr
+>             when (tptrOpt /= Nothing && tptrOpt /= Just thread) $ do
+
+fail or throw or something else?
+
+>                 fail "receiveIPC: reply object already has unexecuted reply!"
+>                 replyClear rptr
 >         let epptr = capEPPtr cap
 >         ep <- getEndpoint epptr
 >         -- check if anything is waiting on bound ntfn
@@ -134,12 +148,16 @@ The IPC receive operation is essentially the same as the send operation, but wit
 >               True -> do
 >                   setThreadState (BlockedOnReceive {
 >                       blockingObject = epptr, replyObject = replyOpt }) thread
+>                   when (replyOpt /= Nothing) $
+>                       setReplyTCB (Just thread) $ fromJust replyOpt
 >                   setEndpoint epptr $ RecvEP [thread]
 >               False -> doNBRecvFailedTransfer thread
 >             RecvEP queue -> case isBlocking of
 >               True -> do
 >                   setThreadState (BlockedOnReceive {
 >                       blockingObject = epptr, replyObject = replyOpt }) thread
+>                   when (replyOpt /= Nothing) $
+>                       setReplyTCB (Just thread) $ fromJust replyOpt
 >                   qs' <- tcbEPAppend thread queue
 >                   setEndpoint epptr $ RecvEP $ qs'
 >               False -> doNBRecvFailedTransfer thread
@@ -162,7 +180,6 @@ The IPC receive operation is essentially the same as the send operation, but wit
 >                     (_, _, True, Just reply) -> do
 >                         senderSc <- threadGet tcbSchedContext sender
 >                         replyPush sender thread reply (senderSc /= Nothing)
->                         setThreadState BlockedOnReply sender
 >                     _ -> setThreadState Inactive sender
 >             SendEP [] -> fail "Send endpoint queue must not be empty"
 
@@ -209,10 +226,7 @@ If the thread is blocking on an endpoint, then the endpoint is fetched and the t
 
 >             replyIPCCancel = do
 >                 threadSet (\tcb -> tcb {tcbFault = Nothing}) tptr
->                 replyOpt <- threadGet tcbReply tptr
->                 case replyOpt of
->                     Nothing -> return ()
->                     Just reply -> replyRemove reply
+>                 replyRemoveTCB tptr
 >             blockedIPCCancel state replyOpt = do
 >                 epptr <- getBlockingObject state
 >                 ep <- getEndpoint epptr
@@ -225,7 +239,7 @@ If the thread is blocking on an endpoint, then the endpoint is fetched and the t
 >                 setEndpoint epptr ep'
 >                 case replyOpt of
 >                     Nothing -> return ()
->                     Just reply -> replyRemove reply
+>                     Just reply -> replyUnlink reply
 
 Finally, replace the IPC block with a fault block (which will retry the operation if the thread is resumed).
 
@@ -245,14 +259,10 @@ If an endpoint is deleted, then every pending IPC operation using it must be can
 >             _ -> do
 >                 setEndpoint epptr IdleEP
 >                 forM_ (epQueue ep) (\t -> do
->                     setThreadState Restart t
 >                     state <- getThreadState t
->                     case state of
->                         BlockedOnReceive _ replyOpt ->
->                             case replyOpt of
->                                 Nothing -> return ()
->                                 Just reply -> replyRemove reply
->                         _ -> return ()
+>                     when (isReceive state || isReply state) $
+>                         replyUnlink $ fromJust $ replyObject state
+>                     setThreadState Restart t
 >                     possibleSwitchTo t)
 >                 rescheduleRequired
 

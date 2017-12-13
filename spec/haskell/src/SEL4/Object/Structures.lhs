@@ -215,7 +215,7 @@ list of pointers to waiting threads;
 >     scReply :: Maybe (PPtr Reply) }
 
 > data Reply = Reply {
->     replyCaller :: Maybe (PPtr TCB),
+>     replyTCB :: Maybe (PPtr TCB),
 >     replyPrev :: Maybe (PPtr Reply),
 >     replyNext :: Maybe (PPtr Reply),
 >     replySc :: Maybe (PPtr SchedContext) }
@@ -316,8 +316,6 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbYieldTo :: Maybe (PPtr SchedContext),
 
->         tcbReply :: Maybe (PPtr Reply),
-
 \item any arch-specific TCB contents;
 
 >         tcbArch :: ArchTCB }
@@ -403,7 +401,8 @@ A user thread may be in the following states:
 
 \item blocked waiting for a reply to a previously sent message;
 
->     | BlockedOnReply
+>     | BlockedOnReply {
+>         replyObject :: Maybe (PPtr Reply) }
 
 \item blocked on an notification;
 
@@ -490,7 +489,7 @@ Each entry in the domain schedule specifies a domain and a length (a number of t
 > isSend _ = False
 
 > isReply :: ThreadState -> Bool
-> isReply BlockedOnReply = True
+> isReply (BlockedOnReply _) = True
 > isReply _ = False
 
 \subsubsection{User Data}

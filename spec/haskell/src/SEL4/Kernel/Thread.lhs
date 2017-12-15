@@ -441,8 +441,9 @@ Note also that the level 2 bitmap array is stored in reverse in order to get bet
 >             prio <- getHighestPrio curdom
 >             queue <- getQueue curdom prio
 >             let thread = head queue
->             runnable <- isRunnable thread
->             assert runnable "Scheduled a non-runnable thread"
+>             inReleaseQ <- inReleaseQueue thread
+>             schedulable <- isSchedulable thread inReleaseQ
+>             assert schedulable "Scheduled a non-runnable thread"
 >             switchToThread thread
 >         else
 >             switchToIdleThread
@@ -482,8 +483,9 @@ The following function is used to alter a thread's domain.
 >         curThread <- getCurThread
 >         tcbSchedDequeue tptr
 >         threadSet (\t -> t { tcbDomain = newdom }) tptr
->         runnable <- isRunnable tptr
->         when runnable $ tcbSchedEnqueue tptr
+>         inReleaseQ <- inReleaseQueue tptr
+>         schedulable <- isSchedulable tptr inReleaseQ
+>         when schedulable $ tcbSchedEnqueue tptr
 >         when (tptr == curThread) $ rescheduleRequired
 
 \subsubsection{Changing a thread's MCP}

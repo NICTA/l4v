@@ -537,8 +537,8 @@ The following two functions returns the base and size of the object a capability
 >     = 1 `shiftL` objBits (undefined::Notification)
 > capUntypedSize (ThreadCap {})
 >     = 1 `shiftL` objBits (undefined::TCB)
-> capUntypedSize (SchedContextCap {})
->     = 1 `shiftL` objBits (undefined::SchedContext)
+> capUntypedSize (SchedContextCap { capSCSize = b })
+>     = 1 `shiftL` b
 > capUntypedSize SchedControlCap = 1 -- error in haskell
 > capUntypedSize (DomainCap {})
 >     = 1 -- error in haskell

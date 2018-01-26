@@ -1555,8 +1555,17 @@ crunch vmdb[wp]: do_ipc_transfer "valid_mdb :: 'state_ext state \<Rightarrow> bo
 crunch ifunsafe[wp]: do_ipc_transfer "if_unsafe_then_cap :: 'state_ext state \<Rightarrow> bool"
   (wp: crunch_wps hoare_vcg_const_Ball_lift simp: zipWithM_x_mapM ignore: transfer_caps_loop)
 
+lemma make_fault_msg_iflive[wp]:
+  "\<lbrace>if_live_then_nonz_cap\<rbrace> make_fault_msg param_a param_b \<lbrace>\<lambda>_. if_live_then_nonz_cap\<rbrace>"
+  sorry
+
 crunch iflive[wp]: do_ipc_transfer "if_live_then_nonz_cap :: 'state_ext state \<Rightarrow> bool"
-  (wp: crunch_wps simp: zipWithM_x_mapM ignore: transfer_caps_loop set_object)
+  (wp: crunch_wps simp: zipWithM_x_mapM gets_the_wp rule: sched_context_update_consumed_if_live
+   ignore: transfer_caps_loop set_object sched_context_update_consumed)
+
+lemma make_fault_msg_state_refs_of[wp]:
+  "\<lbrace>\<lambda>s. P (state_refs_of s)\<rbrace> make_fault_msg param_a param_b \<lbrace>\<lambda>_ s. P (state_refs_of s)\<rbrace>"
+  sorry
 
 crunch state_refs_of[wp]: do_ipc_transfer "\<lambda>s::'state_ext state. P (state_refs_of s)"
   (wp: crunch_wps simp: zipWithM_x_mapM ignore: transfer_caps_loop set_object)
@@ -1725,9 +1734,13 @@ lemmas set_mrs_cap_refs_respects_device_region[wp]
 
 context Ipc_AI begin
 
+lemma make_fault_msg_cap_refs_in_kernel_window[wp]:
+  "\<lbrace>cap_refs_in_kernel_window\<rbrace> make_fault_msg param_a param_b \<lbrace>\<lambda>_ .cap_refs_in_kernel_window\<rbrace>"
+  sorry
+
 crunch cap_refs_in_kernel_window[wp]: do_ipc_transfer "cap_refs_in_kernel_window :: 'state_ext state \<Rightarrow> bool"
   (wp: crunch_wps hoare_vcg_const_Ball_lift ball_tcb_cap_casesI
-     simp: zipWithM_x_mapM crunch_simps ball_conj_distrib )
+     simp: zipWithM_x_mapM crunch_simps ball_conj_distrib ignore: update_sched_context)
 
 crunch valid_objs[wp]: do_ipc_transfer "valid_objs :: 'state_ext state \<Rightarrow> bool"
   (wp: hoare_vcg_const_Ball_lift simp:ball_conj_distrib )
@@ -2673,6 +2686,18 @@ lemma receive_ipc_cap_to[wp]:
   "\<lbrace>ex_nonz_cap_to p\<rbrace> receive_ipc param_a param_b param_c param_d  \<lbrace>\<lambda>_. ex_nonz_cap_to p\<rbrace>"
   sorry
 end
+
+lemma maybe_return_sc_cap_to[wp]:
+  "\<lbrace>ex_nonz_cap_to p\<rbrace> maybe_return_sc param_a param_b \<lbrace>\<lambda>_. ex_nonz_cap_to p\<rbrace>"
+  sorry
+
+lemma schedule_tcb_cap_to[wp]:
+  "\<lbrace>ex_nonz_cap_to p\<rbrace> schedule_tcb param_a \<lbrace>\<lambda>_. ex_nonz_cap_to p\<rbrace>"
+  sorry
+
+lemma receive_ipc_cap_to[wp]:
+  "\<lbrace>ex_nonz_cap_to p\<rbrace> receive_ipc param_a param_b param_c param_d  \<lbrace>\<lambda>_. ex_nonz_cap_to p\<rbrace>"
+  sorry
 
 crunch cap_to[wp]: receive_signal "ex_nonz_cap_to p:: det_ext state \<Rightarrow> bool"
   (wp: crunch_wps maybeM_inv ignore: set_object set_tcb_obj_ref)

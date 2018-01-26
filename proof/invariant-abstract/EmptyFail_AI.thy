@@ -23,6 +23,9 @@ lemmas [wp] = empty_fail_bind empty_fail_bindE empty_fail_get empty_fail_modify
               ef_ignore_failure ef_machine_op_lift
 lemmas empty_fail_error_bits[simp]
 
+lemma maybeM_empty_fail[wp]: "\<forall>x. empty_fail (f x) \<Longrightarrow> empty_fail (maybeM f t)"
+  by (wpsimp simp: maybeM_def)
+
 lemma sequence_empty_fail[wp]:
   "(\<And>m. m \<in> set ms \<Longrightarrow> empty_fail m) \<Longrightarrow> empty_fail (sequence ms)"
   apply (induct ms)

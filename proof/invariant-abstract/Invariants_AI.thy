@@ -557,7 +557,9 @@ where
      \<and> valid_bound_tcb (sc_tcb sc) s
      \<and> valid_bound_tcb (sc_yield_from sc) s
      \<and> list_all (\<lambda>r. reply_at r s) (sc_replies sc)
-     \<and> valid_sched_context_size n"
+     \<and> valid_sched_context_size n
+     \<and> length (sc_refills sc) \<ge> 1
+     (* \<and> length (sc_replies sc) \<le> sc_refill_max sc *)"
 
 definition
   valid_reply :: "reply \<Rightarrow> 'z::state_ext state \<Rightarrow> bool"
@@ -2487,7 +2489,7 @@ lemma valid_sc_typ:
   apply (case_tac "sc_yield_from sc";
          simp add: wp_post_taut t[simplified tcb_at_typ[symmetric]])
   apply (rule hoare_vcg_conj_lift)
-  apply (auto simp: valid_sc_typ_list_all_reply r s)
+   apply (auto simp: valid_sc_typ_list_all_reply r s, wpsimp)
   done
 
 lemma valid_reply_typ:

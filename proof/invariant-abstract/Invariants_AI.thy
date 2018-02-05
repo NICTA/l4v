@@ -2938,6 +2938,30 @@ interpretation irq_node_update_arch:
 
 sublocale Arch \<subseteq> irq_node_update_arch: Arch_p_arch_update_eq "interrupt_irq_node_update f" ..
 
+interpretation consumed_time_update_arch:
+  p_arch_update_eq "consumed_time_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> consumed_time_update_arch: Arch_p_arch_update_eq "consumed_time_update f" ..
+
+interpretation cur_time_update_arch:
+  p_arch_update_eq "cur_time_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> cur_time_update_arch: Arch_p_arch_update_eq "cur_time_update f" ..
+
+interpretation cur_sc_update_arch:
+  p_arch_update_eq "cur_sc_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> cur_sc_update_arch: Arch_p_arch_update_eq "cur_sc_update f" ..
+
+interpretation reprogram_timer_update_arch:
+  p_arch_update_eq "reprogram_timer_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> reprogram_timer_update_arch: Arch_p_arch_update_eq "reprogram_timer_update f" ..
+
 lemma obj_ref_in_untyped_range:
   "\<lbrakk> is_untyped_cap c; cap_aligned c \<rbrakk> \<Longrightarrow> obj_ref_of c \<in> untyped_range c"
   apply (clarsimp simp: is_cap_simps cap_aligned_def)

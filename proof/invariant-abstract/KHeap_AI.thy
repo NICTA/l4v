@@ -1678,22 +1678,33 @@ lemma update_sched_context_respect_device_region [wp]:
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def a_type_def
                wp: set_object_pspace_respects_device_region)
 
-lemma update_sched_context_iflive [wp]:
+lemma update_sched_context_iflive:
   "\<lbrace>\<lambda>s. valid_objs s \<and> if_live_then_nonz_cap s \<and>
         (live (SchedContext val n) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
      update_sched_context ptr val \<lbrace>\<lambda>rv. if_live_then_nonz_cap\<rbrace>"
   by (wpsimp simp: update_sched_context_def get_object_def live_def obj_at_def is_sc_obj_def
                    valid_sched_context_size_objsI)
 
+lemma update_sched_context_iflive':
+  "\<lbrace>\<lambda>s. if_live_then_nonz_cap s \<and> sc_at ptr s \<and>
+        ((bound (sc_tcb sc) \<or> bound (sc_yield_from sc) \<or> bound (sc_ntfn sc)
+                                \<or> (sc_replies sc \<noteq> [])) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
+     update_sched_context ptr sc \<lbrace>\<lambda>rv. if_live_then_nonz_cap\<rbrace>"
+  by (wpsimp simp: update_sched_context_def get_object_def live_def obj_at_def is_sc_obj_def)
+
 lemma update_sched_context_ifunsafe [wp]:
-  "\<lbrace>valid_objs and if_unsafe_then_cap\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>rv. if_unsafe_then_cap\<rbrace>"
+  "\<lbrace>if_unsafe_then_cap\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>rv. if_unsafe_then_cap\<rbrace>"
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def is_sc_obj_def
                    valid_sched_context_size_objsI)
 
-lemma update_sched_context_zombies [wp]:
+lemma update_sched_context_zombies':
   "\<lbrace>valid_objs and zombies_final\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>rv. zombies_final\<rbrace>"
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def is_sc_obj_def
                    valid_sched_context_size_objsI)
+
+lemma update_sched_context_zombies[wp]:
+  "\<lbrace>zombies_final\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>rv. zombies_final\<rbrace>"
+  by (wpsimp simp: update_sched_context_def get_object_def obj_at_def)
 
 lemma update_sched_context_tcb [wp]:
   "\<lbrace> tcb_at t \<rbrace>

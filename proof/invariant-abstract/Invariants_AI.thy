@@ -2708,8 +2708,7 @@ lemma valid_mdb_def2:
                     untyped_mdb (cdt s) (caps_of_state s) \<and> descendants_inc (cdt s) (caps_of_state s) \<and>
                     no_mloop (cdt s) \<and> untyped_inc (cdt s) (caps_of_state s) \<and>
                     ut_revocable (is_original_cap s) (caps_of_state s) \<and>
-                    irq_revocable (is_original_cap s) (caps_of_state s)(* \<and>
-                    reply_mdb (cdt s) (caps_of_state s)*))"
+                    irq_revocable (is_original_cap s) (caps_of_state s))"
   by (auto simp add: valid_mdb_def swp_cte_at_caps_of)
 
 lemma cte_wp_valid_cap:
@@ -2922,6 +2921,30 @@ interpretation interrupt_update:
 
 sublocale Arch \<subseteq> interrupt_update: Arch_p_arch_idle_update_eq "interrupt_states_update f" ..
 
+interpretation consumed_time_update_arch:
+  p_arch_idle_update_int_eq "consumed_time_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> consumed_time_update_arch: Arch_p_arch_idle_update_int_eq "consumed_time_update f" ..
+
+interpretation cur_time_update_arch:
+  p_arch_idle_update_int_eq "cur_time_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> cur_time_update_arch: Arch_p_arch_idle_update_int_eq "cur_time_update f" ..
+
+interpretation cur_sc_update_arch:
+  p_arch_idle_update_int_eq "cur_sc_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> cur_sc_update_arch: Arch_p_arch_idle_update_int_eq "cur_sc_update f" ..
+
+interpretation reprogram_timer_update_arch:
+  p_arch_idle_update_int_eq "reprogram_timer_update f"
+  by unfold_locales auto
+
+sublocale Arch \<subseteq> reprogram_timer_update_arch: Arch_p_arch_idle_update_int_eq "reprogram_timer_update f" ..
+
 interpretation irq_node_update:
   pspace_int_update_eq "interrupt_irq_node_update f"
   by unfold_locales auto
@@ -2939,30 +2962,6 @@ interpretation irq_node_update_arch:
   by unfold_locales auto
 
 sublocale Arch \<subseteq> irq_node_update_arch: Arch_p_arch_update_eq "interrupt_irq_node_update f" ..
-
-interpretation consumed_time_update_arch:
-  p_arch_update_eq "consumed_time_update f"
-  by unfold_locales auto
-
-sublocale Arch \<subseteq> consumed_time_update_arch: Arch_p_arch_update_eq "consumed_time_update f" ..
-
-interpretation cur_time_update_arch:
-  p_arch_update_eq "cur_time_update f"
-  by unfold_locales auto
-
-sublocale Arch \<subseteq> cur_time_update_arch: Arch_p_arch_update_eq "cur_time_update f" ..
-
-interpretation cur_sc_update_arch:
-  p_arch_update_eq "cur_sc_update f"
-  by unfold_locales auto
-
-sublocale Arch \<subseteq> cur_sc_update_arch: Arch_p_arch_update_eq "cur_sc_update f" ..
-
-interpretation reprogram_timer_update_arch:
-  p_arch_update_eq "reprogram_timer_update f"
-  by unfold_locales auto
-
-sublocale Arch \<subseteq> reprogram_timer_update_arch: Arch_p_arch_update_eq "reprogram_timer_update f" ..
 
 lemma obj_ref_in_untyped_range:
   "\<lbrakk> is_untyped_cap c; cap_aligned c \<rbrakk> \<Longrightarrow> obj_ref_of c \<in> untyped_range c"
@@ -2985,6 +2984,22 @@ lemma valid_mdb_more_update [iff]:
 lemma valid_mdb_machine [iff]:
   "valid_mdb (machine_state_update f s) = valid_mdb s"
   by (auto elim: valid_mdb_eqI)
+
+lemma valid_mdb_consumed_time_update [iff]:
+  "valid_mdb (consumed_time_update f s) = valid_mdb s"
+  by (simp add: valid_mdb_def swp_def)
+
+lemma valid_mdb_cur_time_update [iff]:
+  "valid_mdb (cur_time_update f s) = valid_mdb s"
+  by (simp add: valid_mdb_def swp_def)
+
+lemma valid_mdb_cur_sc_update [iff]:
+  "valid_mdb (cur_sc_update f s) = valid_mdb s"
+  by (simp add: valid_mdb_def swp_def)
+
+lemma valid_mdb_reprogram_timer_update [iff]:
+  "valid_mdb (reprogram_timer_update f s) = valid_mdb s"
+  by (simp add: valid_mdb_def swp_def)
 
 lemma valid_refs_cte:
   assumes "\<And>P p. cte_wp_at P p s = cte_wp_at P p s'"
@@ -3244,6 +3259,22 @@ lemma zombies_final_more_update [iff]:
   "zombies_final (trans_state f s) = zombies_final s"
   by (simp add: zombies_final_def is_final_cap'_def)
 
+lemma zombies_final_consumed_time_update[simp]:
+  "zombies_final (consumed_time_update f s) = zombies_final s"
+  by (fastforce elim!: zombies_final_pspaceI)
+
+lemma zombies_final_cur_time_update[simp]:
+  "zombies_final (cur_time_update f s) = zombies_final s"
+  by (fastforce elim!: zombies_final_pspaceI)
+
+lemma zombies_final_cur_sc_update[simp]:
+  "zombies_final (cur_sc_update f s) = zombies_final s"
+  by (fastforce elim!: zombies_final_pspaceI)
+
+lemma zombies_final_reprogram_timer_update[simp]:
+  "zombies_final (reprogram_timer_update f s) = zombies_final s"
+  by (fastforce elim!: zombies_final_pspaceI)
+
 lemmas state_refs_arch_update [iff] = arch_update.state_refs_update
 
 lemmas state_hyp_refs_arch_update [iff] = arch_update.state_hyp_refs_update
@@ -3264,6 +3295,20 @@ lemma valid_ioc_machine_state_update[iff]:
   by (simp add: valid_ioc_def)
 lemma valid_ioc_cur_thread_update[iff]:
   "valid_ioc (cur_thread_update f s) = valid_ioc s"
+  by (simp add: valid_ioc_def)
+
+lemma valid_ioc_consumed_time_update[iff]:
+  "valid_ioc (consumed_time_update f s) = valid_ioc s"
+  by (simp add: valid_ioc_def)
+
+lemma valid_ioc_cur_time_update[iff]:
+  "valid_ioc (cur_time_update f s) = valid_ioc s"
+  by (simp add: valid_ioc_def)
+lemma valid_ioc_cur_sc_update[iff]:
+  "valid_ioc (cur_sc_update f s) = valid_ioc s"
+  by (simp add: valid_ioc_def)
+lemma valid_ioc_reprogram_timer_update[iff]:
+  "valid_ioc (reprogram_timer_update f s) = valid_ioc s"
   by (simp add: valid_ioc_def)
 
 lemma vms_ioc_update[iff]:

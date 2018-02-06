@@ -654,6 +654,31 @@ lemma set_simple_ko_mdb [wp]:
   "\<lbrace>valid_mdb\<rbrace> set_simple_ko f p ep \<lbrace>\<lambda>r. valid_mdb\<rbrace>"
   by (wp valid_mdb_lift)
 
+lemma update_sched_context_caps_of_state [wp]:
+  "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>r s. P (caps_of_state s)\<rbrace>"
+  apply (wpsimp simp: update_sched_context_def get_object_def set_object_def)
+  apply (subst cte_wp_caps_of_lift; auto simp: cte_wp_at_cases)
+  done
+
+lemma set_sched_context_caps_of_state [wp]:
+  "\<lbrace>\<lambda>s. P (caps_of_state s) \<and> valid_sched_context_size n\<rbrace> set_sched_context ptr val n
+   \<lbrace>\<lambda>r s. P (caps_of_state s)\<rbrace>"
+  apply (wpsimp simp: set_sched_context_def get_object_def set_object_def)
+  apply (subst cte_wp_caps_of_lift; auto simp: cte_wp_at_cases)
+  done
+
+lemma update_sched_context_revokable [wp]:
+  "\<lbrace>\<lambda>s. P (is_original_cap s)\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>r s. P (is_original_cap s)\<rbrace>"
+  by (wpsimp simp: update_sched_context_def set_object_def get_object_def)
+
+lemma set_sched_context_revokable [wp]:
+  "\<lbrace>\<lambda>s. P (is_original_cap s) \<and> valid_sched_context_size n\<rbrace> set_sched_context ptr val n
+   \<lbrace>\<lambda>r s. P (is_original_cap s)\<rbrace>"
+  by (wpsimp simp: set_sched_context_def set_object_def get_object_def)
+
+lemma update_sched_context_mdb [wp]:
+  "\<lbrace>valid_mdb\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>r. valid_mdb\<rbrace>"
+  by (wpsimp simp: update_sched_context_def get_object_def wp: valid_mdb_lift)
 
 lemma cte_wp_at_after_update:
   "\<lbrakk> obj_at (same_caps val) p' s \<rbrakk>
@@ -1209,19 +1234,20 @@ interpretation
   sbn: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_bound_notification_update p b" +
   as_user: non_aobj_non_cap_non_mem_op "as_user p g" +
   thread_set: non_aobj_non_mem_op "thread_set f p" +
-  set_sched_context: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_sched_context_update p sc" +
+  set_tcb_sched_context: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_sched_context_update p sc" +
+  update_sched_context: non_aobj_non_cap_non_mem_op "update_sched_context p sc'" +
   set_yield_to: non_aobj_non_cap_non_mem_op "set_tcb_obj_ref tcb_yield_to_update p sc" +
   set_cap: non_aobj_non_mem_op "set_cap cap p'"
   apply (all \<open>unfold_locales; (wp ; fail)?\<close>)
   unfolding set_simple_ko_def set_thread_state_def
             set_tcb_obj_ref_def thread_set_def set_cap_def[simplified split_def]
-            as_user_def set_mrs_def
+            as_user_def set_mrs_def update_sched_context_def set_sched_context_def
   apply -
   apply (all \<open>(wp set_object_non_arch get_object_wp | wpc | simp split del: if_split)+\<close>)
   apply (auto simp: obj_at_def[abs_def] partial_inv_def the_equality
                split: Structures_A.kernel_object.splits)[1]
-  by (fastforce simp: obj_at_def[abs_def] a_type_def
-               split: Structures_A.kernel_object.splits option.splits)+
+  by ((fastforce simp: obj_at_def[abs_def] a_type_def
+               split: Structures_A.kernel_object.splits option.splits)+)
 
 interpretation
   store_word_offs: non_aobj_non_cap_op "store_word_offs a b c"
@@ -1652,32 +1678,6 @@ lemma update_sched_context_respect_device_region [wp]:
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def a_type_def
                wp: set_object_pspace_respects_device_region)
 
-lemma update_sched_context_caps_of_state [wp]:
-  "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>r s. P (caps_of_state s)\<rbrace>"
-  apply (wpsimp simp: update_sched_context_def get_object_def set_object_def)
-  apply (subst cte_wp_caps_of_lift; auto simp: cte_wp_at_cases)
-  done
-
-lemma set_sched_context_caps_of_state [wp]:
-  "\<lbrace>\<lambda>s. P (caps_of_state s) \<and> valid_sched_context_size n\<rbrace> set_sched_context ptr val n
-   \<lbrace>\<lambda>r s. P (caps_of_state s)\<rbrace>"
-  apply (wpsimp simp: set_sched_context_def get_object_def set_object_def)
-  apply (subst cte_wp_caps_of_lift; auto simp: cte_wp_at_cases)
-  done
-
-lemma update_sched_context_revokable [wp]:
-  "\<lbrace>\<lambda>s. P (is_original_cap s)\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>r s. P (is_original_cap s)\<rbrace>"
-  by (wpsimp simp: update_sched_context_def set_object_def get_object_def)
-
-lemma set_sched_context_revokable [wp]:
-  "\<lbrace>\<lambda>s. P (is_original_cap s) \<and> valid_sched_context_size n\<rbrace> set_sched_context ptr val n
-   \<lbrace>\<lambda>r s. P (is_original_cap s)\<rbrace>"
-  by (wpsimp simp: set_sched_context_def set_object_def get_object_def)
-
-lemma update_sched_context_mdb [wp]:
-  "\<lbrace>valid_mdb\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>r. valid_mdb\<rbrace>"
-  by (wpsimp simp: update_sched_context_def get_object_def wp: valid_mdb_lift)
-
 lemma update_sched_context_iflive [wp]:
   "\<lbrace>\<lambda>s. valid_objs s \<and> if_live_then_nonz_cap s \<and>
         (live (SchedContext val n) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
@@ -1783,6 +1783,8 @@ crunch interrupt_states[wp]: set_sched_context "\<lambda>s. P (interrupt_states 
   (wp: crunch_wps)
 
 crunch irq_node[wp]: set_sched_context "\<lambda>s. P (interrupt_irq_node s)"
+
+crunch irq_node[wp]: update_sched_context "\<lambda>s. P (interrupt_irq_node s)"
 
 lemma get_sched_context_wp:
   "\<lbrace>\<lambda>s. \<forall>sc n. ko_at (SchedContext sc n) ptr s \<longrightarrow> P sc s\<rbrace> get_sched_context ptr \<lbrace>P\<rbrace>"

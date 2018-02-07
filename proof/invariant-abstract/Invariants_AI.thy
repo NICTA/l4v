@@ -447,7 +447,6 @@ where
   | BlockedOnSend ref sp \<Rightarrow> ep_at ref s
   | BlockedOnNotification ref \<Rightarrow> ntfn_at ref s
   | BlockedOnReply r \<Rightarrow> (case r of Some r' \<Rightarrow> reply_at r' s | _ \<Rightarrow> True)
-(*  | YieldTo t \<Rightarrow> tcb_at t s*)
   | _ \<Rightarrow> True"
 
 abbreviation
@@ -664,7 +663,6 @@ where
   "tcb_st_refs_of z \<equiv> case z of (Running)               => {}
   | (Inactive)              => {}
   | (Restart)               => {}
-(*  | (YieldTo t)             => {(t, TCBYieldTo)}*)
   | (BlockedOnReply r)        => if bound r then {(the r, TCBReply)} else {}
   | (IdleThreadState)       => {}
   | (BlockedOnReceive x r)  => if bound r then {(x, TCBBlockedRecv), (the r, TCBReply)}
@@ -698,24 +696,46 @@ where
    | None \<Rightarrow> {}"
 
 definition
+  refs_of_tcb :: "tcb \<Rightarrow> (obj_ref \<times> reftype) set"
+where
+  "refs_of_tcb tcb \<equiv> tcb_st_refs_of (tcb_state tcb)
+                          \<union> get_refs TCBBound (tcb_bound_notification tcb)
+                          \<union> get_refs TCBSchedContext (tcb_sched_context tcb)
+                          \<union> get_refs TCBYieldTo (tcb_yield_to tcb)"
+
+definition
+  refs_of_ntfn :: "notification \<Rightarrow> (obj_ref \<times> reftype) set"
+where
+  "refs_of_ntfn ntfn \<equiv> ntfn_q_refs_of (ntfn_obj ntfn)
+                          \<union> get_refs NTFNBound (ntfn_bound_tcb ntfn)
+                          \<union> get_refs NTFNSchedContext (ntfn_sc ntfn)"
+
+definition
+  refs_of_sc :: "sched_context \<Rightarrow> (obj_ref \<times> reftype) set"
+where
+  "refs_of_sc sc \<equiv> get_refs SCNtfn (sc_ntfn sc)
+                          \<union> get_refs SCTcb (sc_tcb sc)
+                          \<union> get_refs SCYieldFrom (sc_yield_from sc)
+                          \<union> set (map (\<lambda>r. (r, SCReply)) (sc_replies sc))"
+
+definition
+  refs_of_reply :: "reply \<Rightarrow> (obj_ref \<times> reftype) set"
+where
+  "refs_of_reply r \<equiv> get_refs ReplySchedContext (reply_sc r)
+                          \<union> get_refs ReplyTCB (reply_tcb r)"
+
+lemmas refs_of_defs[simp] = refs_of_tcb_def refs_of_ntfn_def refs_of_sc_def refs_of_reply_def
+
+definition
   refs_of :: "kernel_object \<Rightarrow> (obj_ref \<times> reftype) set"
 where
   "refs_of x \<equiv> case x of
      CNode sz fun      => {}
-   | TCB tcb           => tcb_st_refs_of (tcb_state tcb)
-                          \<union> get_refs TCBBound (tcb_bound_notification tcb)
-                          \<union> get_refs TCBSchedContext (tcb_sched_context tcb)
-                          \<union> get_refs TCBYieldTo (tcb_yield_to tcb)
+   | TCB tcb           => refs_of_tcb tcb
    | Endpoint ep       => ep_q_refs_of ep
-   | Notification ntfn => ntfn_q_refs_of (ntfn_obj ntfn)
-                          \<union> get_refs NTFNBound (ntfn_bound_tcb ntfn)
-                          \<union> get_refs NTFNSchedContext (ntfn_sc ntfn)
-   | SchedContext sc n \<Rightarrow> get_refs SCNtfn (sc_ntfn sc)
-                          \<union> get_refs SCTcb (sc_tcb sc)
-                          \<union> get_refs SCYieldFrom (sc_yield_from sc)
-                          \<union> set (map (\<lambda>r. (r, SCReply)) (sc_replies sc))
-   | Reply r           \<Rightarrow> get_refs ReplySchedContext (reply_sc r)
-                          \<union> get_refs ReplyTCB (reply_tcb r)
+   | Notification ntfn => refs_of_ntfn ntfn
+   | SchedContext sc n \<Rightarrow> refs_of_sc sc
+   | Reply r           \<Rightarrow> refs_of_reply r
    | ArchObj ao        => {}"
 
 definition
@@ -765,6 +785,11 @@ where
    | SchedContext sc n => live0 ko
    | Reply reply       => live0 ko
    | ArchObj ao        => hyp_live ko"
+
+definition live_sc :: "sched_context \<Rightarrow> bool"
+where
+  "live_sc sc \<equiv> (bound (sc_tcb sc) \<or> bound (sc_yield_from sc) \<or> bound (sc_ntfn sc)
+                                \<or> (sc_replies sc \<noteq> []))"
 
 lemma a_type_arch_live:
   "a_type ko = AArch tp \<Longrightarrow> \<not> live0 ko"

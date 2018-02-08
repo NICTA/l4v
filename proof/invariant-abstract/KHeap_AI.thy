@@ -1647,13 +1647,14 @@ lemma set_sched_context_refs_of [wp]:
   done
 
 lemma update_sched_context_hyp_refs_of [wp]:
- "\<lbrace>\<lambda>s. sc_at ptr s \<and> P ((state_hyp_refs_of s))\<rbrace>
+ "\<lbrace>\<lambda>s. P ((state_hyp_refs_of s))\<rbrace>
     update_sched_context ptr val
   \<lbrace>\<lambda>rv s. P (state_hyp_refs_of s)\<rbrace>"
   apply (wpsimp simp: update_sched_context_def set_object_def get_object_def)
   apply (clarsimp elim!: rsubst[where P=P])
-  apply (subst state_hyp_refs_of_sc_update[symmetric])
-   apply (auto simp: fun_upd_def obj_at_def is_sc_obj_def a_type_def)
+  apply (rule all_ext)
+  apply (clarsimp simp: ARM.state_hyp_refs_of_def obj_at_def ARM.hyp_refs_of_def
+                 split: kernel_object.splits)
   done
 
 lemma update_sched_context_distinct [wp]:
@@ -1677,7 +1678,7 @@ lemma update_sched_context_respect_device_region [wp]:
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def a_type_def
                wp: set_object_pspace_respects_device_region)
 
-lemma update_sched_context_iflive:
+lemma update_sched_context_iflive[wp]:
   "\<lbrace>\<lambda>s. if_live_then_nonz_cap s \<and>
         (live_sc val \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
      update_sched_context ptr val \<lbrace>\<lambda>rv. if_live_then_nonz_cap\<rbrace>"

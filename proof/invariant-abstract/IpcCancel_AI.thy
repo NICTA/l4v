@@ -422,7 +422,8 @@ lemma reply_cancel_ipc_invs:
                         (cap_delete_one p :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
   shows           "\<lbrace>invs\<rbrace> (reply_cancel_ipc t r :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (simp add: reply_cancel_ipc_def)
-  apply (wpsimp wp: delete select_wp reply_remove_invs)
+  apply (wpsimp wp: delete select_wp)
+
 sorry (*
   apply (rule_tac Q="\<lambda>rv. invs" in hoare_post_imp)
    apply (fastforce simp: emptyable_def dest: reply_slot_not_descendant)

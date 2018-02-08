@@ -450,12 +450,11 @@ lemma get_ep_valid_ep[wp]:
   by (wpsimp simp: ep_at_def2 valid_ep_def2 simp_del: valid_simple_obj_def)
 
 lemma get_sc_valid_sc[wp]:
-  "\<lbrace> invs and sc_obj_at n sc \<rbrace>
+  "\<lbrace> invs and sc_at sc \<rbrace>
    get_sched_context sc
-   \<lbrace> \<lambda>rv. valid_sched_context rv n \<rbrace>"
+   \<lbrace> \<lambda>rv. valid_sched_context rv \<rbrace>"
   apply (wpsimp simp: get_sched_context_def invs_def valid_state_def valid_pspace_def obj_at_def)
-  apply (auto simp: is_sc_obj_def valid_sched_context_def valid_obj_def
-             intro!: valid_objs_valid_sched_context_size[rotated])
+  apply (auto simp: is_sc_obj_def valid_sched_context_def valid_obj_def)
   done
 
 lemma get_reply_valid_reply[wp]:
@@ -1632,7 +1631,7 @@ lemma update_sched_context_cte_wp_at [wp]:
   by (wpsimp simp: update_sched_context_def set_object_def cte_wp_at_cases get_object_def)
 
 lemma update_sched_context_refs_of [wp]:
- "\<lbrace>\<lambda>s. P ((state_refs_of s) (p := refs_of (SchedContext val n))) \<and> valid_sched_context_size n\<rbrace>
+ "\<lbrace>\<lambda>s. P ((state_refs_of s) (p := refs_of (SchedContext val n)))\<rbrace>
     update_sched_context p val
   \<lbrace>\<lambda>rv s. P (state_refs_of s)\<rbrace>"
   apply (wpsimp simp: update_sched_context_def set_object_def get_object_def)
@@ -1679,14 +1678,14 @@ lemma update_sched_context_respect_device_region [wp]:
                wp: set_object_pspace_respects_device_region)
 
 lemma update_sched_context_iflive:
-  "\<lbrace>\<lambda>s. valid_objs s \<and> if_live_then_nonz_cap s \<and>
+  "\<lbrace>\<lambda>s. if_live_then_nonz_cap s \<and>
         (live (SchedContext val n) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
      update_sched_context ptr val \<lbrace>\<lambda>rv. if_live_then_nonz_cap\<rbrace>"
   by (wpsimp simp: update_sched_context_def get_object_def live_def obj_at_def is_sc_obj_def
                    valid_sched_context_size_objsI)
 
 lemma update_sched_context_iflive':
-  "\<lbrace>\<lambda>s. if_live_then_nonz_cap s \<and> sc_at ptr s \<and>
+  "\<lbrace>\<lambda>s. if_live_then_nonz_cap s \<and>
         ((bound (sc_tcb sc) \<or> bound (sc_yield_from sc) \<or> bound (sc_ntfn sc)
                                 \<or> (sc_replies sc \<noteq> [])) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
      update_sched_context ptr sc \<lbrace>\<lambda>rv. if_live_then_nonz_cap\<rbrace>"
@@ -1694,11 +1693,6 @@ lemma update_sched_context_iflive':
 
 lemma update_sched_context_ifunsafe [wp]:
   "\<lbrace>if_unsafe_then_cap\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>rv. if_unsafe_then_cap\<rbrace>"
-  by (wpsimp simp: update_sched_context_def get_object_def obj_at_def is_sc_obj_def
-                   valid_sched_context_size_objsI)
-
-lemma update_sched_context_zombies':
-  "\<lbrace>valid_objs and zombies_final\<rbrace> update_sched_context ptr val \<lbrace>\<lambda>rv. zombies_final\<rbrace>"
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def is_sc_obj_def
                    valid_sched_context_size_objsI)
 
@@ -1758,13 +1752,13 @@ lemma update_sched_context_only_idle [wp]:
   by (wpsimp simp: update_sched_context_def get_object_def wp: only_idle_lift)
 
 lemma update_sched_context_cap_refs_kernel_window [wp]:
-  "\<lbrace>valid_objs and cap_refs_in_kernel_window\<rbrace> update_sched_context ptr val
+  "\<lbrace>cap_refs_in_kernel_window\<rbrace> update_sched_context ptr val
    \<lbrace>\<lambda>rv. cap_refs_in_kernel_window\<rbrace>"
   by (wpsimp simp: update_sched_context_def obj_at_def is_sc_obj_def valid_sched_context_size_objsI
                wp: set_object_cap_refs_in_kernel_window get_object_wp)
 
 lemma update_sched_context_cap_refs_respects_device_region [wp]:
-  "\<lbrace>valid_objs and cap_refs_respects_device_region\<rbrace> update_sched_context ptr val
+  "\<lbrace>cap_refs_respects_device_region\<rbrace> update_sched_context ptr val
    \<lbrace>\<lambda>rv. cap_refs_respects_device_region\<rbrace>"
   by (wpsimp simp: update_sched_context_def get_object_def obj_at_def is_sc_obj_def
                    valid_sched_context_size_objsI

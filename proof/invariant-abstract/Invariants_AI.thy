@@ -550,14 +550,13 @@ where
       (ts \<noteq> [] \<and> (\<forall>t \<in> set ts. tcb_at t s) \<and> distinct ts)"
 
 definition
-  valid_sched_context :: "sched_context \<Rightarrow> nat \<Rightarrow> 'z::state_ext state \<Rightarrow> bool"
+  valid_sched_context :: "sched_context \<Rightarrow> 'z::state_ext state \<Rightarrow> bool"
 where
-  "valid_sched_context sc n s \<equiv> (* RT FIXME: any conditions for period consumed refills refill_max? *)
+  "valid_sched_context sc s \<equiv> (* RT FIXME: any conditions for period consumed refills refill_max? *)
      valid_bound_ntfn (sc_ntfn sc) s
      \<and> valid_bound_tcb (sc_tcb sc) s
      \<and> valid_bound_tcb (sc_yield_from sc) s
      \<and> list_all (\<lambda>r. reply_at r s) (sc_replies sc)
-     \<and> valid_sched_context_size n
      \<and> length (sc_refills sc) \<ge> 1
      (* \<and> length (sc_replies sc) \<le> sc_refill_max sc *)"
 
@@ -577,7 +576,7 @@ where
   | Notification p \<Rightarrow> valid_ntfn p s
   | TCB t \<Rightarrow> valid_tcb ptr t s
   | CNode sz cs \<Rightarrow> valid_cs sz cs s
-  | SchedContext sc n \<Rightarrow> valid_sched_context sc n s
+  | SchedContext sc n \<Rightarrow> valid_sched_context sc s \<and> valid_sched_context_size n
   | Reply reply \<Rightarrow> valid_reply reply s
   | ArchObj ao \<Rightarrow> arch_valid_obj ao s"
 
@@ -1998,31 +1997,43 @@ lemma valid_cs_sizeE [elim]:
 lemma valid_objs_valid_sched_context [dest?]:
   assumes vp: "valid_objs s"
   and    ran: "SchedContext sc n \<in> ran (kheap s)"
-  shows  "valid_sched_context sc n s"
+  shows  "valid_sched_context sc s"
+  using vp ran unfolding valid_objs_def
+  by (auto simp: valid_obj_def ran_def dom_def)
+
+lemma valid_objs_valid_sched_context_size [dest?]:
+  assumes vp: "valid_objs s"
+  and    ran: "SchedContext sc n \<in> ran (kheap s)"
+  shows  "valid_sched_context_size n"
   using vp ran unfolding valid_objs_def
   by (auto simp: valid_obj_def ran_def dom_def)
 
 lemma valid_pspace_valid_sched_context [dest?]:
   assumes vp: "valid_pspace s"
   and    ran: "SchedContext sc n \<in> ran (kheap s)"
-  shows  "valid_sched_context sc n s"
+  shows  "valid_sched_context sc s"
   using vp
   by (rule valid_pspaceE)
-     (simp add: valid_objs_valid_sched_context ran)
+     (drule valid_objs_valid_sched_context, rule ran, simp)
 
 lemma valid_pspace_valid_sched_context_size [intro?]:
   assumes ran: "SchedContext sc n \<in> ran (kheap s)"
   and      vp: "valid_pspace s"
   shows  "valid_sched_context_size n"
-  using valid_pspace_valid_sched_context [OF vp ran]
-  unfolding valid_sched_context_def by blast
+  using vp
+  by (rule valid_pspaceE)
+     (drule valid_objs_valid_sched_context_size, rule ran, simp)
 
-lemma valid_objs_valid_sched_context_size [intro?]:
-  assumes ran: "SchedContext sc n \<in> ran (kheap s)"
-  and      vp: "valid_objs s"
-  shows  "valid_sched_context_size n"
-  using valid_objs_valid_sched_context [OF vp ran]
-  unfolding valid_sched_context_def by blast
+
+lemma valid_sched_context_objsI [intro?]:
+  "\<lbrakk> valid_objs s; kheap s r = Some (SchedContext sc n) \<rbrakk>
+  \<Longrightarrow> valid_sched_context sc s"
+  by (drule ranI, erule valid_objs_valid_sched_context)
+
+lemma valid_sched_contextI [intro?]:
+  "\<lbrakk> valid_pspace s; kheap s r = Some (SchedContext sc n) \<rbrakk>
+  \<Longrightarrow> valid_sched_context sc s"
+  by (drule ranI, erule valid_pspace_valid_sched_context)
 
 lemma valid_sched_context_size_objsI [intro?]:
   "\<lbrakk> valid_objs s; kheap s r = Some (SchedContext sc n) \<rbrakk>
@@ -2476,8 +2487,7 @@ lemma valid_sc_typ:
   assumes t: "\<And>p. \<lbrace>typ_at ATCB p\<rbrace> f \<lbrace>\<lambda>rv. typ_at ATCB p\<rbrace>"
   assumes n: "\<And>p. \<lbrace>typ_at ANTFN p\<rbrace> f \<lbrace>\<lambda>rv. typ_at ANTFN p\<rbrace>"
   assumes r: "\<And>p. \<lbrace>typ_at AReply p\<rbrace> f \<lbrace>\<lambda>rv. typ_at AReply p\<rbrace>"
-  assumes s: "\<And>n. \<lbrace>\<lambda>s. valid_sched_context_size n\<rbrace> f \<lbrace>\<lambda>s rv. valid_sched_context_size n\<rbrace>"
-  shows      "\<lbrace>\<lambda>s. valid_sched_context sc n s\<rbrace> f \<lbrace>\<lambda>rv s. valid_sched_context sc n s\<rbrace>"
+  shows      "\<lbrace>\<lambda>s. valid_sched_context sc s\<rbrace> f \<lbrace>\<lambda>rv s. valid_sched_context sc s\<rbrace>"
   apply (simp add: valid_sched_context_def)
   apply (rule hoare_vcg_conj_lift)
    apply (case_tac "sc_ntfn sc";
@@ -2489,7 +2499,7 @@ lemma valid_sc_typ:
   apply (case_tac "sc_yield_from sc";
          simp add: wp_post_taut t[simplified tcb_at_typ[symmetric]])
   apply (rule hoare_vcg_conj_lift)
-   apply (auto simp: valid_sc_typ_list_all_reply r s, wpsimp)
+   apply (auto simp: valid_sc_typ_list_all_reply r, wpsimp)
   done
 
 lemma valid_reply_typ:
@@ -2509,7 +2519,7 @@ lemma valid_obj_typ:
   shows      "\<lbrace>\<lambda>s. valid_obj p ob s\<rbrace> f \<lbrace>\<lambda>rv s. valid_obj p ob s\<rbrace>"
   apply (case_tac ob, simp_all add: valid_obj_def P P [where P=id, simplified]
          wellformed_arch_typ valid_sc_typ valid_reply_typ hoare_vcg_prop
-         valid_cs_typ valid_tcb_typ valid_ep_typ valid_ntfn_typ)
+         valid_cs_typ valid_tcb_typ valid_ep_typ valid_ntfn_typ hoare_vcg_conj_lift)
   done
 
 lemma valid_irq_node_typ:

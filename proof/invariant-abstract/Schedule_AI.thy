@@ -180,6 +180,7 @@ crunches commit_domain_time,set_next_interrupt,set_refills,refill_split_check
   and reprogram_timer[wp]: "\<lambda>s. P (reprogram_timer s)"
   and cur_sc[wp]: "\<lambda>s. P (cur_sc s)"
   and cur_time[wp]: "\<lambda>s. P (cur_time s)"
+  and cur_thread[wp]: "\<lambda>s. P (cur_thread s)"
   and cur_sc_cur_thread[wp]: "\<lambda>s. P (cur_sc s) (cur_thread s)"
   (wp: crunch_wps simp: Let_def)
 
@@ -558,11 +559,6 @@ lemma switch_sched_context_invs[wp]:
 lemma sc_and_timer_invs: "\<lbrace>invs\<rbrace> sc_and_timer \<lbrace>\<lambda>rv. invs\<rbrace>"
   by (wpsimp simp: sc_and_timer_def)
 
-lemma sc_and_timer_activatable: "\<lbrace>invs\<rbrace> sc_and_timer \<lbrace>\<lambda>rv. ct_in_state activatable\<rbrace>"
-  apply (wpsimp simp: sc_and_timer_def wp: hoare_drop_imp modify_wp)
- sorry
-
-
 (* FIXME move *)
 lemma pred_tcb_weaken_strongerE:
   "\<lbrakk> pred_tcb_at proj P t s; \<And>tcb . P (proj tcb) \<Longrightarrow> P' (proj' tcb) \<rbrakk> \<Longrightarrow> pred_tcb_at proj' P' t s"
@@ -594,6 +590,67 @@ lemma ct_in_state_trans_update[simp]: "ct_in_state st (trans_state f s) = ct_in_
   apply (simp add: ct_in_state_def)
   done
 
+(* move to Invariants_AI *)
+lemma ct_in_state_reprogram_timer_update[iff]:
+  "ct_in_state st (reprogram_timer_update f s) = ct_in_state st s"
+  by (simp add: ct_in_state_def)
+lemma ct_in_state_consumed_time_update[iff]:
+  "ct_in_state st (consumed_time_update f s) = ct_in_state st s"
+  by (simp add: ct_in_state_def)
+lemma ct_in_state_cur_time_update[iff]:
+  "ct_in_state st (cur_time_update f s) = ct_in_state st s"
+  by (simp add: ct_in_state_def)
+lemma ct_in_state_cur_sc_update[iff]:
+  "ct_in_state st (cur_sc_update f s) = ct_in_state st s"
+  by (simp add: ct_in_state_def)
+
+lemma set_refills_pred_tcb_at[wp]:
+  "\<lbrace> pred_tcb_at proj f t \<rbrace> set_refills p r \<lbrace> \<lambda>rv. pred_tcb_at proj f t \<rbrace>"
+  by (wpsimp simp: set_refills_def)
+
+lemma refill_split_check_pred_tcb_at[wp]:
+  "\<lbrace> pred_tcb_at proj f t \<rbrace> refill_split_check p u \<lbrace> \<lambda>rv. pred_tcb_at proj f t \<rbrace>"
+  by (wpsimp wp: get_sched_context_wp simp: refill_split_check_def Let_def split_del: if_splits)
+
+lemma commit_time_pred_tcb_at[wp]:
+  "\<lbrace> pred_tcb_at proj f t \<rbrace> commit_time \<lbrace> \<lambda>rv. pred_tcb_at proj f t \<rbrace>"
+  by (wpsimp simp: commit_time_def)
+
+lemma update_sched_context_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> update_sched_context p sc \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp simp: update_sched_context_def set_object_def get_object_def obj_at_def
+                      pred_tcb_at_def ct_in_state_def simp_del: fun_upd_apply) fastforce
+
+lemma set_refills_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> set_refills p r \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp simp: set_refills_def)
+
+lemma refill_split_check_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> refill_split_check csc consumed \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp simp: refill_split_check_def Let_def split_del: if_splits wp: get_sched_context_wp)
+
+lemma commit_time_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> commit_time \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp simp: commit_time_def)
+
+lemma rollback_time_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> rollback_time \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp simp: rollback_time_def)
+
+lemma refill_unblock_check_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> refill_unblock_check csc \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp wp: get_refills_wp get_sched_context_wp
+       simp: refill_unblock_check_def is_round_robin_def refills_merge_valid[simplified])
+
+lemma switch_sched_context_ct_in_state[wp]:
+  "\<lbrace> ct_in_state t \<rbrace> switch_sched_context \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
+  by (wpsimp simp: switch_sched_context_def wp: hoare_drop_imp hoare_vcg_if_lift2)
+
+lemma sc_and_timer_activatable: "\<lbrace>ct_in_state activatable\<rbrace> sc_and_timer \<lbrace>\<lambda>rv. ct_in_state activatable\<rbrace>"
+  apply (wpsimp simp: sc_and_timer_def switch_sched_context_def
+           wp: hoare_drop_imp modify_wp hoare_vcg_if_lift2)
+  done
+
 lemma (in Schedule_AI_U) schedule_ct_activateable[wp]:
   "\<lbrace>invs\<rbrace> (Schedule_A.schedule :: (unit,unit) s_monad) \<lbrace>\<lambda>rv. ct_in_state activatable \<rbrace>"
   proof -
@@ -608,6 +665,15 @@ lemma (in Schedule_AI_U) schedule_ct_activateable[wp]:
     apply (wp alternative_wp sc_and_timer_activatable
               select_ext_weak_wp select_wp stt_activatable stit_activatable
                | simp add: P Q)+
+    apply (clarsimp simp: getActiveTCB_def ct_in_state_def)
+    apply (rule conjI)
+     apply clarsimp
+     apply (case_tac "get_tcb (cur_thread s) s", simp_all add: ct_in_state_def is_schedulable_opt_def)
+     apply (drule get_tcb_SomeD)
+     apply (clarsimp simp: pred_tcb_at_def obj_at_def split: if_split_asm option.split_asm)
+    apply (case_tac "get_tcb x s", simp_all add: is_schedulable_opt_def)
+    apply (drule get_tcb_SomeD)
+    apply (clarsimp simp: pred_tcb_at_def obj_at_def split: if_split_asm option.split_asm)
   done
 qed
 
@@ -646,15 +712,42 @@ lemma invoke_sched_context_typ_at[wp]:
   by (cases i;
       wpsimp wp: dxo_wp_weak simp: invoke_sched_context_def sched_context_bind_ntfn_def)
 
+crunch inv[wp]: refill_capacity,refill_sufficient,refill_ready "\<lambda>s. P s"
+
+lemma refill_add_tail_typ_at[wp]:
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> refill_add_tail sc_ptr rfl \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
+  by (wpsimp simp: refill_add_tail_def wp: get_sched_context_wp)
+
+lemma maybe_add_empty_tail_typ_at[wp]:
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> maybe_add_empty_tail sc_ptr \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
+  by (wpsimp simp: maybe_add_empty_tail_def wp: get_sched_context_wp)
+
+lemma refill_new_typ_at[wp]:
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> refill_new sc_ptr new_period new_budget new_max_refills
+      \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
+  by (wpsimp simp: refill_new_def wp: get_sched_context_wp)
+
+lemma refill_update_typ_at[wp]: (* check the definition *)
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> refill_update sc_ptr new_period new_budget new_max_refills
+      \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
+  by (wpsimp simp: refill_update_def wp: get_sched_context_wp)
+
+crunch typ_at[wp]: is_schedulable "P (typ_at T p s)"
+  (wp: crunch_wps select_ext_wp ignore: set_refills)
+
+lemma sched_context_resume_typ_at[wp]:
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> sched_context_resume sc_ptr
+      \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def
+      wp: get_sched_context_wp hoare_vcg_if_lift2 hoare_drop_imp)
+
 lemma invoke_sched_control_typ_at[wp]:
   "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace>
      invoke_sched_control_configure i
    \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
-  apply (cases i;
-    wpsimp wp: dxo_wp_weak simp: invoke_sched_control_configure_def sched_context_resume_def
-        split_del: if_splits)
-(*  by (wpsimp simp: invoke_sched_control_configure_def split: sched_control_invocation.splits)*)
-  sorry
+  by (cases i; wpsimp simp: invoke_sched_control_configure_def split_del: if_splits
+                  wp: hoare_vcg_if_lift2 hoare_drop_imp)
+
 
 lemma invoke_sched_context_tcb[wp]:
   "\<lbrace>tcb_at tptr\<rbrace> invoke_sched_context i \<lbrace>\<lambda>rv. tcb_at tptr\<rbrace>"
@@ -664,15 +757,75 @@ lemma invoke_sched_control_tcb[wp]:
   "\<lbrace>tcb_at tptr\<rbrace> invoke_sched_control_configure i \<lbrace>\<lambda>rv. tcb_at tptr\<rbrace>"
   by (simp add: tcb_at_typ invoke_sched_control_typ_at [where P=id, simplified])
 
+crunch invs[wp]: set_message_info invs
+crunches set_message_info,sched_context_update_consumed
+ for tcb_at[wp]: "tcb_at t"
+ and cur_thread[wp]: "\<lambda>s. P (cur_thread s)"
+  (wp: get_object_wp)
+
+lemma update_sched_context_tcb_at_ct[wp]:
+  "\<lbrace>\<lambda>s. tcb_at (cur_thread s) s\<rbrace> update_sched_context p sc \<lbrace>\<lambda>rv s. tcb_at (cur_thread s) s\<rbrace>"
+  by (wpsimp simp: update_sched_context_def set_object_def obj_at_def is_tcb_def wp: get_object_wp)
+
+lemma sched_context_update_consumed_tcb_at_ct[wp]:
+  "\<lbrace>\<lambda>s. tcb_at (cur_thread s) s\<rbrace> sched_context_update_consumed scp \<lbrace>\<lambda>rv s. tcb_at (cur_thread s) s\<rbrace>"
+  by (wpsimp simp: sched_context_update_consumed_def)
+
+(* RT FIXME Move *)
+lemma [simp]:
+ "live_sc (sc_consumed_update f sc) = live_sc sc"
+ "live_sc (sc_period_update f sc) = live_sc sc"
+ "live_sc (sc_refills_update g sc) = live_sc sc"
+ "live_sc (sc_badge_update h sc) = live_sc sc"
+  by (simp add: live_sc_def)+
+
+
+lemma sched_context_update_consumed_invs[wp]:
+  "\<lbrace>invs\<rbrace> sched_context_update_consumed scp \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: sched_context_update_consumed_def wp: update_sched_context_invs get_sched_context_wp)
+  by (fastforce dest: invs_valid_objs invs_iflive invs_sym_refs
+       simp: valid_objs_def obj_at_def valid_obj_def if_live_then_nonz_cap_def
+             live_def live_sc_def fun_upd_idem refs_of_def state_refs_of_def)
+
+lemma sched_context_bind_ntfn_invs[wp]:
+  "\<lbrace>invs and sc_at sc\<rbrace> sched_context_bind_ntfn sc ntfn \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: sched_context_bind_ntfn_def update_sk_obj_ref_def
+              wp: update_sched_context_invs get_sched_context_wp hoare_vcg_all_lift hoare_drop_imp
+             set_ntfn_minor_invs valid_sc_typ get_simple_ko_wp)
+  by (clarsimp dest: invs_valid_objs invs_iflive invs_sym_refs
+       simp: valid_objs_def obj_at_def valid_obj_def if_live_then_nonz_cap_def
+             live_def live_sc_def fun_upd_idem refs_of_def state_refs_of_def
+is_sc_obj_def split: kernel_object.splits)
+
+  sorry
+
+lemma sched_context_unbind_ntfn_invs[wp]:
+  "\<lbrace>invs\<rbrace> sched_context_unbind_ntfn sc \<lbrace>\<lambda>rv. invs\<rbrace>"
+  sorry
+
+lemma sched_context_bind_tcb_invs[wp]:
+  "\<lbrace>invs\<rbrace> sched_context_bind_tcb sc tcb \<lbrace>\<lambda>rv. invs\<rbrace>"
+   sorry
+
+lemma sched_context_unbind_tcb_invs[wp]:
+  "\<lbrace>invs\<rbrace> sched_context_unbind_tcb sc \<lbrace>\<lambda>rv. invs\<rbrace>"
+   sorry
+
+lemma sched_context_unbind_all_tcbs_invs[wp]:
+  "\<lbrace>invs\<rbrace> sched_context_unbind_all_tcbs sc \<lbrace>\<lambda>rv. invs\<rbrace>"
+   sorry
 
 lemma invoke_sched_context_invs[wp]:
   "\<lbrace>invs and valid_sched_context_inv i\<rbrace> invoke_sched_context i \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (cases i; wpsimp simp: invoke_sched_context_def set_consumed_def)
-  sorry
+  by (cases i; wpsimp wp: dxo_wp_weak hoare_vcg_conj_lift
+          simp: invoke_sched_context_def set_consumed_def)
 
 
 lemma invoke_sched_control_configure_invs[wp]:
   "\<lbrace>invs and valid_sched_control_inv i\<rbrace> invoke_sched_control_configure i \<lbrace>\<lambda>rv. invs\<rbrace>"
+  by (cases i; wpsimp simp: invoke_sched_control_configure_def split_del: if_splits
+                  wp: hoare_vcg_if_lift2 hoare_drop_imp)
+
   sorry
 
 
@@ -697,6 +850,10 @@ lemma decode_sched_control_inv_inv:
   "\<lbrace>P\<rbrace>
      decode_sched_control_invocation label args excaps
    \<lbrace>\<lambda>rv. P\<rbrace>"
+  by (wpsimp simp: decode_sched_control_invocation_def split_del: if_splits
+             wp: hoare_vcg_if_lift2 hoare_drop_imp)
+
+
   sorry
 
 

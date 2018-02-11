@@ -396,10 +396,10 @@ lemma cancel_signal_invs:
   apply (case_tac "ntfn_obj ntfna", simp_all)[1]
   apply (rule hoare_pre)
    apply (wp set_simple_ko_valid_objs valid_irq_node_typ sts_only_idle
-           | simp add: valid_tcb_state_def
+           | simp add: valid_tcb_state_def refs_of_ntfn_def
            | wpc)+
-  apply (clarsimp simp: ep_redux_simps cong: list.case_cong if_cong)
-  apply (frule(1) if_live_then_nonz_capD, (clarsimp simp: live_def)+)
+  apply (clarsimp simp: refs_of_ntfn_def ep_redux_simps cong: list.case_cong if_cong)
+  apply (frule(1) if_live_then_nonz_capD, (clarsimp simp: live_def live_ntfn_def)+)
   apply (frule ko_at_state_refs_ofD)
   apply (frule st_tcb_at_state_refs_ofD)
   apply (erule(1) obj_at_valid_objsE, clarsimp simp: valid_obj_def valid_ntfn_def)
@@ -897,8 +897,6 @@ lemma cancel_all_ipc_invs_helper:
   apply (rule hoare_pre)
    apply (wp cancel_all_invs_helper hoare_vcg_const_Ball_lift valid_irq_node_typ)
   apply (clarsimp simp: invs_def valid_state_def valid_pspace_def valid_ep_def live_def)
-  apply (rule conjI)
-   apply (fastforce simp: live_def is_ep_def elim!: obj_at_weakenE split: kernel_object.splits)
   apply (rule conjI)
    apply clarsimp
    apply (drule(1) sym_refs_obj_atD, clarsimp)

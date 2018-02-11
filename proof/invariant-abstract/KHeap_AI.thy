@@ -540,9 +540,7 @@ lemma pspace_distinct_same_type:
   done
 
 lemma set_ntfn_refs_of[wp]:
-  "\<lbrace>\<lambda>s. P ((state_refs_of s) (ntfnptr := ntfn_q_refs_of (ntfn_obj ntfn)
-                                         \<union> get_refs NTFNBound (ntfn_bound_tcb ntfn)
-                                         \<union> get_refs NTFNSchedContext (ntfn_sc ntfn)))\<rbrace>
+  "\<lbrace>\<lambda>s. P ((state_refs_of s) (ntfnptr := refs_of_ntfn ntfn))\<rbrace>
      set_notification ntfnptr ntfn
    \<lbrace>\<lambda>rv s. P (state_refs_of s)\<rbrace>"
   by (wp; fastforce simp: state_refs_of_def elim!: rsubst[where P=P])
@@ -1017,9 +1015,10 @@ crunch it[wp]: set_simple_ko "\<lambda>s. P (idle_thread s)"
   (wp: crunch_wps simp: crunch_simps)
 
 lemma set_simple_ko_idle[wp]:
-  "\<lbrace>obj_at (\<lambda>ko. partial_inv f ko \<noteq> None) ptr and valid_idle\<rbrace>
+  "\<lbrace>valid_idle\<rbrace>
    set_simple_ko f ptr ep \<lbrace>\<lambda>_. valid_idle\<rbrace>"
-  by (set_simple_ko_method simp_thm: set_object_def obj_at_def valid_idle_def pred_tcb_at_def)
+  by (wpsimp simp: set_simple_ko_def set_object_def get_object_def valid_idle_def
+                   pred_tcb_at_def obj_at_def)
 
 lemma ep_redux_simps:
   "valid_ep (case xs of [] \<Rightarrow> Structures_A.IdleEP | y # ys \<Rightarrow> Structures_A.SendEP (y # ys))
@@ -1416,10 +1415,21 @@ crunch valid_irq_states[wp]: set_sched_context,set_reply "valid_irq_states"
   (wp: crunch_wps simp: crunch_simps)
 
 lemma set_ntfn_minor_invs:
+  "\<lbrace>invs and obj_at (\<lambda>ko. refs_of ko = refs_of_ntfn val) ptr
+         and valid_ntfn val
+         and (\<lambda>s. \<forall>typ. (idle_thread s, typ) \<notin> ntfn_q_refs_of (ntfn_obj val))
+         and (\<lambda>s. live (Notification val) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
+     set_notification ptr val
+   \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: invs_def valid_state_def valid_pspace_def
+          wp: valid_irq_node_typ simp_del: fun_upd_apply)
+  apply (clarsimp simp: state_refs_of_def obj_at_def ext elim!: rsubst[where P = sym_refs])
+  done
+
+(*
+lemma set_ntfn_minor_invs:
   "\<lbrace>invs and ntfn_at ptr
-         and obj_at (\<lambda>ko. refs_of ko = ntfn_q_refs_of (ntfn_obj val)
-                                       \<union> get_refs NTFNBound (ntfn_bound_tcb val)
-                                       \<union> get_refs NTFNSchedContext (ntfn_sc val)) ptr
+         and obj_at (\<lambda>ko. refs_of ko = refs_of_ntfn val) ptr
          and valid_ntfn val
          and (\<lambda>s. \<forall>typ. (idle_thread s, typ) \<notin> ntfn_q_refs_of (ntfn_obj val))
          and (\<lambda>s. live (Notification val) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
@@ -1433,7 +1443,7 @@ lemma set_ntfn_minor_invs:
                  intro!: ext
                   dest!: obj_at_state_refs_ofD)
   done
-
+*)
 lemma dmo_aligned[wp]:
   "\<lbrace>pspace_aligned\<rbrace> do_machine_op f \<lbrace>\<lambda>_. pspace_aligned\<rbrace>"
   apply (simp add: do_machine_op_def split_def)

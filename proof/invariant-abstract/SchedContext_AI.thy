@@ -528,7 +528,7 @@ lemma refill_update_typ_at[wp]: (* check the definition *)
       \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
   by (wpsimp simp: refill_update_def wp: get_sched_context_wp)
 
-crunch typ_at[wp]: is_schedulable "P (typ_at T p s)"
+crunch typ_at[wp]: is_schedulable "\<lambda>s. P (typ_at T p s)"
   (wp: crunch_wps select_ext_wp ignore: set_refills)
 
 lemma sched_context_resume_typ_at[wp]:
@@ -691,6 +691,19 @@ lemma set_sc_yf_refs_of_Some[wp]:
       intro!: ext split: option.splits if_splits)
   done
 
+lemma ssc_refs_of_Some[wp]:
+  "\<lbrace>\<lambda>s. P ((state_refs_of s)(t:= insert (sc, TCBSchedContext)
+          {x \<in> state_refs_of s t. snd x \<noteq> TCBSchedContext}))\<rbrace>
+   set_tcb_obj_ref tcb_sched_context_update t (Some sc)
+   \<lbrace>\<lambda>rv s. P (state_refs_of s)\<rbrace>"
+  apply (simp add: set_tcb_obj_ref_def)
+  apply (wpsimp simp: set_object_def wp: gets_the_wp)
+  apply (fastforce elim!: rsubst[where P=P] dest!: get_tcb_SomeD
+                   simp: state_refs_of_def conj_disj_distribR get_refs_def2
+                         get_tcb_rev pred_tcb_def2 mem_Times_iff tcb_st_refs_of_def
+                 intro!: ext split: thread_state.splits)
+  done
+
 lemma set_sc_ntfn_refs_of_None[wp]:
   "\<lbrace>\<lambda>s. P ((state_refs_of s)(t:= state_refs_of s t - {x \<in> state_refs_of s t. snd x = SCNtfn}
 (*          {x \<in> state_refs_of s t. snd x = SCTcb \<or> snd x = SCYieldFrom \<or> snd x = SCReply}*)))\<rbrace>
@@ -784,7 +797,7 @@ lemma sched_context_bind_ntfn_invs[wp]:
    apply (clarsimp simp: valid_obj_def valid_ntfn_def obj_at_def is_sc_obj_def split: ntfn.splits)
   apply (erule delta_sym_refs)
    apply (fastforce simp: state_refs_of_def obj_at_def refs_of_ntfn_def split: if_splits)
-  apply (clarsimp simp: state_refs_of_def refs_of_ntfn_def refs_of_ntfn_def get_refs_def2
+  apply (clarsimp simp: state_refs_of_def refs_of_ntfn_def get_refs_def2
                   dest!: symreftype_inverse' split: if_splits)
   done
 
@@ -815,26 +828,378 @@ lemma sched_context_unbind_ntfn_invs[wp]:
         simp: obj_at_def get_refs_def2 refs_of_ntfn_def ntfn_q_refs_of_def image_iff refs_of_simps)+)
   done
 
+text {* possible_switch_to invariants *}
+
+crunches set_tcb_obj_ref,get_tcb_obj_ref
+ for aligned[wp]: pspace_aligned
+ and distinct[wp]: pspace_distinct
+ and sc_at[wp]: "sc_at sc_ptr"
+ and interrupt_irq_node[wp]: "\<lambda>s. P (interrupt_irq_node s)"
+ and no_cdt[wp]: "\<lambda>s. P (cdt s)"
+ and no_revokable[wp]: "\<lambda>s. P (is_original_cap s)"
+ and valid_irq_states[wp]: "valid_irq_states"
+ and pspace_in_kernel_window[wp]: "pspace_in_kernel_window"
+ and pspace_respects_device_region[wp]: "pspace_respects_device_region"
+ and cur_tcb[wp]: "cur_tcb"
+ and it[wp]: "\<lambda>s. P (idle_thread s)"
+ and typ_at[wp]: "\<lambda>s. P (typ_at T p s)"
+ and interrupt_states[wp]: "\<lambda>s. P (interrupt_states s)"
+  (simp: Let_def wp: hoare_drop_imps)
+
+crunches get_tcb_obj_ref
+ for valid_objs[wp]: valid_objs
+ and iflive[wp]: "if_live_then_nonz_cap"
+ and valid_mdb[wp]: valid_mdb
+ and zombies[wp]: zombies_final
+ and valid_irq_handlers[wp]: "valid_irq_handlers"
+ and valid_ioc[wp]: "valid_ioc"
+ and valid_idle[wp]: valid_idle
+ and cap_refs_in_kernel_window[wp]: "cap_refs_in_kernel_window"
+ and cap_refs_respects_device_region[wp]: "cap_refs_respects_device_region"
+ and valid_arch[wp]: "valid_arch_state"
+ and ifunsafe[wp]: "if_unsafe_then_cap"
+ and only_idle[wp]: "only_idle"
+ and valid_global_objs[wp]: "valid_global_objs"
+ and valid_global_vspace_mappings[wp]: "valid_global_vspace_mappings"
+ and valid_arch_caps[wp]: "valid_arch_caps"
+ and v_ker_map[wp]: "valid_kernel_mappings"
+ and equal_mappings[wp]: "equal_kernel_mappings"
+ and vms[wp]: "valid_machine_state"
+ and valid_vspace_objs[wp]: "valid_vspace_objs"
+ and valid_global_refs[wp]: "valid_global_refs"
+ and valid_asid_map[wp]: "valid_asid_map"
+ and state_hyp_refs_of[wp]: "\<lambda>s. P (state_hyp_refs_of s)"
+ and state_refs_of[wp]: "\<lambda>s. P (state_refs_of s)"
+ and cte_wp_at[wp]: "cte_wp_at P c"
+ and caps_of_state[wp]: "\<lambda>s. P (caps_of_state s)"
+
+crunches tcb_sched_action,reschedule_required,possible_switch_to,tcb_release_enqueue
+ for aligned[wp]: pspace_aligned
+ and it[wp]: "\<lambda>s. P (idle_thread s)"
+ and distinct[wp]: pspace_distinct
+ and sc_at[wp]: "sc_at sc_ptr"
+ and interrupt_irq_node[wp]: "\<lambda>s. P (interrupt_irq_node s)"
+ and no_cdt[wp]: "\<lambda>s. P (cdt s)"
+ and no_revokable[wp]: "\<lambda>s. P (is_original_cap s)"
+ and valid_irq_states[wp]: "valid_irq_states"
+ and pspace_in_kernel_window[wp]: "pspace_in_kernel_window"
+ and pspace_respects_device_region[wp]: "pspace_respects_device_region"
+ and cur_tcb[wp]: "cur_tcb"
+ and typ_at[wp]: "\<lambda>s. P (typ_at T p s)"
+ and interrupt_states[wp]: "\<lambda>s. P (interrupt_states s)"
+ and valid_objs[wp]: valid_objs
+ and iflive[wp]: "if_live_then_nonz_cap"
+ and valid_mdb[wp]: valid_mdb
+ and zombies[wp]: zombies_final
+ and valid_irq_handlers[wp]: "valid_irq_handlers"
+ and valid_ioc[wp]: "valid_ioc"
+ and valid_idle[wp]: valid_idle
+ and cap_refs_in_kernel_window[wp]: "cap_refs_in_kernel_window"
+ and cap_refs_respects_device_region[wp]: "cap_refs_respects_device_region"
+ and valid_arch[wp]: "valid_arch_state"
+ and ifunsafe[wp]: "if_unsafe_then_cap"
+ and only_idle[wp]: "only_idle"
+ and valid_global_objs[wp]: "valid_global_objs"
+ and valid_global_vspace_mappings[wp]: "valid_global_vspace_mappings"
+ and valid_arch_caps[wp]: "valid_arch_caps"
+ and v_ker_map[wp]: "valid_kernel_mappings"
+ and equal_mappings[wp]: "equal_kernel_mappings"
+ and vms[wp]: "valid_machine_state"
+ and valid_vspace_objs[wp]: "valid_vspace_objs"
+ and valid_global_refs[wp]: "valid_global_refs"
+ and valid_asid_map[wp]: "valid_asid_map"
+ and state_hyp_refs_of[wp]: "\<lambda>s. P (state_hyp_refs_of s)"
+ and state_refs_of[wp]: "\<lambda>s. P (state_refs_of s)"
+ and cte_wp_at[wp]: "cte_wp_at P c"
+ and caps_of_state[wp]: "\<lambda>s. P (caps_of_state s)"
+ and aligned[wp]: pspace_aligned
+ and distinct[wp]: pspace_distinct
+ and valid_objs[wp]: valid_objs
+ and sc_at[wp]: "sc_at sc_ptr"
+ and cte_wp_at[wp]: "cte_wp_at P c"
+ and interrupt_irq_node[wp]: "\<lambda>s. P (interrupt_irq_node s)"
+ and caps_of_state[wp]: "\<lambda>s. P (caps_of_state s)"
+ and no_cdt[wp]: "\<lambda>s. P (cdt s)"
+  (simp: Let_def wp: hoare_drop_imps hoare_vcg_if_lift2 mapM_wp
+   ignore: set_tcb_obj_ref get_tcb_obj_ref)
+
+(*
+crunches
+  for consumed_time[wp]: "\<lambda>s::det_ext state. P (consumed_time s)"
+  and reprogram_timer[wp]: "\<lambda>s::det_ext state. P (reprogram_timer s)"
+  and cur_sc[wp]: "\<lambda>s::det_ext state. P (cur_sc s)"
+  and cur_time[wp]: "\<lambda>s::det_ext state. P (cur_time s)"
+  and cur_thread[wp]: "\<lambda>s::det_ext state. P (cur_thread s)"
+  and cur_sc_cur_thread[wp]: "\<lambda>s::det_ext state. P (cur_sc s) (cur_thread s)"
+  (wp: crunch_wps simp: Let_def)
+*)
+
+crunches postpone
+ for aligned[wp]: "pspace_aligned::det_ext state \<Rightarrow> bool"
+ and distinct[wp]: "pspace_distinct::det_ext state \<Rightarrow> bool"
+ and iflive[wp]: "if_live_then_nonz_cap::det_ext state \<Rightarrow> bool"
+ and sc_at[wp]: "sc_at sc_ptr::det_ext state \<Rightarrow> bool"
+ and cte_wp_at[wp]: "cte_wp_at P c::det_ext state \<Rightarrow> bool"
+ and interrupt_irq_node[wp]: "\<lambda>s::det_ext state. P (interrupt_irq_node s)"
+ and caps_of_state[wp]: "\<lambda>s::det_ext state. P (caps_of_state s)"
+ and no_cdt[wp]: "\<lambda>s::det_ext state. P (cdt s)"
+ and no_revokable[wp]: "\<lambda>s::det_ext state. P (is_original_cap s)"
+ and valid_idle[wp]: "valid_idle::det_ext state \<Rightarrow> bool"
+ and valid_irq_handlers[wp]: "valid_irq_handlers::det_ext state \<Rightarrow> bool"
+ and valid_global_objs[wp]: "valid_global_objs::det_ext state \<Rightarrow> bool"
+ and valid_global_vspace_mappings[wp]: "valid_global_vspace_mappings::det_ext state \<Rightarrow> bool"
+ and valid_arch_caps[wp]: "valid_arch_caps::det_ext state \<Rightarrow> bool"
+ and only_idle[wp]: "only_idle::det_ext state \<Rightarrow> bool"
+ and ifunsafe[wp]: "if_unsafe_then_cap::det_ext state \<Rightarrow> bool"
+ and valid_arch[wp]: "valid_arch_state::det_ext state \<Rightarrow> bool"
+ and valid_irq_states[wp]: "valid_irq_states::det_ext state \<Rightarrow> bool"
+ and vms[wp]: "valid_machine_state::det_ext state \<Rightarrow> bool"
+ and valid_vspace_objs[wp]: "valid_vspace_objs::det_ext state \<Rightarrow> bool"
+ and valid_global_refs[wp]: "valid_global_refs::det_ext state \<Rightarrow> bool"
+ and v_ker_map[wp]: "valid_kernel_mappings::det_ext state \<Rightarrow> bool"
+ and equal_mappings[wp]: "equal_kernel_mappings::det_ext state \<Rightarrow> bool"
+ and valid_asid_map[wp]: "valid_asid_map::det_ext state \<Rightarrow> bool"
+ and pspace_in_kernel_window[wp]: "pspace_in_kernel_window::det_ext state \<Rightarrow> bool"
+ and cap_refs_in_kernel_window[wp]: "cap_refs_in_kernel_window::det_ext state \<Rightarrow> bool"
+ and cap_refs_respects_device_region[wp]: "cap_refs_respects_device_region::det_ext state \<Rightarrow> bool"
+ and pspace_respects_device_region[wp]: "pspace_respects_device_region::det_ext state \<Rightarrow> bool"
+ and cur_tcb[wp]: "cur_tcb::det_ext state \<Rightarrow> bool"
+ and valid_ioc[wp]: "valid_ioc::det_ext state \<Rightarrow> bool"
+ and zombie_final[wp]: "zombies_final::det_ext state \<Rightarrow> bool"
+ and valid_objs[wp]: "valid_objs::det_ext state \<Rightarrow> bool"
+ and typ_at[wp]: "\<lambda>s::det_ext state. P (typ_at T p s)"
+ and valid_objs[wp]: "valid_objs::det_ext state \<Rightarrow> bool"
+ and state_hyp_refs_of[wp]: "\<lambda>s::det_ext state. P (state_hyp_refs_of s)"
+ and state_refs_of[wp]: "\<lambda>s::det_ext state. P (state_refs_of s)"
+  (simp: Let_def reprogram_timer_update_arch.state_refs_update wp: hoare_drop_imps select_f_wp)
+
+lemma is_schedulable_inv[wp]: "\<lbrace>P\<rbrace> is_schedulable x inq \<lbrace> \<lambda>_. P\<rbrace>"
+  by (wpsimp simp: is_schedulable_def)
+
+lemma sched_context_resume_aligned[wp]:
+  "\<lbrace>pspace_aligned\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. pspace_aligned\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_distinct[wp]:
+  "\<lbrace>pspace_distinct\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. pspace_distinct\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_iflive[wp]:
+  "\<lbrace>if_live_then_nonz_cap\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. if_live_then_nonz_cap\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_sc_at[wp]:
+  "\<lbrace>sc_at sc_ptr\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. sc_at sc_ptr\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_cte_wp_at[wp]:
+  "\<lbrace>cte_wp_at P c\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. cte_wp_at P c\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_interrupt_irq_node[wp]:
+  "\<lbrace>\<lambda>s. P (interrupt_irq_node s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (interrupt_irq_node s)\<rbrace>"
+  apply (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp valid_irq_node_typ get_sched_context_wp thread_get_wp)
+  done
+
+lemma sched_context_resume_it[wp]:
+  "\<lbrace>\<lambda>s. P (idle_thread s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (idle_thread s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_no_cdt[wp]:
+  "\<lbrace>\<lambda>s. P (cdt s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (cdt s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_no_revokable[wp]:
+  "\<lbrace>\<lambda>s. P (is_original_cap s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (is_original_cap s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_irq_states[wp]:
+  "\<lbrace>valid_irq_states\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_irq_states\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_pspace_in_kernel_window[wp]:
+  "\<lbrace>pspace_in_kernel_window\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. pspace_in_kernel_window\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_pspace_respects_device_region[wp]:
+  "\<lbrace>pspace_respects_device_region\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. pspace_respects_device_region\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_cur_tcb[wp]:
+  "\<lbrace>cur_tcb\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. cur_tcb\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_interrupt_states[wp]:
+  "\<lbrace>\<lambda>s. P (interrupt_states s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (interrupt_states s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_mdb[wp]:
+  "\<lbrace>valid_mdb\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_mdb\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_objs[wp]:
+  "\<lbrace>valid_objs\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_objs\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_zombies[wp]:
+  "\<lbrace>zombies_final\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. zombies_final\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_irq_handlers[wp]:
+  "\<lbrace>valid_irq_handlers\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_irq_handlers\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_ioc[wp]:
+  "\<lbrace>valid_ioc\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_ioc\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_cap_refs_in_kernel_window[wp]:
+  "\<lbrace>cap_refs_in_kernel_window\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. cap_refs_in_kernel_window\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_cap_refs_respects_device_region[wp]:
+  "\<lbrace>cap_refs_respects_device_region\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. cap_refs_respects_device_region\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_idle[wp]:
+  "\<lbrace>valid_idle\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_idle\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_only_idle[wp]:
+  "\<lbrace>only_idle\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. only_idle\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_arch[wp]:
+  "\<lbrace>valid_arch_state\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_arch_state\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_ifunsafe[wp]:
+  "\<lbrace>if_unsafe_then_cap\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. if_unsafe_then_cap\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_global_objs[wp]:
+  "\<lbrace>valid_global_objs\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_global_objs\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_global_vspace_mappings[wp]:
+  "\<lbrace>valid_global_vspace_mappings\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_global_vspace_mappings\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_arch_caps[wp]:
+  "\<lbrace>valid_arch_caps\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_arch_caps\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_v_ker_map[wp]:
+  "\<lbrace>valid_kernel_mappings\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_kernel_mappings\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_equal_mappings[wp]:
+  "\<lbrace>equal_kernel_mappings\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. equal_kernel_mappings\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_vspace_objs[wp]:
+  "\<lbrace>valid_vspace_objs\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_vspace_objs\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_vms[wp]:
+  "\<lbrace>valid_machine_state\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_machine_state\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_global_refs[wp]:
+  "\<lbrace>valid_global_refs\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_global_refs\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_valid_asid_map[wp]:
+  "\<lbrace>valid_asid_map\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_. valid_asid_map\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma sched_context_resume_state_hyp_refs_of[wp]:
+  "\<lbrace>\<lambda>s. P (state_hyp_refs_of s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (state_hyp_refs_of s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+lemma state_refs_of_reprogram_timer_update[simp]:
+  "state_refs_of (reprogram_timer_update f s) = state_refs_of s"
+  by (clarsimp simp: state_refs_of_def)
+
+lemma sched_context_resume_state_refs_of[wp]:
+  "\<lbrace>\<lambda>s. P (state_refs_of s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (state_refs_of s)\<rbrace>"
+  apply (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+  done
+
+lemma sched_context_resume_no_caps_of_state[wp]:
+  "\<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace> sched_context_resume param_a \<lbrace>\<lambda>_ s. P (caps_of_state s)\<rbrace>"
+  by (wpsimp simp: sched_context_resume_def refill_sufficient_def refill_ready_def is_schedulable_def
+        wp: get_refills_wp get_sched_context_wp thread_get_wp)
+
+
+lemma set_sc_obj_ref_ex_cap[wp]:
+  "\<lbrace>ex_nonz_cap_to p\<rbrace> set_sc_obj_ref f p' v  \<lbrace>\<lambda>rv. ex_nonz_cap_to p\<rbrace>"
+  by (wp ex_nonz_cap_to_pres)
+
+lemma ssc_sc_tcb_update_bound_sc_tcb_at[wp]:
+  "\<lbrace>bound_sc_tcb_at P t\<rbrace> set_sc_obj_ref sc_tcb_update scp tcb \<lbrace>\<lambda>rv. bound_sc_tcb_at P t\<rbrace>"
+  by (wpsimp simp: set_sc_obj_ref_def)
 
 lemma sched_context_bind_tcb_invs[wp]:
-  "\<lbrace>invs\<rbrace> sched_context_bind_tcb sc tcb \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply_trace (wpsimp simp: sched_context_bind_tcb_def invs_def valid_state_def
-      valid_pspace_def set_tcb_obj_ref_def
-       wp: valid_irq_node_typ)
-(*  apply (clarsimp simp: obj_at_def is_ntfn sc_ntfn_sc_at_def)
-  apply (case_tac "sc=ntfn", simp)
+  "\<lbrace>invs and (\<lambda>s. tcb \<noteq> idle_thread s)
+    and bound_sc_tcb_at (op = None) tcb and ex_nonz_cap_to tcb
+    and sc_tcb_sc_at (op = None) sc and ex_nonz_cap_to sc\<rbrace>
+      sched_context_bind_tcb sc tcb \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: sched_context_bind_tcb_def invs_def valid_state_def
+      valid_pspace_def set_sc_obj_ref_def
+      wp: valid_irq_node_typ obj_set_prop_at get_sched_context_wp ssc_refs_of_Some)
+  apply (clarsimp simp: obj_at_def is_sc_obj_def pred_tcb_at_def)
+  apply (case_tac "sc=tcb", simp)
   apply safe
+    apply (erule (1) valid_objsE)
+    apply (clarsimp simp: valid_obj_def valid_sched_context_def obj_at_def is_tcb)
    apply (frule valid_objs_valid_sched_context_size)
-    apply fast force
-   apply (erule (1) valid_objsE)
-   apply (clarsimp simp: valid_obj_def valid_ntfn_def obj_at_def is_sc_obj_def split: ntfn.splits)
+    apply fastforce
+   apply assumption
   apply (erule delta_sym_refs)
-   apply (fastorce simp: state_refs_of_def obj_at_def refs_of_ntfn_def split: if_splits)
-  apply (clarsimp simp: state_refs_of_def refs_of_ntfn_def refs_of_ntfn_def get_refs_def2
-                  dest!: symreftype_inverse' split: if_splits)
+   apply (clarsimp simp: state_refs_of_def obj_at_def refs_of_sc_def split: if_splits)
+  apply (clarsimp simp: state_refs_of_def refs_of_tcb_def get_refs_def2 image_iff
+      tcb_st_refs_of_def sc_tcb_sc_at_def obj_at_def
+      dest!: symreftype_inverse' split: if_splits)
+   apply (clarsimp split: thread_state.split_asm if_split_asm)
+  apply (clarsimp simp: refs_of_sc_def get_refs_def2 image_iff)
   done
-*)
-   sorry
 
 lemma sched_context_unbind_tcb_invs[wp]:
   "\<lbrace>invs\<rbrace> sched_context_unbind_tcb sc \<lbrace>\<lambda>rv. invs\<rbrace>"

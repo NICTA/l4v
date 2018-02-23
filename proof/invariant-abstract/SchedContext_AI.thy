@@ -197,7 +197,7 @@ lemma cur_tcb_reprogram_timer_update[iff]:
 
 lemma refs_of_sc_consumed_update[iff]:
   "refs_of_sc (sc_consumed_update f sc) = refs_of_sc sc"
-  by simp 
+  by simp
 
 lemma refs_of_sc_refills_update[iff]:
   "refs_of_sc (sc_refills_update f sc) = refs_of_sc sc"
@@ -663,7 +663,7 @@ lemma sched_context_unbind_ntfn_invs[wp]:
   shows
   "\<lbrace>invs\<rbrace> sched_context_unbind_ntfn sc \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (simp add: sched_context_unbind_ntfn_def maybeM_def get_sc_obj_ref_def)
-  apply_trace (wpsimp simp: invs_def valid_state_def valid_pspace_def update_sk_obj_ref_def
+  apply (wpsimp simp: invs_def valid_state_def valid_pspace_def update_sk_obj_ref_def
       wp: valid_irq_node_typ set_simple_ko_valid_objs get_simple_ko_wp get_sched_context_wp)
   apply (clarsimp simp: obj_at_def is_ntfn sc_ntfn_sc_at_def)
   apply (case_tac "sc=x", simp)
@@ -955,7 +955,7 @@ lemma sched_context_unbind_all_tcbs_invs[wp]:
   by (wpsimp simp: sched_context_unbind_all_tcbs_def sc_tcb_sc_at_def obj_at_def
        wp: get_sched_context_wp)
 
-lemma set_reply_refs_of[wp]:
+lemma set_reply_refs_of:
   "\<lbrace>\<lambda>s. P ((state_refs_of s) (rptr := refs_of_reply reply))\<rbrace>
      set_reply rptr reply
    \<lbrace>\<lambda>rv s. P (state_refs_of s)\<rbrace>"
@@ -966,13 +966,67 @@ lemma get_sc_replies_typ_at[wp]:
   "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> liftM sc_replies (get_sched_context scp) \<lbrace>\<lambda>_ s. P (typ_at T p s)\<rbrace>"
   by (wpsimp simp: obj_at_def)
 
-lemma sched_context_unbind_reply_invs[wp]:
-  notes refs_of_simps[simp del] set_reply_sc_refs_of[wp del]
+lemma mapM_x_set_reply_sc_refs_of:
+  notes refs_of_simps[simp del]
   shows
-  "\<lbrace>invs\<rbrace> sched_context_unbind_reply sc \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (simp add: sched_context_unbind_reply_def liftM_def)
- sorry
+  "\<lbrace>\<lambda>s. P (foldl (\<lambda>f r. f(r:= (state_refs_of s r - {x \<in> state_refs_of s r. snd x = ReplySchedContext}))) (state_refs_of s) replies)\<rbrace>
+       mapM_x (\<lambda>r. set_reply_obj_ref reply_sc_update r None) replies
+   \<lbrace>\<lambda>rv s. P ((state_refs_of s)(*(t:= (state_refs_of s t - {x \<in> state_refs_of s t. snd x = ReplySchedContext}))*))\<rbrace>"
+  apply (induct replies)
+   apply (clarsimp simp: mapM_x_def sequence_x_def)
+  apply (clarsimp simp: mapM_x_Cons simp del: fun_upd_apply)
+  apply (rule hoare_seq_ext)
+   apply assumption
+  apply (wp set_reply_sc_refs_of)
+  apply (clarsimp elim!: rsubst[where P=P] split del: if_split simp del: fun_upd_apply)
+proof -
+  fix a :: "32 word" and repliesa :: "32 word list" and s :: "'a state"
+  have "\<forall>f w. f(w := ((state_refs_of s)
+                    (a := state_refs_of s a - {p \<in> state_refs_of s a. snd p = ReplySchedContext})) w
+           - {p \<in> ((state_refs_of s) (a := state_refs_of s a - {p \<in> state_refs_of s a. snd p = ReplySchedContext})) w. 
+            snd p = ReplySchedContext}) = f(w := state_refs_of s w - {p \<in> state_refs_of s w. snd p = ReplySchedContext})"
+    by (simp add: Collect_Diff_restrict_simp)
+  then show "foldl (\<lambda>f w. f (w := state_refs_of s w - {p \<in> state_refs_of s w. snd p = ReplySchedContext})) ((state_refs_of s) (a := state_refs_of s a - {p \<in> state_refs_of s a. snd p = ReplySchedContext})) repliesa = foldl (\<lambda>f w. f (w := ((state_refs_of s) (a := state_refs_of s a - {p \<in> state_refs_of s a. snd p = ReplySchedContext})) w - {p \<in> ((state_refs_of s) (a := state_refs_of s a - {p \<in> state_refs_of s a. snd p = ReplySchedContext})) w. snd p = ReplySchedContext})) ((state_refs_of s) (a := state_refs_of s a - {p \<in> state_refs_of s a. snd p = ReplySchedContext})) repliesa"
+    by presburger
+qed
 
+lemma sched_context_unbind_reply_invs[wp]:
+  notes refs_of_simps[simp del] fun_upd_apply[simp del]
+  shows
+  "\<lbrace>invs\<rbrace> sched_context_unbind_reply sc_ptr \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (simp add: sched_context_unbind_reply_def)
+  apply (wpsimp wp: mapM_x_set_reply_sc_refs_of valid_irq_node_typ hoare_vcg_conj_lift
+      simp: invs_def valid_state_def valid_pspace_def)
+                      prefer 7
+                      apply (rule hoare_strengthen_post)
+                      apply (wp mapM_x_set_reply_sc_refs_of)
+                      apply simp
+                      apply (wpsimp wp: mapM_x_wp' set_reply_sc_iflive valid_irq_node_typ
+                                        get_sched_context_wp get_simple_ko_wp)+
+  apply (clarsimp simp: invs_def valid_state_def valid_pspace_def)
+  apply (frule sym_refs_ko_atD[where p=sc_ptr, rotated])
+   apply (simp add: obj_at_def, elim conjE)
+  apply (simp (no_asm) add: foldl_fun_upd)
+  apply (intro conjI impI)
+    (* sc_ptr \<in> set (sc_replies sc) : False *)
+   apply (clarsimp simp: refs_of_def refs_of_sc_def get_refs_def2 split_def)
+   apply (drule_tac x="(sc_ptr, SCReply)" in bspec, clarsimp)
+   apply (clarsimp simp: obj_at_def refs_of_sc_def get_refs_def2)
+    (* sc_ptr \<notin> set (sc_replies sc) *)
+  apply (clarsimp simp: fun_upd_apply split_def)
+  apply (erule delta_sym_refs)
+   apply (clarsimp simp: fun_upd_apply split: if_split_asm)
+  apply (clarsimp simp: fun_upd_apply split: if_split_asm)
+   apply (clarsimp simp: refs_of_def refs_of_sc_def get_refs_def2)
+  apply (drule_tac x="(x, SCReply)" in bspec)
+   apply (clarsimp simp: refs_of_def refs_of_sc_def)
+  apply (drule state_refs_of_elemD)
+  apply (clarsimp simp: obj_at_def state_refs_of_def dest!: symreftype_inverse')
+  apply (case_tac ko;
+         clarsimp simp: refs_of_simps refs_of_defs get_refs_def2 image_iff
+                        ntfn_q_refs_of_def ep_q_refs_of_def tcb_st_refs_of_def
+                 split: ntfn.split_asm endpoint.split_asm thread_state.split_asm if_split_asm)
+  done
 
 text {* more invs rules *}
 

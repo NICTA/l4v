@@ -155,18 +155,21 @@ lemma is_up_8_32: "is_up (ucast :: word8 \<Rightarrow> word32)"
 
 
 crunch mdb_inv[wp]: schedule_tcb "\<lambda>s. P (cdt s)"
-  (wp: fast_finalise_lift crunch_wps)
+  (wp: crunch_wps)
 
 crunch mdb_inv[wp]: cancel_all_ipc "\<lambda>s. P (cdt s)"
-  (wp: fast_finalise_lift crunch_wps ignore: schedule_tcb)
+  (wp: crunch_wps ignore: schedule_tcb)
 
 crunch mdb_inv[wp]: cancel_all_signals "\<lambda>s. P (cdt s)"
-  (wp: fast_finalise_lift crunch_wps)
+  (wp: crunch_wps)
 
-crunch mdb_inv[wp]: sched_context_unbind_tcb "\<lambda>(s::det_ext state). P (cdt s)"
-  (wp: fast_finalise_lift crunch_wps)
+crunch mdb_inv[wp]: sched_context_unbind_tcb "\<lambda>s. P (cdt s)"
+  (wp: crunch_wps ignore: tcb_release_remove)
 
-crunch mdb_inv[wp]: fast_finalise "\<lambda>(s::det_ext state). P (cdt s)" (* RT det_ext? *)
+crunch mdb_inv[wp]: sched_context_donate "\<lambda>s. P (cdt s)"
+  (wp: crunch_wps hoare_vcg_if_lift2 ignore: test_reschedule)
+
+crunch mdb_inv[wp]: fast_finalise "\<lambda>s. P (cdt s)"
   (wp: fast_finalise_lift crunch_wps maybeM_inv ignore: sched_context_donate)
 
 crunch mdb_inv[wp]: set_cap "\<lambda>s. P (cdt s)"

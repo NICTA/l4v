@@ -78,6 +78,7 @@ crunches set_sc_obj_ref,get_sc_obj_ref
  for aligned[wp]: pspace_aligned
  and distinct[wp]: pspace_distinct
  and sc_at[wp]: "sc_at sc_ptr"
+ and tcb_at[wp]: "tcb_at t"
  and cte_wp_at[wp]: "cte_wp_at P c"
  and interrupt_irq_node[wp]: "\<lambda>s. P (interrupt_irq_node s)"
  and caps_of_state[wp]: "\<lambda>s. P (caps_of_state s)"
@@ -456,6 +457,8 @@ crunches tcb_sched_action,reschedule_required,possible_switch_to,tcb_release_enq
  and it[wp]: "\<lambda>s. P (idle_thread s)"
  and distinct[wp]: pspace_distinct
  and sc_at[wp]: "sc_at sc_ptr"
+ and tcb_at[wp]: "tcb_at tptr"
+ and st_tcb_at[wp]: "st_tcb_at P tptr"
  and interrupt_irq_node[wp]: "\<lambda>s. P (interrupt_irq_node s)"
  and no_cdt[wp]: "\<lambda>s. P (cdt s)"
  and no_revokable[wp]: "\<lambda>s. P (is_original_cap s)"
@@ -467,6 +470,7 @@ crunches tcb_sched_action,reschedule_required,possible_switch_to,tcb_release_enq
  and interrupt_states[wp]: "\<lambda>s. P (interrupt_states s)"
  and valid_objs[wp]: valid_objs
  and iflive[wp]: "if_live_then_nonz_cap"
+ and nonz_cap_to[wp]: "ex_nonz_cap_to p"
  and valid_mdb[wp]: valid_mdb
  and zombies[wp]: zombies_final
  and valid_irq_handlers[wp]: "valid_irq_handlers"
@@ -490,6 +494,7 @@ crunches tcb_sched_action,reschedule_required,possible_switch_to,tcb_release_enq
  and state_refs_of[wp]: "\<lambda>s. P (state_refs_of s)"
  and cte_wp_at[wp]: "cte_wp_at P c"
  and caps_of_state[wp]: "\<lambda>s. P (caps_of_state s)"
+ and arch_state[wp]: "\<lambda>s. P (arch_state s)"
  and aligned[wp]: pspace_aligned
  and distinct[wp]: pspace_distinct
  and valid_objs[wp]: valid_objs

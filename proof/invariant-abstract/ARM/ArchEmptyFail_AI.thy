@@ -38,6 +38,9 @@ global_interpretation EmptyFail_AI_load_word?: EmptyFail_AI_load_word
 
 context Arch begin global_naming ARM
 
+lemma maybeM_empty_fail[wp]: "empty_fail (maybeM f t)"
+  sorry
+
 crunch (empty_fail) empty_fail[wp, EmptyFail_AI_assms]: handle_fault
   (simp: kernel_object.splits option.splits arch_cap.splits cap.splits endpoint.splits
          bool.splits list.splits thread_state.splits split_def catch_def sum.splits
@@ -152,6 +155,9 @@ global_interpretation EmptyFail_AI_schedule?: EmptyFail_AI_schedule
   interpret Arch .
   case 1 show ?case by (unfold_locales; (fact EmptyFail_AI_assms)?)
   qed
+
+(* RT FIXME: Move to EmptyFail *)
+crunch (empty_fail) empty_fail[wp]: possible_switch_to
 
 context Arch begin global_naming ARM
 crunch (empty_fail) empty_fail[wp, EmptyFail_AI_assms]: handle_event, activate_thread

@@ -2638,20 +2638,20 @@ crunch valid_sched[wp]: delete_caller_cap valid_sched
 
 end
 
-lemma handle_double_fault_valid_queues:
+lemma handle_no_fault_valid_queues:
   "\<lbrace>valid_queues and not_queued tptr\<rbrace>
-     handle_double_fault tptr ex1 ex2
+     handle_no_fault tptr ex1 ex2
    \<lbrace>\<lambda>rv. valid_queues\<rbrace>"
-  apply (simp add: handle_double_fault_def set_thread_state_def)
+  apply (simp add: handle_no_fault_def set_thread_state_def)
   apply (wp | simp add:  set_thread_state_ext_def set_object_def)+
   apply (fastforce simp: valid_queues_def st_tcb_at_kh_if_split not_queued_def)
   done
 
-lemma handle_double_fault_valid_sched_action:
+lemma handle_no_fault_valid_sched_action:
   "\<lbrace>valid_sched_action and scheduler_act_not tptr\<rbrace>
-     handle_double_fault tptr ex1 ex2
+     handle_no_fault tptr ex1 ex2
    \<lbrace>\<lambda>rv. valid_sched_action\<rbrace>"
-  apply (simp add: handle_double_fault_def set_thread_state_def)
+  apply (simp add: handle_no_fault_def set_thread_state_def)
   apply (wp gts_wp | simp add: set_thread_state_ext_def set_object_def)+
   apply (clarsimp simp: valid_sched_action_def weak_valid_sched_action_def
                         is_activatable_def pred_tcb_at_def obj_at_def
@@ -2659,15 +2659,15 @@ lemma handle_double_fault_valid_sched_action:
                   split: scheduler_action.splits)
   done
 
-lemma handle_double_fault_valid_sched:
+lemma handle_no_fault_valid_sched:
   "\<lbrace>valid_sched and not_queued tptr and scheduler_act_not tptr\<rbrace>
-     handle_double_fault tptr ex1 ex2
+     handle_no_fault tptr ex1 ex2
    \<lbrace>\<lambda>rv. valid_sched\<rbrace>"
   apply (simp add: valid_sched_def)
   including no_pre
-  apply (wp handle_double_fault_valid_queues handle_double_fault_valid_sched_action
+  apply (wp handle_no_fault_valid_queues handle_no_fault_valid_sched_action
             set_thread_state_not_runnable_valid_blocked
-          | rule hoare_conjI | simp add: handle_double_fault_def | fastforce simp: simple_sched_action_def)+
+          | rule hoare_conjI | simp add: handle_no_fault_def | fastforce simp: simple_sched_action_def)+
   done
 
 lemma send_fault_ipc_error_sched_act_not[wp]:
@@ -2692,7 +2692,7 @@ lemma handle_fault_valid_sched:
    handle_fault thread ex \<lbrace>\<lambda>rv. valid_sched\<rbrace>"
   unfolding handle_fault_def
   by (simp add: handle_fault_def |
-      wp handle_double_fault_valid_sched send_fault_ipc_valid_sched)+
+      wp handle_no_fault_valid_sched send_fault_ipc_valid_sched)+
 end
 
 lemma idle_not_queued'':

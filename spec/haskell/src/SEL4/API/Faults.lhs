@@ -44,11 +44,15 @@ When a user-level task causes a fault or exception, represented in this model by
 > makeFaultMessage (UnknownSyscallException n) thread = do
 >     msg <- asUser thread $ mapM getRegister syscallMessage
 >     return (2, msg ++ [n])
->
+
 > makeFaultMessage (UserException exception code) thread = do
 >     msg <- asUser thread $ mapM getRegister exceptionMessage
 >     return (3, msg ++ [exception, code])
->
+
+> makeFaultMessage (Timeout badge) thread = do
+>     msg <- asUser thread $ mapM getRegister timeoutMessage
+>     return (4, msg ++ [badge])
+
 > makeFaultMessage (ArchFault af) thread = makeArchFaultMessage af thread
 
 \subsection{Receiving Fault IPC Replies}
@@ -75,6 +79,13 @@ This function returns "True" if the faulting thread should be restarted after th
 >     asUser thread $ zipWithM_
 >         (\r v -> setRegister r $ sanitiseRegister b r v)
 >         exceptionMessage msg
+>     return (label == 0)
+
+> handleFaultReply (Timeout _) thread label msg = do
+>     b <- getSanitiseRegisterInfo thread
+>     asUser thread $ zipWithM_
+>         (\r v -> setRegister r $ sanitiseRegister b r v)
+>         timeoutMessage msg
 >     return (label == 0)
 
 > handleFaultReply (ArchFault af) thread label msg =

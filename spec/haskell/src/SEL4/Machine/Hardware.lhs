@@ -240,3 +240,10 @@ The constant "nullPointer" is a physical pointer guaranteed to be invalid.
 > getCurrentTime :: MachineMonad Word64
 > getCurrentTime = Arch.getCurrentTime
 
+> ticksToUs :: Word64 -> Word64
+> ticksToUs = Arch.usToTicks
+
+> usToTicks :: Word64 -> Word64
+> usToTicks = Arch.usToTicks
+
+

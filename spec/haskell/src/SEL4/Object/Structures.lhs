@@ -203,9 +203,11 @@ list of pointers to waiting threads;
 
 > data SchedContext = SchedContext {
 >     scPeriod :: Ticks,
+>     scConsumed :: Ticks,
 >     scTCB :: Maybe (PPtr TCB),
 >     scNtfn :: Maybe (PPtr Notification),
 >     scRefills :: [Refill],
+>     scBadge :: Word,
 >     scRefillMax :: Int,
 >     scRefillHead :: Int,
 >     scRefillTail :: Int,
@@ -280,6 +282,8 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbFaultHandler :: CTE,
 
+>         tcbTimeoutHandler :: CTE,
+
 \item the security domain and a flag that determines whether the thread can set the security domain of other threads.
 
 >         tcbDomain :: Domain,
@@ -330,6 +334,9 @@ Each TCB contains four CTE entries. The following constants define the slot numb
 
 > tcbFaultHandlerSlot :: Word
 > tcbFaultHandlerSlot = 3
+
+> tcbTimeoutHandlerSlot :: Word
+> tcbTimeoutHandlerSlot = 4
 
 > minPriority :: Priority
 > minPriority = 0

@@ -43,6 +43,7 @@ This module defines the ARM register set.
 > nbsendRecvDest = R8
 > exceptionMessage = [FaultInstruction, SP, CPSR]
 > syscallMessage = [R0 .. R7] ++ [FaultInstruction, SP, LR, CPSR]
+> timeoutMessage = [FaultInstruction, SP, CPSR] ++ [R0, R1] ++ [R8 .. IP] ++ [R2 .. R7] ++ [LR]
 
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
 > elr_hyp = LR_svc

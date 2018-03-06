@@ -27,6 +27,7 @@ We use the C preprocessor to select a target architecture.
 
 > import SEL4.Config
 > import SEL4.API.Types
+> import SEL4.API.Failures(Fault(..))
 > import SEL4.API.Faults
 > import SEL4.Machine
 > import SEL4.Model
@@ -35,6 +36,7 @@ We use the C preprocessor to select a target architecture.
 > import SEL4.Object.SchedContext
 > import SEL4.Object.Structures
 > import SEL4.Kernel.VSpace
+> import {-# SOURCE #-} SEL4.Kernel.FaultHandler(handleTimeout, validTimeoutHandler)
 > import {-# SOURCE #-} SEL4.Kernel.Init
 
 > import Data.Bits
@@ -201,7 +203,22 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                 Nothing -> do
 >                     doIPCTransfer sender Nothing 0 True receiver
 >                     setThreadState Running receiver
->                     attemptSwitchTo receiver
+>                 Just (Timeout badge) -> do
+>                     mi <- getMessageInfo sender
+>                     buf <- lookupIPCBuffer False sender
+>                     mrs <- getMRs sender buf mi
+>                     restart <- handleFaultReply (Timeout badge) receiver (msgLabel mi) mrs
+>                     threadSet (\tcb -> tcb { tcbFault = Nothing }) receiver
+>                     setThreadState (if restart then Restart else Inactive) receiver
+>                     runnable <- isRunnable receiver
+>                     tcb <- getObject receiver
+>                     when (tcbSchedContext tcb /= Nothing && runnable) $ do
+>                         refillUnblockCheck $ fromJust $ tcbSchedContext tcb
+>                         ready <- refillReady $ fromJust $ tcbSchedContext tcb
+>                         sufficient <- refillSufficient (fromJust $ tcbSchedContext tcb) 0
+>                         if ready && sufficient
+>                             then attemptSwitchTo receiver
+>                             else postpone (fromJust $ tcbSchedContext tcb)
 >                 Just f -> do
 >                     mi <- getMessageInfo sender
 >                     buf <- lookupIPCBuffer False sender
@@ -209,7 +226,20 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                     restart <- handleFaultReply f receiver (msgLabel mi) mrs
 >                     threadSet (\tcb -> tcb { tcbFault = Nothing }) receiver
 >                     setThreadState (if restart then Restart else Inactive) receiver
->                     when restart $ attemptSwitchTo receiver
+>                     runnable <- isRunnable receiver
+>                     tcb <- getObject receiver
+>                     when (tcbSchedContext tcb /= Nothing && runnable) $ do
+>                         refillUnblockCheck $ fromJust $ tcbSchedContext tcb
+>                         ready <- refillReady $ fromJust $ tcbSchedContext tcb
+>                         sufficient <- refillSufficient (fromJust $ tcbSchedContext tcb) 0
+>                         if ready && sufficient
+>                             then attemptSwitchTo receiver
+>                             else do
+>                                 isHandlerValid <- validTimeoutHandler receiver
+>                                 if isHandlerValid
+>                                     then handleTimeout receiver
+>                                     else do
+>                                         postpone (fromJust $ tcbSchedContext tcb)
 
 \subsubsection{Ordinary IPC}
 
@@ -645,19 +675,23 @@ Kernel init will created a initial thread whose tcbPriority is max priority.
 
 > initTCB = (makeObject::TCB){ tcbPriority=maxBound }
 
-> endTimeslice :: Kernel ()
-> endTimeslice = do
+> endTimeslice :: Bool -> Kernel ()
+> endTimeslice canTimeoutFault = do
 >     ct <- getCurThread
 >     it <- getIdleThread
 >     when (ct /= it) $ do
 >         scPtr <- getCurSc
 >         ready <- refillReady scPtr
 >         sufficient <- refillSufficient scPtr 0
->         if ready && sufficient
->             then do
->                 cur <- getCurThread
->                 tcbSchedAppend cur
->             else postpone scPtr
+>         valid <- validTimeoutHandler ct
+>         if (canTimeoutFault && valid)
+>             then handleTimeout ct
+>             else
+>                 if ready && sufficient
+>                     then do
+>                         cur <- getCurThread
+>                         tcbSchedAppend cur
+>                     else postpone scPtr
 
 > inReleaseQueue :: PPtr TCB -> Kernel Bool
 > inReleaseQueue tcbPtr = do

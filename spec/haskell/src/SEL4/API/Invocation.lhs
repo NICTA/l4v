@@ -62,6 +62,7 @@ The following data type defines the set of possible TCB invocation operations. T
 >             tcThread :: PPtr TCB,
 >             tcThreadCapSlot :: PPtr CTE,
 >             tcNewFaultHandler :: Maybe (Capability, PPtr CTE),
+>             tcNewTimeoutHandler :: Maybe (Capability, PPtr CTE),
 >             tcNewMCPriority :: Maybe (Priority, PPtr TCB),
 >             tcNewPriority :: Maybe (Priority, PPtr TCB),
 >             tcNewCRoot, tcNewVRoot :: Maybe (Capability, PPtr CTE),
@@ -89,7 +90,10 @@ The following data type defines the set of possible TCB invocation operations. T
 >         deriving Show
 
 > data SchedContextInvocation
->         = InvokeSchedContextBind {
+>         = InvokeSchedContextConsumed {
+>             consumedScPtr :: PPtr SchedContext,
+>             buffer :: [Word] }
+>         | InvokeSchedContextBind {
 >             bindScPtr :: PPtr SchedContext,
 >             bindCap :: Capability }
 >         | InvokeSchedContextUnbindObject {
@@ -103,7 +107,8 @@ The following data type defines the set of possible TCB invocation operations. T
 >             configureScPtr :: PPtr SchedContext,
 >             ticks1 :: Ticks,
 >             ticks2 :: Ticks,
->             n :: Int }
+>             n :: Int,
+>             badge :: Word }
 >         deriving Show
 
 \subsubsection{CNode Invocations}

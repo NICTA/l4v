@@ -62,6 +62,7 @@ The following type enumerates all the kinds of invocations that clients can requ
 >         | IRQClearIRQHandler
 >         | DomainSetSet
 >         | SchedControlConfigure
+>         | SchedContextConsumed
 >         | SchedContextBind
 >         | SchedContextUnbind
 >         | SchedContextUnbindObject
@@ -103,12 +104,13 @@ The following type enumerates all the kinds of invocations that clients can requ
 >          IRQClearIRQHandler -> 26
 >          TCBSetSchedContext -> 27
 >          SchedControlConfigure -> 28
->          SchedContextBind -> 29
->          SchedContextUnbind -> 30
->          SchedContextUnbindObject -> 31
+>          SchedContextConsumed -> 29
+>          SchedContextBind -> 30
+>          SchedContextUnbind -> 31
+>          SchedContextUnbindObject -> 32
 >          DomainSetSet -> apiMax
 >          ArchInvocationLabel a -> apiMax + 1 + fromEnum a
->          where apiMax = 32
+>          where apiMax = 33
 >     toEnum n
 >         | n == 0 = InvalidInvocation
 >         | n == 1 = UntypedRetype
@@ -139,13 +141,14 @@ The following type enumerates all the kinds of invocations that clients can requ
 >         | n == 26 = IRQClearIRQHandler
 >         | n == 27 = TCBSetSchedContext
 >         | n == 28 = SchedControlConfigure
->         | n == 29 = SchedContextBind
->         | n == 30 = SchedContextUnbind
->         | n == 31 = SchedContextUnbindObject
->         | n == 32 = DomainSetSet
+>         | n == 29 = SchedContextConsumed
+>         | n == 30 = SchedContextBind
+>         | n == 31 = SchedContextUnbind
+>         | n == 32 = SchedContextUnbindObject
+>         | n == 33 = DomainSetSet
 >         | n > apiMax = ArchInvocationLabel $ toEnum (n - 1 - apiMax)
 >         | otherwise = error "toEnum out of range for InvocationLabel"
->         where apiMax = 32
+>         where apiMax = 33
 
 Decode the invocation type requested by a particular message label.
 

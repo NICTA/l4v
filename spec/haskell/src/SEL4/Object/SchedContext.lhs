@@ -31,14 +31,16 @@ This module uses the C preprocessor to select a target architecture.
 >         maybeDonateSc, maybeReturnSc,
 >         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn,
 >         isRoundRobin, getRefills, setRefills, refillFull, refillAbsoluteMax,
+>         schedContextCompleteYieldTo, schedContextCancelYieldTo
 >     ) where
 
 \begin{impdetails}
 
 > import SEL4.Machine.Hardware
-> import SEL4.Machine.RegisterSet(PPtr, msgInfoRegister, setRegister)
+> import SEL4.Machine.RegisterSet(PPtr(..), msgInfoRegister, setRegister, Word)
 > import SEL4.API.Failures(SyscallError(..))
 > import SEL4.API.Types(MessageInfo(..), wordFromMessageInfo)
+> import {-# SOURCE #-} SEL4.Kernel.VSpace(lookupIPCBuffer)
 > import SEL4.Model.Failures(KernelF, withoutFailure)
 > import SEL4.Model.PSpace(getObject, setObject)
 > import SEL4.Model.StateData
@@ -395,13 +397,16 @@ This module uses the C preprocessor to select a target architecture.
 >         Nothing -> return ()
 >         Just scPtr -> schedContextUnbindTCB scPtr
 
+> setConsumed :: PPtr SchedContext -> PPtr Word -> Kernel ()
+> setConsumed scPtr buffer = do
+>     consumed <- schedContextUpdateConsumed scPtr
+>     tptr <- getCurThread
+>     length <- return $ setTimeArg 0 consumed buffer tptr
+>     asUser tptr $ setRegister msgInfoRegister (wordFromMessageInfo (MI length 0 0 0))
+
 > invokeSchedContext :: SchedContextInvocation -> KernelF SyscallError ()
 > invokeSchedContext iv = withoutFailure $ case iv of
->     InvokeSchedContextConsumed scPtr buffer -> do
->         consumed <- schedContextUpdateConsumed scPtr
->         tptr <- getCurThread
->         length <- return $ setTimeArg 0 consumed buffer tptr
->         asUser tptr $ setRegister msgInfoRegister (wordFromMessageInfo (MI length 0 0 0))
+>     InvokeSchedContextConsumed scPtr buffer -> setConsumed scPtr (PPtr (head buffer))
 >     InvokeSchedContextBind scPtr cap -> case cap of
 >         ThreadCap tcbPtr -> schedContextBindTCB scPtr tcbPtr
 >         NotificationCap ntfn _ _ _ -> schedContextBindNtfn scPtr ntfn
@@ -413,6 +418,24 @@ This module uses the C preprocessor to select a target architecture.
 >     InvokeSchedContextUnbind scPtr -> do
 >         schedContextUnbindAllTCBs scPtr
 >         schedContextUnbindNtfn scPtr
+>     InvokeSchedContextYieldTo scPtr buffer -> do
+>         refillUnblockCheck scPtr
+>         sc <- getSchedContext scPtr
+>         tptr <- return $ fromJust $ scTCB sc
+>         inq <- inReleaseQueue tptr
+>         schedulable <- isSchedulable tptr inq
+>         if schedulable
+>             then do
+>                 sufficient <- refillSufficient scPtr 0
+>                 ready <- refillReady scPtr
+>                 assert (sufficient && ready) "invokeSchedContext: error for InvokeSchedContextYieldTo"
+>                 ctPtr <- getCurThread
+>                 tcb <- getObject ctPtr
+>                 yieldToScPtr <- return $ fromJust $ tcbYieldTo tcb
+>                 setSchedContext yieldToScPtr sc
+>                 attemptSwitchTo $ fromJust $ scTCB sc
+>                 setThreadState YieldTo ctPtr
+>             else setConsumed scPtr (PPtr (head buffer))
 
 > invokeSchedControlConfigure :: SchedControlInvocation -> KernelF SyscallError ()
 > invokeSchedControlConfigure iv = case iv of
@@ -580,7 +603,7 @@ This module uses the C preprocessor to select a target architecture.
 >         setSchedContext scPtr (sc { scTCB = Nothing })
 
 > coreSchedContextBytes :: Int
-> coreSchedContextBytes = 80
+> coreSchedContextBytes = 88
 
 > refillSizeBytes :: Int
 > refillSizeBytes = 16
@@ -588,4 +611,25 @@ This module uses the C preprocessor to select a target architecture.
 > refillAbsoluteMax :: Capability -> Int
 > refillAbsoluteMax (SchedContextCap _ sc) = (sc - coreSchedContextBytes) `div` refillSizeBytes + minRefills
 > refillAbsoluteMax _ = 0
+
+> schedContextCancelYieldTo :: PPtr TCB -> Kernel ()
+> schedContextCancelYieldTo tptr = do
+>     tcb <- getObject tptr
+>     scPtrOpt <- return $ tcbYieldTo tcb
+>     when (scPtrOpt /= Nothing) $ do
+>         scPtr <- return $ fromJust scPtrOpt
+>         sc <- getSchedContext scPtr
+>         setSchedContext scPtr (sc { scYieldFrom = Nothing })
+>         threadSet (\tcb -> tcb { tcbYieldTo = Nothing }) tptr
+
+> schedContextCompleteYieldTo :: PPtr TCB -> Kernel ()
+> schedContextCompleteYieldTo tptr = do
+>     tcb <- getObject tptr
+>     scPtrOpt <- return $ tcbYieldTo tcb
+>     when (scPtrOpt /= Nothing) $ do
+>         scPtr <- return $ fromJust scPtrOpt
+>         bufferOpt <- lookupIPCBuffer True tptr
+>         setConsumed scPtr (fromJust bufferOpt)
+>         schedContextCancelYieldTo tptr
+>         setThreadState Running tptr
 

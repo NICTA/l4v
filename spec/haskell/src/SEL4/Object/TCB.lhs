@@ -675,12 +675,22 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >                 _ -> throw (InvalidCapability 1)
 >             return $ InvokeSchedContextUnbindObject scPtr cap
 >         SchedContextUnbind -> return $! InvokeSchedContextUnbind scPtr
+>         SchedContextYieldTo -> do
+>             sc <- withoutFailure $ getSchedContext scPtr
+>             ctPtr <- withoutFailure $ getCurThread
+>             ct <- withoutFailure $ getObject ctPtr
+>             when (scTCB sc == Nothing) $ throw IllegalOperation
+>             when (fromJust (scTCB sc) == ctPtr) $ throw IllegalOperation
+>             tcb <- withoutFailure $ getObject $ fromJust $ scTCB sc
+>             when (tcbPriority tcb > tcbMCP ct) $ throw IllegalOperation
+>             withoutFailure $ setThreadState Restart ctPtr
+>             return $ InvokeSchedContextYieldTo scPtr args
 >         _ -> throw IllegalOperation
 
 > parseTimeArg :: Int -> [Word] -> Time
 > parseTimeArg i args = fromIntegral (args !! (i+1)) `shiftL` 32 + fromIntegral (args !! i)
 
-> setTimeArg :: Int -> Time -> [Word] -> PPtr TCB -> Word
+> setTimeArg :: Int -> Time -> PPtr Word -> PPtr TCB -> Word
 > setTimeArg = undefined
 
 > decodeSchedControlInvocation :: Word -> [Word] -> [Capability] ->

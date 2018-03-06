@@ -92,7 +92,7 @@ The following data type defines the set of possible TCB invocation operations. T
 > data SchedContextInvocation
 >         = InvokeSchedContextConsumed {
 >             consumedScPtr :: PPtr SchedContext,
->             buffer :: [Word] }
+>             consumedbuffer :: [Word] }
 >         | InvokeSchedContextBind {
 >             bindScPtr :: PPtr SchedContext,
 >             bindCap :: Capability }
@@ -100,6 +100,9 @@ The following data type defines the set of possible TCB invocation operations. T
 >             unbindObjectScPtr :: PPtr SchedContext,
 >             unbindObjectCap :: Capability }
 >         | InvokeSchedContextUnbind { unbindScPtr :: PPtr SchedContext }
+>         | InvokeSchedContextYieldTo {
+>             yieldToScPtr :: PPtr SchedContext,
+>             yieldTobuffer :: [Word] }
 >         deriving Show
 
 > data SchedControlInvocation

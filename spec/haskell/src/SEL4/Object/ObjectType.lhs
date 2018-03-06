@@ -44,6 +44,7 @@ We use the C preprocessor to select a target architecture.
 
 > import Data.Bits
 > import Data.WordLib
+> import Data.Maybe(fromJust)
 
 \end{impdetails}
 
@@ -124,24 +125,31 @@ A "CNodeCap" is replaced with the appropriate "Zombie". No other action is neede
 
 Threads are treated as special capability nodes; they also become zombies when their final capabilities are deleted, but they must first be suspended to prevent them being scheduled during deletion.
 
-> finaliseCap (ThreadCap { capTCBPtr = tcb}) True _ = do
->     cte_ptr <- getThreadCSpaceRoot tcb
->     unbindNotification tcb
->     unbindFromSc tcb
->     suspend tcb
->     Arch.prepareThreadDelete tcb
+> finaliseCap (ThreadCap { capTCBPtr = tptr}) True _ = do
+>     cte_ptr <- getThreadCSpaceRoot tptr
+>     unbindNotification tptr
+>     tcb <- getObject tptr
+>     sc <- getSchedContext $ fromJust $ tcbSchedContext tcb
+>     schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
+>     unbindFromSc tptr
+>     suspend tptr
+>     Arch.prepareThreadDelete tptr
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)
 
-> finaliseCap (SchedContextCap { capSchedContextPtr = sc }) final _ = do
+> finaliseCap (SchedContextCap { capSchedContextPtr = scPtr }) final _ = do
 >     when final $ do
->         schedContextUnbindAllTCBs sc
+>         schedContextUnbindAllTCBs scPtr
 >     when final $ do
->         schedContextUnbindNtfn sc
+>         schedContextUnbindNtfn scPtr
 >     when final $ do
->         schedContextClearReplies sc
->     return (NullCap, Nothing)
+>         schedContextClearReplies scPtr
+>     when final $ do
+>         sc <- getSchedContext scPtr
+>         when (scYieldFrom sc /= Nothing) $ do
+>             schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
+>     return (NullCap, NullCap)
 
-> finaliseCap SchedControlCap _ _ = return (NullCap, Nothing)
+> finaliseCap SchedControlCap _ _ = return (NullCap, NullCap)
 
 Zombies have already been finalised.
 

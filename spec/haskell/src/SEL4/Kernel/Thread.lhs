@@ -87,6 +87,8 @@ The "activateThread" function is used to prepare a thread to run. If the thread 
 >         state <- getThreadState thread
 >         case state of
 >             Running -> return ()
+>             YieldTo -> do
+>                 schedContextCompleteYieldTo thread
 >             Restart -> do
 >                 pc <- asUser thread $ getRestartPC
 >                 asUser thread $ setNextPC pc
@@ -118,6 +120,7 @@ Note that the idle thread is not considered runnable; this is to prevent it bein
 >         return $ case state of
 >             Running -> True
 >             Restart -> True
+>             YieldTo -> True
 >             _ -> False
 
 > isSchedulable :: PPtr TCB -> Bool -> Kernel Bool
@@ -139,6 +142,7 @@ When a thread is suspended, either explicitly by a TCB invocation or implicitly 
 >     cancelIPC target
 >     setThreadState Inactive target
 >     tcbSchedDequeue target
+>     schedContextCancelYieldTo target
 
 \subsubsection{Restarting a Blocked Thread}
 
@@ -213,7 +217,6 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                     runnable <- isRunnable receiver
 >                     tcb <- getObject receiver
 >                     when (tcbSchedContext tcb /= Nothing && runnable) $ do
->                         refillUnblockCheck $ fromJust $ tcbSchedContext tcb
 >                         ready <- refillReady $ fromJust $ tcbSchedContext tcb
 >                         sufficient <- refillSufficient (fromJust $ tcbSchedContext tcb) 0
 >                         if ready && sufficient
@@ -229,7 +232,6 @@ Replies sent by the "Reply" and "ReplyRecv" system calls can either be normal IP
 >                     runnable <- isRunnable receiver
 >                     tcb <- getObject receiver
 >                     when (tcbSchedContext tcb /= Nothing && runnable) $ do
->                         refillUnblockCheck $ fromJust $ tcbSchedContext tcb
 >                         ready <- refillReady $ fromJust $ tcbSchedContext tcb
 >                         sufficient <- refillSufficient (fromJust $ tcbSchedContext tcb) 0
 >                         if ready && sufficient

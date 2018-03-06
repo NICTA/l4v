@@ -66,6 +66,7 @@ The following type enumerates all the kinds of invocations that clients can requ
 >         | SchedContextBind
 >         | SchedContextUnbind
 >         | SchedContextUnbindObject
+>         | SchedContextYieldTo
 >         | ArchInvocationLabel ArchLabels.ArchInvocationLabel
 >         deriving (Show, Eq)
 
@@ -108,9 +109,10 @@ The following type enumerates all the kinds of invocations that clients can requ
 >          SchedContextBind -> 30
 >          SchedContextUnbind -> 31
 >          SchedContextUnbindObject -> 32
+>          SchedContextYieldTo -> 33
 >          DomainSetSet -> apiMax
 >          ArchInvocationLabel a -> apiMax + 1 + fromEnum a
->          where apiMax = 33
+>          where apiMax = 34
 >     toEnum n
 >         | n == 0 = InvalidInvocation
 >         | n == 1 = UntypedRetype
@@ -145,10 +147,11 @@ The following type enumerates all the kinds of invocations that clients can requ
 >         | n == 30 = SchedContextBind
 >         | n == 31 = SchedContextUnbind
 >         | n == 32 = SchedContextUnbindObject
->         | n == 33 = DomainSetSet
+>         | n == 33 = SchedContextYieldTo
+>         | n == 34 = DomainSetSet
 >         | n > apiMax = ArchInvocationLabel $ toEnum (n - 1 - apiMax)
 >         | otherwise = error "toEnum out of range for InvocationLabel"
->         where apiMax = 33
+>         where apiMax = 34
 
 Decode the invocation type requested by a particular message label.
 

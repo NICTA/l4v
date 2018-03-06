@@ -293,9 +293,7 @@ The TCB is used to store various data about the thread's current state:
 
 >         tcbFault :: Maybe Fault,
 
-\item a capability pointer to the fault handler endpoint, which receives an IPC from the kernel whenever this thread generates a fault;
-
->         tcbFaultHandler :: CPtr,
+>         tcbFaultHandler :: Capability,
 
 \item the virtual address of the thread's IPC buffer, which is readable at user level as thread-local data (by an architecture-defined mechanism), and is also used by the kernel to determine the buffer's offset within its frame;
 

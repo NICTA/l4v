@@ -716,7 +716,7 @@ lemma reply_remove_arch[wp]:
                wp: hoare_drop_imp)
 
 lemma reply_unlink_sc_valid_objs [wp]:
-  "\<lbrace>valid_objs and reply_at rp\<rbrace> reply_unlink_sc scp rp \<lbrace>\<lambda>_. valid_objs\<rbrace>"
+  "\<lbrace>valid_objs\<rbrace> reply_unlink_sc scp rp \<lbrace>\<lambda>_. valid_objs\<rbrace>"
   apply (wpsimp simp: reply_unlink_sc_def update_sk_obj_ref_def)
        apply (wpsimp simp: set_simple_ko_def set_object_def get_simple_ko_def get_object_def
                            get_sched_context_def)+
@@ -731,20 +731,30 @@ lemma reply_unlink_sc_tcb_at [wp]:
                    get_object_def get_sched_context_def)
 
 lemma reply_unlink_tcb_valid_objs [wp]:
-  "\<lbrace>valid_objs and reply_at rp\<rbrace> reply_unlink_tcb rp \<lbrace>\<lambda>_. valid_objs\<rbrace>"
+  "\<lbrace>valid_objs\<rbrace> reply_unlink_tcb rp \<lbrace>\<lambda>_. valid_objs\<rbrace>"
   apply (wpsimp simp: reply_unlink_tcb_def update_sk_obj_ref_def get_simple_ko_def get_object_def
                       get_thread_state_def thread_get_def)+
   apply (auto simp: valid_obj_def valid_reply_def)
   done
 
+lemma reply_unlink_tcb_tcb_at [wp]:
+  "\<lbrace>tcb_at t\<rbrace> reply_unlink_tcb rp \<lbrace>\<lambda>_. tcb_at t\<rbrace>"
+  apply  (wpsimp simp: reply_unlink_tcb_def update_sk_obj_ref_def obj_at_def is_tcb a_type_def
+            split: kernel_object.splits wp: thread_get_wp get_object_wp get_simple_ko_wp)
+     apply (rule hoare_strengthen_post)
+      apply (rule gts_sp)
+     apply (clarsimp simp: obj_at_def pred_tcb_at_def, fastforce)
+    apply (wpsimp wp: get_simple_ko_wp)+
+  apply (clarsimp simp: obj_at_def pred_tcb_at_def is_tcb)
+  done
+
 lemma reply_remove_valid_objs [wp]:
-  "\<lbrace>valid_objs and (\<lambda>s. reply_tcb_reply_at (\<lambda>t. \<exists>tp. t = Some tp \<and> tcb_at tp s) r s)\<rbrace>
+  "\<lbrace>valid_objs and (\<lambda>s. reply_tcb_reply_at (\<lambda>x. x=Some t \<and> tcb_at t s) r s)\<rbrace>
         reply_remove r \<lbrace>\<lambda>_. valid_objs\<rbrace>"
-  apply (wpsimp simp: reply_remove_def reply_unlink_tcb_def update_sk_obj_ref_def get_simple_ko_def
+  apply (wpsimp simp: reply_remove_def update_sk_obj_ref_def get_simple_ko_def
       get_thread_state_def get_sched_context_def
       wp: hoare_vcg_if_lift2 hoare_drop_imp get_object_wp thread_get_wp)
-  apply (clarsimp simp: obj_at_def reply_tcb_reply_at_def is_tcb is_reply)
-  apply (erule (1) valid_objsE, clarsimp simp: valid_obj_def valid_reply_def)
+  apply (clarsimp simp: obj_at_def reply_tcb_reply_at_def is_tcb is_reply cong: conj_cong)
   done
 
 lemma reply_remove_pspace_aligned[wp]:

@@ -1689,6 +1689,22 @@ lemma dmo_ackInterrupt[wp]: "\<lbrace>invs\<rbrace> do_machine_op (ackInterrupt 
   apply(erule (1) use_valid[OF _ ackInterrupt_irq_masks])
   done
 
+lemmas setDeadline_irq_masks = no_irq[OF no_irq_setDeadline]
+crunch device_state_inv[wp]: setDeadline "\<lambda>ms. P (device_state ms)"
+lemma dmo_setDeadline[wp]: "\<lbrace>invs\<rbrace> do_machine_op (setDeadline t) \<lbrace>\<lambda>y. invs\<rbrace>"
+  apply (wp dmo_invs)
+  apply safe
+   apply (drule_tac Q="\<lambda>_ m'. underlying_memory m' p = underlying_memory m p"
+          in use_valid)
+     apply ((clarsimp simp: setDeadline_def machine_op_lift_def
+                           machine_rest_lift_def split_def | wp)+)[3]
+  apply(erule (1) use_valid[OF _ setDeadline_irq_masks])
+  done
+
+lemma set_next_timer_interrupt_invs [wp]:
+  "\<lbrace>invs\<rbrace> set_next_timer_interrupt t' \<lbrace>\<lambda>_. invs\<rbrace>"
+  by (wpsimp simp: set_next_timer_interrupt_def)
+
 lemma svr_invs [wp]:
   "\<lbrace>invs\<rbrace> set_vm_root t' \<lbrace>\<lambda>_. invs\<rbrace>"
   apply (simp add: set_vm_root_def)
@@ -3506,7 +3522,7 @@ lemma empty_table_pt_capI:
 
 crunch underlying_memory[wp]: cleanCacheRange_PoC, cleanL2Range, invalidateL2Range, invalidateByVA,
                               cleanInvalidateL2Range, cleanInvalByVA, invalidateCacheRange_I,
-                              branchFlushRange, ackInterrupt
+                              branchFlushRange, ackInterrupt,setDeadline
                            "\<lambda>m'. underlying_memory m' p = um"
   (wp: cacheRangeOp_lift simp: cache_machine_op_defs machine_op_lift_def machine_rest_lift_def split_def
    ignore: ignore_failure)

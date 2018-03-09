@@ -9,7 +9,7 @@
  *)
 
 theory Tcb_AI
-imports "./$L4V_ARCH/ArchCNodeInv_AI"
+imports "./$L4V_ARCH/ArchCNodeInv_AI" SchedContextInv_AI
 begin
 
 locale Tcb_AI_1 =

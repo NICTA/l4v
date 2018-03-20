@@ -38,6 +38,9 @@ crunch domain_time_inv [wp, DetSchedDomainTime_AI_assms]:
   arch_post_modify_registers, arch_post_cap_deletion
   "\<lambda>s. P (domain_time s)"
 
+crunch domain_consumed_time_inv [wp, DetSchedDomainTime_AI_assms]: make_arch_fault_msg
+  "\<lambda>s. P (domain_time s)(consumed_time s)"
+
 end
 
 global_interpretation DetSchedDomainTime_AI?: DetSchedDomainTime_AI

@@ -1056,7 +1056,10 @@ lemma tcb_sched_action_lift:
   \<Longrightarrow> \<lbrace>P\<rbrace> tcb_sched_action a b \<lbrace>\<lambda>_. P\<rbrace>"
   by (wp | simp add: tcb_sched_action_def etcb_at_def)+
 
-crunch valid_idle[wp]: next_domain valid_idle
+lemma next_domain_valid_idle[wp]:
+  "\<lbrace> valid_idle \<rbrace> next_domain \<lbrace> \<lambda>_. valid_idle \<rbrace>"
+  apply (wpsimp simp: next_domain_def)
+  by (clarsimp simp: valid_idle_def Let_def)
 
 definition next_thread where
   "next_thread queues \<equiv> (hd (max_non_empty_queue queues))"

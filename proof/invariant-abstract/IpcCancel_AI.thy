@@ -1004,13 +1004,8 @@ lemma reply_remove_tcb_invs:
   done
 
 lemma reply_cancel_ipc_invs:
-  assumes delete: "\<And>p. \<lbrace>invs and emptyable p\<rbrace>
-                        (cap_delete_one p :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
-  shows           "\<lbrace>invs and tcb_sched_context_tcb_at (\<lambda>x. x = None) t\<rbrace>
-                   (reply_cancel_ipc t r :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (simp add: reply_cancel_ipc_def)
-  apply (wpsimp wp: delete select_wp)
-    apply (wpsimp wp: reply_remove_tcb_invs)
+  "\<lbrace>invs and tcb_sched_context_tcb_at (\<lambda>x. x = None) t\<rbrace> reply_cancel_ipc t r \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: reply_cancel_ipc_def wp: reply_remove_tcb_invs)
    apply (rule hoare_vcg_conj_lift[rotated])
     apply (wpsimp simp: thread_set_def set_object_def)
    apply (wpsimp wp: thread_set_invs_trivial)
@@ -1018,7 +1013,7 @@ lemma reply_cancel_ipc_invs:
   done
 
 lemma (in delete_one_abs) cancel_ipc_invs[wp]:
-  "\<lbrace>invs\<rbrace> (cancel_ipc t :: (unit,'a) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
+  "\<lbrace>invs and tcb_sched_context_tcb_at (\<lambda>x. x = None) t\<rbrace> (cancel_ipc t :: (unit,'a) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (simp add: cancel_ipc_def)
   apply (rule hoare_seq_ext [OF _ gts_sp])
   apply (case_tac state, simp_all)
@@ -1028,7 +1023,7 @@ lemma (in delete_one_abs) cancel_ipc_invs[wp]:
                             hoare_weaken_pre [OF reply_cancel_ipc_invs]
                             delete_one_invs
                      elim!: pred_tcb_weakenE)
-  sorry
+  done
 
 context IpcCancel_AI begin
 
@@ -1167,7 +1162,7 @@ crunch it[wp]: cancel_ipc "\<lambda>(s::'a state). P (idle_thread s)"
   (wp: maybeM_inv)
 end
 
-lemma (in delete_one_abs) reply_cancel_ipc_no_reply_cap[wp]:
+lemma (in delete_one_abs) reply_cancel_ipc_no_reply_cap:
   notes hoare_pre [wp_pre del]
   shows "\<lbrace>invs and tcb_at t\<rbrace> (reply_cancel_ipc t r:: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv s. \<not> has_reply_cap t s\<rbrace>"
   apply (simp add: reply_cancel_ipc_def)
@@ -1190,7 +1185,7 @@ sorry (*
   done*) (* RT: the statement is probably wrong *)
 
 
-lemma (in delete_one_abs) cancel_ipc_no_reply_cap[wp]:
+lemma (in delete_one_abs) cancel_ipc_no_reply_cap:
   shows "\<lbrace>invs and tcb_at t\<rbrace> (cancel_ipc t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv s. \<not> has_reply_cap t s\<rbrace>"
   apply (simp add: cancel_ipc_def)
 sorry
@@ -1206,7 +1201,7 @@ sorry
   done *) (* RT: the statement is probably wrong *)
 
 
-lemma (in delete_one_abs) suspend_invs[wp]:
+lemma (in delete_one_abs) suspend_invs:
   "\<lbrace>invs and tcb_at t and (\<lambda>s. t \<noteq> idle_thread s)\<rbrace>
    (suspend t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
 sorry (*  apply (simp add: suspend_def)
@@ -1755,7 +1750,7 @@ lemma cancel_all_unlive_helper:
   done
 
 
-lemma cancel_all_ipc_unlive[wp]:
+lemma cancel_all_ipc_unlive:
   "\<lbrace>\<top>\<rbrace> cancel_all_ipc ptr \<lbrace>\<lambda> rv. obj_at (Not \<circ> live) ptr\<rbrace>"
   apply (simp add: cancel_all_ipc_def)
   apply (rule hoare_seq_ext [OF _ get_simple_ko_sp])
@@ -1763,7 +1758,7 @@ lemma cancel_all_ipc_unlive[wp]:
     apply wp
     apply (clarsimp simp: live_def elim!: obj_at_weakenE)
    apply (wp cancel_all_unlive_helper set_object_at_obj3 | simp only: obj_at_exst_update)+
-   apply (clarsimp simp: live_def)
+     apply (clarsimp simp: live_def)
 (*  apply (wp cancel_all_unlive_helper set_object_at_obj3 | simp only: obj_at_exst_update)+
   apply (clarsimp simp: live_def)
   done*) sorry
@@ -1771,7 +1766,8 @@ lemma cancel_all_ipc_unlive[wp]:
 
 (* This lemma should be sufficient provided that each notification object is unbound BEFORE the 'cancel_all_signals' function is invoked. TODO: Check the abstract specification and the C and Haskell implementations that this is indeed the case. *)
 lemma cancel_all_signals_unlive[wp]:
-  "\<lbrace>\<lambda>s. obj_at (\<lambda>ko. \<exists>ntfn. ko = Notification ntfn \<and> ntfn_bound_tcb ntfn = None) ntfnptr s\<rbrace>
+  "\<lbrace>\<lambda>s. obj_at (\<lambda>ko. \<exists>ntfn. ko = Notification ntfn \<and> ntfn_bound_tcb ntfn = None \<and>
+                            ntfn_sc ntfn = None) ntfnptr s\<rbrace>
      cancel_all_signals ntfnptr
    \<lbrace>\<lambda> rv. obj_at (Not \<circ> live) ntfnptr\<rbrace>"
   apply (simp add: cancel_all_signals_def)
@@ -1784,11 +1780,10 @@ lemma cancel_all_signals_unlive[wp]:
       apply (fastforce elim: obj_at_weakenE)
      apply (wp mapM_x_wp' sts_obj_at_impossible
       | simp add: is_ntfn)+
-(*  apply (simp add: set_simple_ko_def)
-    apply (wp get_object_wp obj_set_prop_at)
-  apply (auto simp: live_def pred_tcb_at_def obj_at_def)
-  done*) sorry
-
+    apply (wpsimp simp: set_simple_ko_def set_object_def get_object_def)
+   apply wpsimp
+  apply (auto simp: obj_at_def live_def live_ntfn_def)
+  done
 
 crunch cte_wp_at[wp]: cancel_all_ipc "cte_wp_at P p"
   (wp: crunch_wps mapM_x_wp)

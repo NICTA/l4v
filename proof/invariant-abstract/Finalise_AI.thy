@@ -542,11 +542,6 @@ crunch cte_wp_at[wp]: unbind_notification "cte_wp_at P p"
 crunch cte_wp_at[wp]: sched_context_maybe_unbind_ntfn "cte_wp_at P p"
   (wp: maybeM_inv ignore: set_tcb_obj_ref set_sched_context)
 
-lemma set_mrs_cte_wp_at [wp]:
-  "\<lbrace>cte_wp_at P c\<rbrace> set_mrs p' b m \<lbrace>\<lambda>rv. cte_wp_at P c\<rbrace>"
-  by (wp set_mrs_thread_set_dmo thread_set_cte_wp_at_trivial
-         ball_tcb_cap_casesI | simp)+
-
 lemma sched_context_update_consumed_cte_wp_at [wp]:
   "\<lbrace>cte_wp_at P c\<rbrace> sched_context_update_consumed p \<lbrace>\<lambda>rv. cte_wp_at P c\<rbrace>"
   by (wpsimp simp: sched_context_update_consumed_def wp: thread_set_cte_wp_at_trivial
@@ -1058,12 +1053,6 @@ lemma (in Finalise_AI_1) finalise_cap_equal_cap[wp]:
    \<lbrace>\<lambda>rv. cte_wp_at (op = cap) sl :: 'a state \<Rightarrow> bool\<rbrace>"
   apply (cases cap, simp_all split del: if_split)
 defer 4
-    apply ((wp suspend_cte_wp_at_preserved
-                 deleting_irq_handler_cte_preserved prepare_thread_delete_cte_wp_at
-                 hoare_drop_imp thread_set_cte_wp_at_trivial
-               | clarsimp simp: can_fast_finalise_def unbind_maybe_notification_def
-                                unbind_notification_def
-                                tcb_cap_cases_def)+)[7]
     apply (wp suspend_cte_wp_at_preserved
                  deleting_irq_handler_cte_preserved prepare_thread_delete_cte_wp_at
                  hoare_drop_imp thread_set_cte_wp_at_trivial

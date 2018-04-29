@@ -1509,11 +1509,6 @@ lemma set_mrs_cur [wp]:
   "\<lbrace>cur_tcb\<rbrace> set_mrs r t mrs \<lbrace>\<lambda>rv. cur_tcb\<rbrace>"
   by (wp set_mrs_thread_set_dmo)
 
-
-lemma set_mrs_ex_nonz_cap_to[wp]:
-  "\<lbrace>ex_nonz_cap_to p\<rbrace> set_mrs a b c \<lbrace>\<lambda>rv. ex_nonz_cap_to p\<rbrace>"
-  by (wp ex_nonz_cap_to_pres)
-
 lemma set_mrs_state_hyp_refs_of[wp]:
   "\<lbrace>\<lambda> s. P (state_hyp_refs_of s)\<rbrace> set_mrs thread buf msgs \<lbrace>\<lambda>_ s. P (state_hyp_refs_of s)\<rbrace>"
   by (wp set_mrs_thread_set_dmo thread_set_hyp_refs_trivial | simp)+

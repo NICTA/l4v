@@ -1365,32 +1365,83 @@ lemma descendants_of_nullcap:
   done
 
 lemma reply_cancel_ipc_bound_tcb_at[wp]:
-  "\<lbrace>bound_tcb_at P t and valid_mdb and valid_objs and tcb_at p \<rbrace>
-    reply_cancel_ipc p r
-   \<lbrace>\<lambda>_. bound_tcb_at P t\<rbrace>"
+  "\<lbrace>bound_tcb_at P t\<rbrace> reply_cancel_ipc p r \<lbrace>\<lambda>rv. bound_tcb_at P t\<rbrace>"
   apply (wpsimp simp: reply_cancel_ipc_def reply_remove_tcb_def get_thread_state_def thread_get_def
                       thread_set_def set_object_def)
   apply (clarsimp simp: pred_tcb_at_def obj_at_def get_tcb_def)
   done
 
-(*
-crunch bound_tcb_at[wp]: cancel_ipc "bound_tcb_at P t:: det_ext state \<Rightarrow> bool"
-(ignore: set_object thread_set wp: mapM_x_wp_inv maybeM_inv)
-*)
-
 crunch bound_tcb_at[wp]: cancel_ipc "bound_tcb_at P t"
 (ignore: set_object thread_set wp: mapM_x_wp_inv maybeM_inv)
 
+lemma set_thread_state_bound_sc_tcb_at:
+  "\<lbrace>bound_sc_tcb_at P t'\<rbrace> set_thread_state t ts \<lbrace>\<lambda>rv. bound_sc_tcb_at P t'\<rbrace>"
+  by (wpsimp simp: set_thread_state_def set_object_def pred_tcb_at_def obj_at_def get_tcb_def)
+
+lemma reply_unlink_tcb_bound_sc_tcb_at:
+  "\<lbrace>bound_sc_tcb_at P t'\<rbrace> reply_unlink_tcb r \<lbrace>\<lambda>rv. bound_sc_tcb_at P t'\<rbrace>"
+  apply (wpsimp simp: reply_unlink_tcb_def set_thread_state_def set_object_def
+                      update_sk_obj_ref_def set_simple_ko_def get_object_def get_simple_ko_def
+                      get_thread_state_def thread_get_def)
+  apply (auto simp: pred_tcb_at_def obj_at_def get_tcb_def)
+  done
+
+lemma blocked_cancel_ipc_bound_sc_tcb_at:
+  "\<lbrace>bound_sc_tcb_at P t'\<rbrace> blocked_cancel_ipc ts t r \<lbrace>\<lambda>rv. bound_sc_tcb_at P t'\<rbrace>"
+  by (wpsimp simp: blocked_cancel_ipc_def
+               wp: set_thread_state_bound_sc_tcb_at reply_unlink_tcb_bound_sc_tcb_at)
+
+lemma cancel_signal_bound_sc_tcb_at:
+  "\<lbrace>bound_sc_tcb_at P t'\<rbrace> cancel_signal r ntfn \<lbrace>\<lambda>rv. bound_sc_tcb_at P t'\<rbrace>"
+  by (wpsimp simp: cancel_signal_def get_simple_ko_def get_object_def
+               wp: set_thread_state_bound_sc_tcb_at)
+
+lemma suspend_unlive_helper:
+  notes hoare_pre [wp_pre del]
+  shows
+  "\<lbrace>bound_tcb_at (op = None) t and bound_sc_tcb_at (op = None) t and
+    bound_yt_tcb_at (op = yt_opt) t\<rbrace>
+   maybeM (\<lambda>sc_ptr. do _ <- set_sc_obj_ref sc_yield_from_update sc_ptr None;
+                       set_tcb_obj_ref tcb_yield_to_update t None
+                    od) yt_opt
+   \<lbrace>\<lambda>rv. bound_tcb_at (op = None) t and bound_sc_tcb_at (op = None) t and
+         bound_yt_tcb_at (op = None) t\<rbrace>"
+  by (wpsimp simp: set_tcb_obj_ref_def set_object_def set_sc_obj_ref_def update_sched_context_def
+                   get_object_def pred_tcb_at_def obj_at_def get_tcb_def
+               wp: maybeM_wp)
+
+lemma set_thread_state_not_live0:
+  "\<lbrace>bound_tcb_at (op = None) t and bound_sc_tcb_at (op = None) t
+    and bound_yt_tcb_at (op = None) t\<rbrace>
+   set_thread_state t Inactive
+   \<lbrace>\<lambda>rv. obj_at (Not \<circ> live0) t\<rbrace>"
+  by (wpsimp simp: set_thread_state_def set_object_def obj_at_def pred_tcb_at_def get_tcb_def)
+
 lemma suspend_unlive:
-  "\<lbrace>bound_tcb_at (op = None) t (* and bound_sc_tcb_at (op = None) t *)
-    and valid_mdb and valid_objs and tcb_at t\<rbrace>
+  notes hoare_pre [wp_pre del]
+  shows
+  "\<lbrace>bound_tcb_at (op = None) t and bound_sc_tcb_at (op = None) t
+    and st_tcb_at (Not \<circ> awaiting_reply) t\<rbrace>
    suspend t
    \<lbrace>\<lambda>rv. obj_at (Not \<circ> live0) t\<rbrace>"
-(*  apply (rule_tac Q="\<lambda>_. bound_tcb_at (op = None) t" in hoare_strengthen_post)
-  apply wp
-  apply (auto simp: pred_tcb_def2 dest: refs_of_live)
-  done *) sorry
-
+  apply (wpsimp simp: suspend_def)
+     apply (wpsimp wp: set_thread_state_not_live0)
+    apply (wpsimp wp: suspend_unlive_helper)
+   apply (wpsimp simp: get_tcb_obj_ref_def thread_get_def)
+  apply (wpsimp simp: pred_conj_def)
+   apply (rule hoare_conjI)
+    apply (simp add: cancel_ipc_def)
+    apply (rule hoare_seq_ext[OF _ gts_sp])
+    apply (simp add: pred_conj_def)
+    apply (case_tac state; wpsimp)
+       apply (wpsimp wp: blocked_cancel_ipc_bound_sc_tcb_at)+
+     apply (wpsimp simp: st_tcb_at_def obj_at_def wp: hoare_pre_cont)
+     apply (case_tac "tcb_state tcb"; simp)
+    apply (wpsimp wp: cancel_signal_bound_sc_tcb_at)
+   apply (rule hoare_strengthen_post)
+    apply (wp hoare_TrueI)
+   apply (auto simp: pred_tcb_at_def)
+  done
 
 definition bound_refs_of_tcb :: "'a state \<Rightarrow> machine_word \<Rightarrow> (machine_word \<times> reftype) set"
 where

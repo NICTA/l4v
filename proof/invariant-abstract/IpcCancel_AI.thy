@@ -1251,14 +1251,15 @@ crunch cte_wp_at[wp]: reply_remove_tcb "cte_wp_at P p"
   (wp: crunch_wps)
 
 locale delete_one_pre =
+  fixes state_ext_type :: "('a :: state_ext) itself"
   assumes delete_one_cte_wp_at_preserved:
     "(\<And>cap. P cap \<Longrightarrow> \<not> can_fast_finalise cap) \<Longrightarrow>
-     \<lbrace>cte_wp_at P sl\<rbrace> (cap_delete_one sl' :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. cte_wp_at P sl\<rbrace>"
+     \<lbrace>cte_wp_at P sl\<rbrace> (cap_delete_one sl' :: (unit,'a) s_monad) \<lbrace>\<lambda>rv. cte_wp_at P sl\<rbrace>"
 
 
-lemma reply_cancel_ipc_cte_wp_at_preserved:
+lemma (in delete_one_pre) reply_cancel_ipc_cte_wp_at_preserved:
   "(\<And>cap. P cap \<Longrightarrow> \<not> can_fast_finalise cap) \<Longrightarrow>
-  \<lbrace>cte_wp_at P p\<rbrace> (reply_cancel_ipc t r:: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. cte_wp_at P p\<rbrace>"
+  \<lbrace>cte_wp_at P p\<rbrace> (reply_cancel_ipc t r:: (unit,'a) s_monad) \<lbrace>\<lambda>rv. cte_wp_at P p\<rbrace>"
   unfolding reply_cancel_ipc_def
   apply (wpsimp wp: select_wp)
    apply (rule_tac Q="\<lambda>_. cte_wp_at P p" in hoare_post_imp, clarsimp)
@@ -1267,9 +1268,9 @@ lemma reply_cancel_ipc_cte_wp_at_preserved:
   done
 
 
-lemma cancel_ipc_cte_wp_at_preserved:
+lemma (in delete_one_pre) cancel_ipc_cte_wp_at_preserved:
   "(\<And>cap. P cap \<Longrightarrow> \<not> can_fast_finalise cap) \<Longrightarrow>
-  \<lbrace>cte_wp_at P p\<rbrace> (cancel_ipc t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. cte_wp_at P p\<rbrace>"
+  \<lbrace>cte_wp_at P p\<rbrace> (cancel_ipc t :: (unit,'a) s_monad) \<lbrace>\<lambda>rv. cte_wp_at P p\<rbrace>"
   apply (simp add: cancel_ipc_def)
   apply (rule hoare_pre)
    apply (wp reply_cancel_ipc_cte_wp_at_preserved | wpcw | simp)+
@@ -1283,9 +1284,9 @@ lemma set_sc_yield_from_update_cte_wp_at [wp]:
   "\<lbrace>cte_wp_at P c\<rbrace> set_sc_obj_ref sc_yield_from_update t sc \<lbrace>\<lambda>rv. cte_wp_at P c\<rbrace>"
   by wp
 
-lemma suspend_cte_wp_at_preserved:
+lemma (in delete_one_pre) suspend_cte_wp_at_preserved:
   "(\<And>cap. P cap \<Longrightarrow> \<not> can_fast_finalise cap) \<Longrightarrow>
-  \<lbrace>cte_wp_at P p\<rbrace> (suspend tcb :: (unit,det_ext) s_monad) \<lbrace>\<lambda>_. cte_wp_at P p\<rbrace>"
+  \<lbrace>cte_wp_at P p\<rbrace> (suspend tcb :: (unit,'a) s_monad) \<lbrace>\<lambda>_. cte_wp_at P p\<rbrace>"
   by (simp add: suspend_def) (wpsimp wp: cancel_ipc_cte_wp_at_preserved)
 
 lemma set_thread_state_bound_tcb_at[wp]:
@@ -2069,8 +2070,7 @@ lemma sym_ref_tcb_yt: "\<lbrakk> sym_refs (state_refs_of s); kheap s tp = Some (
 (* end FIXME *)
 
 lemma complete_yield_to_invs:
-  "\<lbrace>invs and st_tcb_at (\<lambda>st. tcb_st_refs_of st = {}) tcb_ptr\<rbrace>
-      complete_yield_to tcb_ptr \<lbrace>\<lambda>rv. invs\<rbrace>"
+  "\<lbrace>invs\<rbrace> complete_yield_to tcb_ptr \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (clarsimp simp: complete_yield_to_def get_tcb_obj_ref_def maybeM_def)
   apply (rule hoare_seq_ext[OF _ thread_get_sp])
   apply (case_tac yt_opt; simp)
@@ -2080,12 +2080,12 @@ lemma complete_yield_to_invs:
   apply (rule hoare_seq_ext[rotated])
    apply (rule_tac Q="K (yt_opt = Some a) and
          (bound_yt_tcb_at (op = (Some a)) tcb_ptr and
-         (invs and st_tcb_at (\<lambda>st. tcb_st_refs_of st = {}) tcb_ptr and ex_nonz_cap_to tcb_ptr))"
+         (invs and ex_nonz_cap_to tcb_ptr))"
          in hoare_weaken_pre)
     apply (wp hoare_vcg_conj_lift
       [OF set_consumed_pred_tcb_at[where proj=itcb_yield_to and t=tcb_ptr and P="op = (Some _)"]
           hoare_vcg_conj_lift[OF set_consumed_invs
-                                 hoare_vcg_conj_lift[OF set_consumed_st_tcb_at set_consumed_ex_nonz]]])
+                                  set_consumed_ex_nonz]])
     apply (auto)[2]
     apply (clarsimp simp: pred_tcb_at_def obj_at_def)
    apply (clarsimp simp: invs_def valid_state_def valid_pspace_def)
@@ -2095,7 +2095,8 @@ lemma complete_yield_to_invs:
   apply (rule conjI)
    apply (clarsimp simp: pred_tcb_at_def obj_at_def split del: if_split)
    apply (rule pspace_valid_objsE, simp, simp)
-   apply (clarsimp simp: valid_obj_def valid_tcb_def valid_bound_obj_def split del: if_split)
+   apply (clarsimp simp: valid_obj_def valid_tcb_def valid_bound_obj_def ran_tcb_cap_cases
+                   split del: if_split)
    apply (drule sym, clarsimp simp: is_sc_obj_def obj_at_def split del: if_split)
    apply (case_tac ko; clarsimp split del: if_split)
    apply (rename_tac sc n)
@@ -2103,7 +2104,7 @@ lemma complete_yield_to_invs:
     apply (erule delta_sym_refs)
      apply (clarsimp split: if_split_asm simp: st_tcb_at_def)
     apply (clarsimp split: if_split_asm simp:  split del: if_split)
-        apply ((fastforce simp: state_refs_of_def get_refs_def2 dest!: symreftype_inverse')+)[5]
+        apply ((fastforce simp: state_refs_of_def get_refs_def2 dest!: symreftype_inverse')+)[4]
    apply (fastforce dest!: sym_ref_tcb_yt)
   apply (clarsimp dest!: idle_no_ex_cap)
   done

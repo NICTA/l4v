@@ -251,10 +251,7 @@ lemma complete_yield_to_iflive[wp]:
    apply wpsimp
   apply (rule hoare_seq_ext[OF _ lookup_ipc_buffer_inv])
   apply (rule hoare_seq_ext[OF _ assert_opt_inv])
-  apply wpsimp
-  apply (drule (1) if_live_then_nonz_capD)
-   apply (clarsimp simp: live_def)
-  by simp
+  by wpsimp
 
 lemma complete_yield_to_ex_nonz[wp]:
   "\<lbrace>ex_nonz_cap_to p\<rbrace> complete_yield_to tcb_ptr \<lbrace>\<lambda>rv. ex_nonz_cap_to p\<rbrace>"
@@ -457,8 +454,7 @@ lemma set_consumed_sc_tcb_sc_at_inv'[wp]:
  simp: split_def set_message_info_def as_user_def set_mrs_def set_object_def sc_tcb_sc_at_def zipWithM_x_mapM)
 
 lemma complete_yield_to_sc_tcb_sc_at'[wp]:
-  "\<lbrace> (*sc_yf_sc_at (op = (Some a)) scp and*) (\<lambda>s. tcb_ptr \<noteq> cur_thread s) and
-    (\<lambda>s. sc_tcb_sc_at (\<lambda>sctcb. \<exists>t. sctcb = Some t \<and> t \<noteq> cur_thread s) scp s) \<rbrace>
+  "\<lbrace>(\<lambda>s. sc_tcb_sc_at (\<lambda>sctcb. \<exists>t. sctcb = Some t \<and> t \<noteq> cur_thread s) scp s) \<rbrace>
   complete_yield_to tcb_ptr \<lbrace>\<lambda>rv s. sc_tcb_sc_at (\<lambda>sctcb. \<exists>t. sctcb = Some t \<and> t \<noteq> cur_thread s) scp s \<rbrace>"
   apply (clarsimp simp: complete_yield_to_def maybeM_def)
   apply (rule hoare_seq_ext[OF _ gyt_sp])
@@ -520,14 +516,10 @@ lemma complete_yield_to_no_st_refs_ct[wp]:
 lemma sched_context_yield_to_invs:
   notes refs_of_simps [simp del]
   shows
-  "\<lbrace>invs (*and (\<lambda>s. st_tcb_at (\<lambda>st. tcb_st_refs_of st = {}) (cur_thread s) s)*)
-(*and (\<lambda>s. ko_at (SchedContext sc n) scp s)*)
- and (\<lambda>s. cur_thread s \<noteq> idle_thread s ) (* cur_thread must be set to Restart *)
+  "\<lbrace>invs and (\<lambda>s. cur_thread s \<noteq> idle_thread s ) (* cur_thread must be set to Restart *)
     and (\<lambda>s. bound_yt_tcb_at (op = None) (cur_thread s) s)
-(* and sc_at scp*)
-(*    and sc_yf_sc_at (op = None) scp*)
-and (\<lambda>s. sc_tcb_sc_at (\<lambda>sctcb.\<exists>t. sctcb = Some t \<and> t \<noteq> cur_thread s) scp s)
-     and (\<lambda>s. ex_nonz_cap_to (cur_thread s) s) and ex_nonz_cap_to scp\<rbrace>
+    and (\<lambda>s. sc_tcb_sc_at (\<lambda>sctcb.\<exists>t. sctcb = Some t \<and> t \<noteq> cur_thread s) scp s)
+    and (\<lambda>s. ex_nonz_cap_to (cur_thread s) s) and ex_nonz_cap_to scp\<rbrace>
        sched_context_yield_to scp args \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (unfold sched_context_yield_to_def get_sc_obj_ref_def bind_assoc)
   apply (rule hoare_seq_ext[OF _ get_sched_context_inv])
@@ -535,7 +527,6 @@ and (\<lambda>s. sc_tcb_sc_at (\<lambda>sctcb.\<exists>t. sctcb = Some t \<and> 
   apply (rule hoare_seq_ext[rotated])
    apply (rule hoare_when_weak_wp)
    apply (wpsimp wp: complete_yield_to_invs)
-   defer
    apply (rule hoare_seq_ext[OF _ get_sched_context_sp])
    apply (wpsimp simp: invs_def valid_state_def valid_pspace_def get_sc_obj_ref_def split_del: if_split
       wp: valid_irq_node_typ hoare_vcg_if_lift2 ethread_get_inv hoare_drop_imp)
@@ -553,9 +544,7 @@ and (\<lambda>s. sc_tcb_sc_at (\<lambda>sctcb.\<exists>t. sctcb = Some t \<and> 
     apply (clarsimp split: if_split_asm dest!: symreftype_inverse' split del: if_split)
    apply (clarsimp split: if_split_asm thread_state.splits dest!: symreftype_inverse'
       simp: state_refs_of_def refs_of_def get_refs_def2 tcb_st_refs_of_def obj_at_def)
-sorry
-
-
+done
 
 text {* valid invocation definitions *}
 

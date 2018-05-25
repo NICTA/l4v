@@ -165,7 +165,8 @@ where (* reply_tcb must be in BlockedOnReply *)
     replies \<leftarrow> liftM sc_replies $ get_sched_context sc_ptr;
     reply_unlink_tcb r;
     reply_unlink_sc sc_ptr r;
-    when (hd replies = r) $ sched_context_donate sc_ptr caller
+    caller_sc \<leftarrow> get_tcb_obj_ref tcb_sched_context caller;
+    when (hd replies = r \<and> caller_sc = None) $ sched_context_donate sc_ptr caller
   od" (* the r.caller is in Inactive on return *)
 
 text {* Remove a specific tcb, and the reply it is blocking on, from the call stack. *}
@@ -247,12 +248,13 @@ where
     assert (ts_reply);
     unbind_reply_in_ts callee;
 
-
     (* link reply and tcb *)
     set_reply_obj_ref reply_tcb_update reply_ptr (Some caller);
     set_thread_state caller (BlockedOnReply (Some reply_ptr));
 
     when (sc_caller \<noteq> None \<and> can_donate) $ do
+      sc_callee \<leftarrow> get_tcb_obj_ref tcb_sched_context callee;
+      assert (sc_callee = None);
       sc_replies \<leftarrow> liftM sc_replies $ get_sched_context (the sc_caller); (* maybe define a function to add a reply to the queue? *)
       case sc_replies of
           [] \<Rightarrow> assert True

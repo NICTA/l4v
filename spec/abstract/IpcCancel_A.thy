@@ -121,7 +121,7 @@ where
      sc_replies \<leftarrow> liftM sc_replies $ get_sched_context sc_ptr;
      reply \<leftarrow> get_reply reply_ptr;
      assert (reply_sc reply = Some sc_ptr);
-     set_reply_obj_ref reply_sc_update reply_ptr None;
+     set_reply reply_ptr (reply_sc_update (K None) reply);
      set_sc_obj_ref sc_replies_update sc_ptr (remove1 reply_ptr sc_replies)
   od"
 
@@ -141,7 +141,7 @@ definition reply_unlink_tcb :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_mo
      tptr \<leftarrow> assert_opt $ reply_tcb reply;
      ts \<leftarrow> get_thread_state tptr;
      assert (case ts of BlockedOnReply r \<Rightarrow> True | BlockedOnReceive _ r \<Rightarrow> True |  _ \<Rightarrow> False);
-     set_reply_obj_ref reply_tcb_update r None;
+     set_reply r (reply_tcb_update (K None) reply);
      set_thread_state tptr Inactive
    od"
 

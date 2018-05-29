@@ -196,7 +196,7 @@ where (* called from finalise_cap *)
             | BlockedOnReply r \<Rightarrow> maybeM reply_remove r
             | _ \<Rightarrow> return ()
   od" (* set_thread_state? *)
-
+(*
 definition
   reply_clear_tcb :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
 where
@@ -208,7 +208,7 @@ where
           | BlockedOnReply r \<Rightarrow> maybeM reply_remove r
           | _ \<Rightarrow> fail
   od"
-
+*)
 definition
   unbind_reply_in_ts :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
 where

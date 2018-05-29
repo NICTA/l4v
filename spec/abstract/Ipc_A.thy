@@ -352,7 +352,7 @@ where
      reply \<leftarrow> (case reply_cap of 
                  ReplyCap r \<Rightarrow> do
                    tptr \<leftarrow> get_reply_obj_ref reply_tcb r;
-                   when (tptr \<noteq> None \<and> the tptr \<noteq> thread) $ reply_clear_tcb (the tptr);
+                   when (tptr \<noteq> None \<and> the tptr \<noteq> thread) $ cancel_ipc (the tptr);
                    return (Some r)
                  od 
                | NullCap \<Rightarrow> return None

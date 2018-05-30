@@ -163,9 +163,9 @@ where (* reply_tcb must be in BlockedOnReply *)
     caller \<leftarrow> assert_opt $ reply_tcb reply;
     sc_ptr \<leftarrow> assert_opt $ reply_sc reply;
     replies \<leftarrow> liftM sc_replies $ get_sched_context sc_ptr;
+    caller_sc \<leftarrow> get_tcb_obj_ref tcb_sched_context caller;
     reply_unlink_tcb r;
     reply_unlink_sc sc_ptr r;
-    caller_sc \<leftarrow> get_tcb_obj_ref tcb_sched_context caller;
     when (hd replies = r \<and> caller_sc = None) $ sched_context_donate sc_ptr caller
   od" (* the r.caller is in Inactive on return *)
 

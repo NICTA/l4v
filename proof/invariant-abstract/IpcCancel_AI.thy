@@ -1174,7 +1174,7 @@ lemma reply_cancel_ipc_inactive [wp]:
 lemma suspend_invs:
   notes hoare_pre [wp_pre del]
   shows
-  "\<lbrace>invs and bound_sc_tcb_at (op = None) t\<rbrace> (suspend t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
+  "\<lbrace>invs\<rbrace> (suspend t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (simp add: suspend_def)
   apply (wp suspend_invs_helper)
    apply (clarsimp simp: cancel_ipc_def)

@@ -1171,26 +1171,6 @@ lemma reply_cancel_ipc_inactive [wp]:
    apply (auto simp: state_refs_of_def get_tcb_SomeD split: if_splits)
   done
 
-lemma suspend_invs:
-  notes hoare_pre [wp_pre del]
-  shows
-  "\<lbrace>invs\<rbrace> (suspend t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (simp add: suspend_def)
-  apply (wp suspend_invs_helper)
-   apply (clarsimp simp: cancel_ipc_def)
-   apply (rule hoare_seq_ext[OF _ gts_sp])
-   apply (case_tac state; simp)
-          apply ((wpsimp simp: st_tcb_at_def obj_at_def)+)[3]
-       apply ((rule hoare_strengthen_post, wp, clarsimp simp: st_tcb_at_def obj_at_def)+)[2]
-       apply (wpsimp simp: pred_disj_def)+
-     apply (rule hoare_strengthen_post, wp,
-            clarsimp simp: invs_def valid_state_def valid_pspace_def,
-            clarsimp simp: st_tcb_at_def obj_at_def)
-    apply (rule hoare_strengthen_post, wp, clarsimp simp: st_tcb_at_def obj_at_def)
-   apply (wpsimp simp: st_tcb_at_def obj_at_def)
-  apply simp
-  done
-
 context IpcCancel_AI begin
 
 lemma suspend_typ_at [wp]:
@@ -1776,6 +1756,34 @@ lemma cancel_ipc_simple':
   "\<lbrace>st_tcb_at simple t'\<rbrace> cancel_ipc t \<lbrace>\<lambda>rv. st_tcb_at simple t'\<rbrace>"
   by (wpsimp simp: cancel_ipc_def get_thread_state_def thread_get_def
                wp: blocked_ipc_st_tcb_at_general cancel_signal_st_tcb_at_general)
+
+lemma cancel_ipc_simple_except_awaiting_reply:
+  "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s\<rbrace> cancel_ipc t
+   \<lbrace>\<lambda>rv. st_tcb_at (op = Running or op = Inactive or op = Restart or op = IdleThreadState) t\<rbrace>"
+  apply (clarsimp simp: cancel_ipc_def)
+  apply (rule hoare_seq_ext[OF _ gts_sp])
+  apply (case_tac state; simp)
+         prefer 8
+         apply ((wpsimp simp: st_tcb_at_def obj_at_def)+)[4]
+     apply ((rule hoare_strengthen_post[where Q = "\<lambda>s. st_tcb_at (op = Inactive) t"], wpsimp,
+             clarsimp simp: st_tcb_at_def obj_at_def)+)[4]
+  done
+
+lemma cancel_ipc_invs_st_tcb_at:
+  "\<lbrace>invs\<rbrace> cancel_ipc t
+   \<lbrace>\<lambda>rv. invs and st_tcb_at (op = Running or op = Inactive or op = Restart or
+                             op = IdleThreadState) t\<rbrace>"
+  by (wpsimp simp: invs_def valid_state_def valid_pspace_def
+               wp: cancel_ipc_simple_except_awaiting_reply)
+
+lemma suspend_invs:
+  notes hoare_pre [wp_pre del]
+  shows
+  "\<lbrace>invs\<rbrace> (suspend t :: (unit,det_ext) s_monad) \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (simp add: suspend_def)
+  apply (wpsimp simp: invs_def valid_state_def valid_pspace_def
+                  wp: suspend_invs_helper cancel_ipc_simple_except_awaiting_reply)
+  done
 
 lemma fast_finalise_misc:
 "\<lbrace>st_tcb_at simple t and invs\<rbrace> fast_finalise a b \<lbrace>\<lambda>_. st_tcb_at simple t\<rbrace>"

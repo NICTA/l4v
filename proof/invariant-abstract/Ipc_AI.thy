@@ -2232,7 +2232,7 @@ lemma cancel_ipc_cte_wp_at_not_reply_state:
    \<lbrace>\<lambda>r. cte_wp_at P p\<rbrace>"
   apply (simp add: cancel_ipc_def)
   apply (rule hoare_seq_ext[OF _ gts_sp])
-  apply (case_tac state; wpsimp)
+  apply (case_tac state; wpsimp split: option.splits)
   done
 
 crunch idle[wp]: cancel_ipc "\<lambda>s. P (idle_thread s)"

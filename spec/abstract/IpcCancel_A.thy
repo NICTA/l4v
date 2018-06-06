@@ -140,7 +140,7 @@ definition reply_unlink_tcb :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_mo
      reply \<leftarrow> get_reply r;
      tptr \<leftarrow> assert_opt $ reply_tcb reply;
      ts \<leftarrow> get_thread_state tptr;
-     assert (case ts of BlockedOnReply r \<Rightarrow> True | BlockedOnReceive _ r \<Rightarrow> True |  _ \<Rightarrow> False);
+     assert (ts = BlockedOnReply (Some r) \<or> (\<exists>ep. ts = BlockedOnReceive ep (Some r)));
      set_reply r (reply_tcb_update (K None) reply);
      set_thread_state tptr Inactive
    od"
@@ -620,9 +620,9 @@ where
 text {* Cancel the message receive operation of a thread waiting for a Reply
 capability it has issued to be invoked. *}
 definition
-  reply_cancel_ipc :: "obj_ref \<Rightarrow> obj_ref option \<Rightarrow> (unit, 'z::state_ext) s_monad"
+  reply_cancel_ipc :: "obj_ref \<Rightarrow> (unit, 'z::state_ext) s_monad"
 where (* called when tptr is in BlocedOnReply *)
- "reply_cancel_ipc tptr reply_opt \<equiv> do
+ "reply_cancel_ipc tptr \<equiv> do
     thread_set (\<lambda>tcb. tcb \<lparr> tcb_fault := None \<rparr>) tptr;
     reply_remove_tcb tptr
   od"
@@ -655,7 +655,8 @@ where
           BlockedOnSend x y \<Rightarrow> blocked_cancel_ipc state tptr None
         | BlockedOnReceive x reply \<Rightarrow> blocked_cancel_ipc state tptr reply
         | BlockedOnNotification event \<Rightarrow> cancel_signal tptr event
-        | BlockedOnReply reply \<Rightarrow> reply_cancel_ipc tptr reply
+        | BlockedOnReply (Some reply) \<Rightarrow> reply_cancel_ipc tptr
+        | BlockedOnReply None \<Rightarrow> fail
         | _ \<Rightarrow> return ()
    od"
 

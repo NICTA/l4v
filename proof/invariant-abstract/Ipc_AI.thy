@@ -1926,13 +1926,18 @@ lemma cap_delete_one_ntfn_at [wp]:
 lemma cap_delete_one_valid_tcb_state:
   "\<lbrace>\<lambda>s. P (valid_tcb_state st s)\<rbrace> cap_delete_one slot \<lbrace>\<lambda>_ s'. P (valid_tcb_state st s')\<rbrace>"
   apply (simp add: valid_tcb_state_def)
-  apply (cases st, (wpsimp wp: hoare_drop_imp hoare_vcg_all_lift cong: conj_cong split: option.splits)+)
-       defer
-       defer
-       apply (wpsimp wp: hoare_drop_imp hoare_vcg_all_lift cong: conj_cong split: option.splits)+
-      defer
-      apply (wpsimp wp: hoare_drop_imp hoare_vcg_all_lift cong: conj_cong split: option.splits)+
-  sorry
+  apply (case_tac st; simp)
+         defer 4
+         defer 5
+         apply wpsimp+
+   apply (rename_tac rp_op)
+   apply (case_tac rp_op, wpsimp)
+   apply (rule P_bool_lift[where P = P], wpsimp)
+   apply (subst de_Morgan_conj)+
+   apply (wpsimp wp: hoare_vcg_disj_lift)
+  apply (rename_tac rp_op)
+  apply (case_tac rp_op; wpsimp)
+  done
 
 lemma cte_wp_at_reply_cap_can_fast_finalise:
   "cte_wp_at (op = (cap.ReplyCap tcb)) slot s \<longrightarrow> cte_wp_at can_fast_finalise slot s"
@@ -3187,7 +3192,18 @@ end
 context Ipc_AI begin
 
 lemma receive_ipc_typ_at[wp]:
-  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> receive_ipc param_a param_b param_c param_d \<lbrace>\<lambda>_ s. P (typ_at T p s)\<rbrace>"
+  "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> receive_ipc thread cap is_blocking reply_cap \<lbrace>\<lambda>_ s. P (typ_at T p s)\<rbrace>"
+  apply (simp add: receive_ipc_def)
+  apply (case_tac cap; simp)
+  apply (case_tac reply_cap; simp)
+   apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
+   apply (rule hoare_seq_ext[OF _ gbn_sp])
+   apply (case_tac ntfnptr; simp)
+    apply (case_tac x; simp)
+      apply (case_tac is_blocking; simp)
+       apply wpsimp
+      apply (wpsimp simp: do_nbrecv_failed_transfer_def)
+     apply (rule hoare_seq_ext[OF _ assert_sp])
   sorry
 (*
 crunch typ_at[wp]: receive_ipc "\<lambda>s::det_ext state. P (typ_at T p s)"
@@ -3258,20 +3274,27 @@ lemma sfi_makes_simple:
   "\<lbrace>st_tcb_at simple t and K (t \<noteq> t') :: det_ext state \<Rightarrow> bool\<rbrace>
      send_fault_ipc t' handler_cap ft can_donate
    \<lbrace>\<lambda>rv. st_tcb_at simple t\<rbrace>"
-  apply (rule hoare_gen_asm)
-  apply (simp add: send_fault_ipc_def Let_def ep_ntfn_cap_case_helper
-             cong: if_cong)
-  apply (wp si_blk_makes_simple hoare_drop_imps
-            thread_set_no_change_tcb_state
-       | simp)+
-  sorry
+  apply (simp add: send_fault_ipc_def)
+  apply (case_tac handler_cap; simp)
+   apply wpsimp
+  apply (wpsimp simp: thread_set_def set_object_def wp: si_blk_makes_simple)
+  apply (auto simp: st_tcb_at_def obj_at_def)
+  done
 
 lemma hf_makes_simple:
-  "\<lbrace>st_tcb_at simple t' and K (t \<noteq> t') :: det_ext state \<Rightarrow> bool\<rbrace>
-     handle_fault t ft
+  notes hoare_pre [wp_pre del]
+  shows
+  "\<lbrace>st_tcb_at simple t' and K (t \<noteq> t') :: det_ext state \<Rightarrow> bool\<rbrace> handle_fault t ft
    \<lbrace>\<lambda>rv. st_tcb_at simple t'\<rbrace>"
-  unfolding handle_fault_def
-sorry (*  by (wpsimp wp: sfi_makes_simple sts_st_tcb_at_cases hoare_drop_imps simp: handle_no_fault_def)*)
+  apply (simp add: handle_fault_def)
+  apply (rule hoare_seq_ext[OF _ assert_get_tcb])
+  apply (wpsimp simp: unless_def handle_no_fault_def send_fault_ipc_def wp: sts_st_tcb_at_cases)
+  apply (case_tac "tcb_fault_handler tcb"; simp)
+   apply wpsimp
+  apply (wpsimp wp: si_blk_makes_simple)
+  apply (wpsimp simp: thread_set_def set_object_def st_tcb_at_def obj_at_def)
+  done
+
 
 end
 
@@ -3286,6 +3309,23 @@ lemma ri_makes_simple:
   apply (rule hoare_gen_asm)
   apply (simp add: receive_ipc_def split_def)
   apply (case_tac cap, simp_all)
+
+  apply (case_tac r; simp)
+   apply (rule hoare_seq_ext [OF _ get_simple_ko_sp])
+   apply (rule hoare_seq_ext [OF _ gbn_sp])
+   apply (case_tac ntfnptr; simp)
+    apply (case_tac x; simp)
+      apply (case_tac is_blocking; simp)
+       apply (wpsimp simp: set_thread_state_def set_object_def st_tcb_at_def obj_at_def)
+      apply (wpsimp simp: do_nbrecv_failed_transfer_def)
+     apply (rule hoare_seq_ext [OF _ assert_sp])
+     apply wpsimp
+            apply (wpsimp wp: sts_st_tcb_at_cases)
+            apply (wpsimp wp: sts_st_tcb_at_cases)
+          apply (wpsimp simp: thread_get_def)
+         apply wpsimp
+
+
 (*  apply (rule hoare_seq_ext [OF _ get_simple_ko_sp])
   apply (rule hoare_seq_ext [OF _ gbn_sp])
   apply (rule hoare_seq_ext)

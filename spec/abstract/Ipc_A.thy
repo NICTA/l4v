@@ -732,10 +732,8 @@ where
       tcb_sched_action tcb_sched_dequeue tcb_ptr;
       cur_sc \<leftarrow> gets cur_sc;
       when (cur_sc = sc_ptr) $ do
-        consumed \<leftarrow> gets consumed_time;
-        capacity \<leftarrow> refill_capacity sc_ptr consumed;
         result \<leftarrow> check_budget;
-        if result then commit_time else charge_budget capacity consumed False
+        when result $ commit_time
       od;
       st \<leftarrow> get_thread_state tcb_ptr;
       if 0 < sc_refill_max sc then do

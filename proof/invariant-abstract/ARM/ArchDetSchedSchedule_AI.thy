@@ -275,6 +275,7 @@ crunch not_cur_thread [wp, DetSchedSchedule_AI_assms]: make_arch_fault_msg, arch
 crunch valid_sched    [wp, DetSchedSchedule_AI_assms]: make_arch_fault_msg valid_sched
 crunch ready_queues   [wp, DetSchedSchedule_AI_assms]: make_arch_fault_msg, arch_get_sanitise_register_info, arch_post_modify_registers "\<lambda>s. P (ready_queues s)"
 crunch valid_etcbs    [wp, DetSchedSchedule_AI_assms]: make_arch_fault_msg valid_etcbs
+crunch ct_not_queued   [wp, DetSchedSchedule_AI_assms]: make_arch_fault_msg, arch_get_sanitise_register_info, handle_arch_fault_reply "ct_not_queued"
 
 crunch scheduler_action [wp, DetSchedSchedule_AI_assms]: make_arch_fault_msg, arch_get_sanitise_register_info, arch_post_modify_registers "\<lambda>s. P (scheduler_action s)"
 

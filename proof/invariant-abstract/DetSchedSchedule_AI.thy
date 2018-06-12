@@ -788,6 +788,10 @@ locale DetSchedSchedule_AI =
     "\<lbrace>valid_queues and valid_etcbs and valid_idle\<rbrace>
       switch_to_idle_thread
      \<lbrace>\<lambda>rv s. not_queued (cur_thread s) s\<rbrace>"
+  assumes make_arch_fault_msg_ct_not_queued[wp]:
+    "\<lbrace>\<lambda>s. not_queued (cur_thread s) s\<rbrace>
+      make_arch_fault_msg ft t
+     \<lbrace>\<lambda>rv s. not_queued (cur_thread s) s\<rbrace>"
   assumes switch_to_idle_thread_valid_blocked[wp]:
     "\<lbrace>valid_blocked and ct_in_q\<rbrace> switch_to_idle_thread \<lbrace>\<lambda>rv. valid_blocked\<rbrace>"
   assumes arch_switch_to_thread_exst'[wp]:
@@ -834,6 +838,8 @@ locale DetSchedSchedule_AI =
     "\<And>t' t f. \<lbrace>scheduler_act_not t'\<rbrace> handle_vm_fault t f \<lbrace>\<lambda>_. scheduler_act_not t'\<rbrace>"
   assumes handle_arch_fault_reply_not_queued'[wp]:
     "\<And>t' f t x y. \<lbrace>not_queued t'\<rbrace> handle_arch_fault_reply f t x y \<lbrace>\<lambda>_. not_queued t'\<rbrace>"
+  assumes handle_arch_fault_reply_ct_not_queued'[wp]:
+    "\<And>f t x y. \<lbrace>ct_not_queued\<rbrace> handle_arch_fault_reply f t x y \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
   assumes handle_arch_fault_reply_scheduler_act_not'[wp]:
     "\<And>t' f t x y. \<lbrace>scheduler_act_not t'\<rbrace> handle_arch_fault_reply f t x y \<lbrace>\<lambda>_. scheduler_act_not t'\<rbrace>"
   assumes handle_arch_fault_reply_cur'[wp]:
@@ -874,6 +880,8 @@ locale DetSchedSchedule_AI =
     "\<And>ft t. make_arch_fault_msg ft t \<lbrace>valid_etcbs\<rbrace>"
   assumes arch_get_sanitise_register_info_not_cur_thread[wp] :
     "\<And>ft t'. arch_get_sanitise_register_info ft \<lbrace>not_cur_thread t'\<rbrace>"
+  assumes arch_get_sanitise_register_info_ct_not_queued[wp] :
+    "\<And>ft. arch_get_sanitise_register_info ft \<lbrace>ct_not_queued\<rbrace>"
   assumes arch_get_sanitise_register_info_valid_sched[wp] :
     "\<And>ft. arch_get_sanitise_register_info ft \<lbrace>valid_sched\<rbrace>"
   assumes arch_get_sanitise_register_info_scheduler_action[wp] :
@@ -3217,9 +3225,17 @@ end
 crunch sched_act_not[wp]: set_simple_ko "scheduler_act_not t"
   (wp: hoare_drop_imps crunch_wps)
 
-lemma set_thread_state_sched_act_not:
-  "\<lbrace>scheduler_act_not t\<rbrace> set_thread_state param_a param_b \<lbrace>\<lambda>_. scheduler_act_not t\<rbrace>"
-  sorry
+lemma set_thread_state_ext_sched_act_not[wp]:
+  "\<lbrace>scheduler_act_not t\<rbrace> set_thread_state_ext tp  \<lbrace>\<lambda>_. scheduler_act_not t\<rbrace>"
+  apply (clarsimp simp: set_thread_state_ext_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ is_schedulable_inv])
+  apply (wpsimp simp: set_scheduler_action_def)
+  done
+
+crunch sched_act_not[wp]: set_thread_state "scheduler_act_not t"
 
 lemma set_thread_state_active_valid_sched:
   "active st \<Longrightarrow>
@@ -4047,50 +4063,198 @@ lemma assert_false:"\<lbrace>\<lambda>s. \<not> P\<rbrace> assert P \<lbrace>\<l
   apply wp
   apply simp
   done
-
+thm do_reply_transfer_def(*
 lemma do_reply_transfer_add_assert:
-  assumes a: "\<lbrace>st_tcb_at awaiting_reply receiver and P\<rbrace>
-               do_reply_transfer sender receiver
+  assumes a: "\<lbrace>(\<lambda>s. reply_tcb_reply_at (\<lambda>p. p = Some receiver \<longrightarrow>
+                                       st_tcb_at awaiting_reply receiver s) rptr s) and P\<rbrace>
+               do_reply_transfer sender rptr
               \<lbrace>\<lambda>_. Q\<rbrace>"
-  shows "\<lbrace>P\<rbrace> do_reply_transfer sender receiver \<lbrace>\<lambda>_. Q\<rbrace>"
+  shows "\<lbrace>P\<rbrace> do_reply_transfer sender rptr \<lbrace>\<lambda>_. Q\<rbrace>"
   apply (rule hoare_name_pre_state)
-  apply (case_tac "st_tcb_at awaiting_reply receiver s")
+  apply (case_tac "reply_tcb_reply_at (\<lambda>p. p = Some receiver \<longrightarrow>
+                                       st_tcb_at awaiting_reply receiver s) rptr s")
    apply (rule hoare_pre)
     apply (wp a)
    apply simp
-  apply (simp add: do_reply_transfer_def)
-  apply (rule hoare_seq_ext)
-(*   apply (rule hoare_seq_ext)
-    prefer 2
-    apply (rule assert_false)
+  apply (simp add: do_reply_transfer_def maybeM_def liftM_def)
+  apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
+  apply (case_tac "reply_tcb x"; clarsimp)
+   apply (wpsimp wp: a)
+   apply (rule hoare_seq_ext[OF _ gts_sp])
+   apply (case_tac state; clarsimp split del: if_split)
+    defer 6
+    apply (wpsimp+)[7]
+defer
+   apply (case_tac "x6 = Some receiver"; clarsimp split del: if_split)
+    apply (rule_tac Q="\<lambda>_. False" in hoare_weaken_pre)
    apply simp
+  apply (clarsimp simp: pred_tcb_at_def obj_at_def)
+  apply (drule sym)
+  apply clarsimp
   apply (simp add: get_thread_state_def thread_get_def)
   apply wp
   apply (clarsimp simp: get_tcb_def pred_tcb_at_def obj_at_def
                   split: option.splits kernel_object.splits)
-  done*) sorry
+  done sorry
+*)
+
+(*
+lemma reschedule_required_ct_not_queued[wp]:
+  "\<lbrace>ct_not_queued\<rbrace> reschedule_required \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  apply (clarsimp simp: reschedule_required_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (case_tac action; clarsimp simp: bind_assoc when_def)
+    apply (wpsimp simp: set_scheduler_action_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ is_schedulable_sp])
+   apply (wpsimp simp: set_scheduler_action_def tcb_sched_action_def)
+     apply simp
+   apply (wpsimp simp: set_scheduler_action_def tcb_sched_action_def)
+apply (clarsimp simp: is_schedulable_opt_def)
+     apply wpsimp
+oops*)
+(*
+
+lemma test_reschedule_ct_not_queued[wp]:
+  "\<lbrace>ct_not_queued and (\<lambda>s. cur_thread s \<noteq> t)\<rbrace> test_reschedule t \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  apply (clarsimp simp: test_reschedule_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule_tac Q="ct_not_queued and (\<lambda>s. cur_thread s \<noteq> t) and (\<lambda>s. cur_thread s = cur) and
+            (\<lambda>s. scheduler_action s = action) and K (t \<noteq> cur)" in hoare_weaken_pre)
+  apply (rule hoare_gen_asm, clarsimp)
+defer
+apply clarsimp
+  apply (case_tac action; clarsimp simp: split del: if_split)
+defer 2
+  apply wpsimp
+  apply wpsimp
+  apply wpsimp
+  done oops
+*)
+
+crunch ct_not_queued[wp]: set_scheduler_action "ct_not_queued"
+crunch not_queued[wp]: set_scheduler_action "not_queued t"
+
+lemma reschedule_required_ct_not_queued[wp]:
+  "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> reschedule_required \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  apply (rule hoare_pre)
+  apply (rule ct_not_queued_lift; wpsimp wp: reschedule_required_not_queued)
+  apply (clarsimp simp: not_queued_def scheduler_act_not_def)
+  done
+
+lemma test_reschedule_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> test_reschedule tptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  by (wpsimp simp: test_reschedule_def wp: reschedule_required_not_queued)
+
+lemma test_reschedule_ct_not_queued[wp]:
+  "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace>
+     test_reschedule tptr \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  by (wpsimp simp: test_reschedule_def wp: reschedule_required_not_queued)
+
+lemma sched_context_donate_ct_not_queued[wp]:
+  "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> sched_context_donate sc_ptr sc_ptr \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  apply (clarsimp simp: sched_context_donate_def)
+  apply (wpsimp simp: set_tcb_obj_ref_def set_sc_obj_ref_def update_sched_context_def
+       tcb_sched_action_def get_sc_obj_ref_def
+          wp: hoare_drop_imp hoare_vcg_if_lift2 get_sched_context_wp)
+  apply (clarsimp simp: etcb_at_def not_queued_def tcb_sched_dequeue_def split: option.splits)
+  done
+
+crunch ct_not_queud[wp]: reply_unlink_tcb,reply_unlink_sc ct_not_queued
+  (simp: a_type_def wp: hoare_drop_imp)
+
+lemma reply_remove_ct_not_queued[wp]:
+  "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> reply_remove r \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  apply (clarsimp simp: reply_remove_def assert_opt_def liftM_def)
+
+
+
+  apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
+  apply (case_tac "reply_tcb reply"; clarsimp)
+  apply (case_tac "reply_sc reply"; clarsimp)
+  apply (rule hoare_seq_ext[OF _ get_sched_context_sp])
+  apply (rule hoare_seq_ext[OF _ gsc_sp])
+  apply (clarsimp simp: pred_tcb_at_def)
+  apply (case_tac caller_sc; clarsimp)
+apply (rule hoare_seq_ext)
+apply (rule hoare_seq_ext)
+  apply (wpsimp wp: sched_context_donate_ct_not_queued)
+sorry
+
+lemma reschedule_required_scheduler_act_sane[wp]:
+  "\<lbrace>cheduler_act_sane\<rbrace> reschedule_required \<lbrace>\<lambda>_. scheduler_act_sane\<rbrace>"
+  by (wpsimp simp: reschedule_required_def set_scheduler_action_def)
+
+lemma test_reschedule_scheduler_act_sane[wp]:
+  "\<lbrace>scheduler_act_sane\<rbrace> test_reschedule tptr \<lbrace>\<lambda>_. scheduler_act_sane\<rbrace>"
+  apply (clarsimp simp: test_reschedule_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (case_tac action; wpsimp)
+  apply auto
+  done
+
+
+crunch scheduler_act_sane[wp]: sched_context_donate "scheduler_act_sane"
+  (wp: get_object_wp hoare_drop_imp ignore: test_reschedule)
+
+crunch scheduler_act_sane[wp]: reply_remove "scheduler_act_sane"
+  (wp: get_object_wp hoare_drop_imp ignore: test_reschedule)
+
+crunch cur_thread[wp]: test_reschedule,tcb_release_enqueue "\<lambda>s. P (cur_thread s)"
+
+crunch cur_thread[wp]: postpone  "\<lambda>s. P (cur_thread s)"
+  (wp: dxo_wp_weak hoare_drop_imp ignore: tcb_release_enqueue tcb_sched_action)
+
+crunch cur_thread[wp]: sched_context_donate  "\<lambda>s. P (cur_thread s)"
+  (wp: crunch_wps maybeM_inv dxo_wp_weak simp: unless_def crunch_simps
+   ignore: test_reschedule tcb_sched_action)
 
 context DetSchedSchedule_AI begin
+
+crunch ct_not_queued[wp]: do_ipc_transfer,handle_fault_reply "ct_not_queued"
+  (wp: mapM_wp' simp: zipWithM_x_mapM)
 
 lemma do_reply_transfer_ct_not_queued[wp]:
   "\<lbrace>ct_not_queued and invs and ct_active and scheduler_act_sane\<rbrace>
      do_reply_transfer sender receiver
    \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
-  apply (rule do_reply_transfer_add_assert)
-  apply (rule hoare_pre)
-   apply (wp ct_not_queued_lift)
-(*  apply (clarsimp simp add: ct_in_state_def pred_tcb_at_def obj_at_def)
-  done*) sorry
+  apply (clarsimp simp: do_reply_transfer_def maybeM_def liftM_def)
+  apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
+  apply (rename_tac reply)
+  apply (case_tac "reply_tcb reply"; clarsimp split del: if_split)
+   apply wpsimp
+  apply (rule hoare_seq_ext[OF _ gts_sp])
+  apply (case_tac state; clarsimp split del: if_split)
+         defer 6
+         apply (wpsimp+)[7]
+  apply (wpsimp wp: hoare_drop_imp simp: thread_set_def)
+  done
+
+
+crunch cur_thread[wp]: do_reply_transfer "\<lambda>s. P (cur_thread s)"
+  (wp: crunch_wps maybeM_inv transfer_caps_loop_pres simp: unless_def crunch_simps
+   ignore: test_reschedule tcb_sched_action tcb_release_enqueue)
+
 
 lemma do_reply_transfer_scheduler_act_sane[wp]:
   "\<lbrace>scheduler_act_sane and ct_active\<rbrace>
      do_reply_transfer sender receiver
    \<lbrace>\<lambda>_. scheduler_act_sane\<rbrace>"
-  apply (rule do_reply_transfer_add_assert)
-  apply (rule hoare_pre)
-   apply (wp sch_act_sane_lift)
-(*  apply (clarsimp simp add: ct_in_state_def pred_tcb_at_def obj_at_def)
-  done*) sorry
+  apply (clarsimp simp: do_reply_transfer_def maybeM_def liftM_def)
+  apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
+  apply (rename_tac reply)
+  apply (case_tac "reply_tcb reply"; clarsimp split del: if_split)
+   apply wpsimp
+  apply (rule hoare_seq_ext[OF _ gts_sp])
+  apply (case_tac state; clarsimp split del: if_split)
+         defer 6
+         apply (wpsimp+)[7]
+apply (rule hoare_pre)
+   apply (wpsimp wp: sch_act_sane_lift set_thread_state_sched_act_not)
+ (* apply (clarsimp simp: obj_at_def)
+done*) sorry
 
 end
 
@@ -4123,18 +4287,30 @@ lemma set_scheduler_action_switch_not_cur_thread [wp]:
 
 lemma possible_switch_to_not_cur_thread [wp]:
   "\<lbrace>not_cur_thread t\<rbrace> possible_switch_to target \<lbrace>\<lambda>_. not_cur_thread t\<rbrace>"
-  unfolding possible_switch_to_def
-  apply (rule hoare_pre)
-   apply (wp hoare_vcg_imp_lift|wpc)+
-  apply clarsimp
-  sorry
+  unfolding possible_switch_to_def get_tcb_obj_ref_def
+  by (rule hoare_seq_ext[OF _ thread_get_sp]) wpsimp
+
+crunch not_ct[wp]: handle_fault,lookup_reply,lookup_cap,receive_ipc,receive_signal "not_cur_thread target"
+  (wp: mapM_wp' maybeM_inv hoare_drop_imp hoare_vcg_if_lift2 simp: unless_def)
 
 lemma handle_recv_not_cur_thread[wp]:
   "\<lbrace>not_cur_thread target\<rbrace> handle_recv param_a param_b \<lbrace>\<lambda>_. not_cur_thread target\<rbrace>"
-  sorry
+  apply (clarsimp simp: handle_recv_def Let_def split del: if_split)
+  apply (wpsimp split_del: if_split simp: whenE_def wp: hoare_vcg_if_lift2 hoare_drop_imp)
+     apply (rule_tac Q'="\<lambda>_. not_cur_thread target" in hoare_post_imp_R)
+      by wpsimp+
+
+crunch it[wp]: handle_fault,lookup_reply,lookup_cap "\<lambda>s. P (idle_thread s)"
+  (wp: mapM_wp' maybeM_inv hoare_drop_imp simp: unless_def)
+
+crunch it[wp]: receive_signal "\<lambda>s. P (idle_thread s)"
+  (wp: mapM_wp' maybeM_inv hoare_drop_imp hoare_vcg_if_lift2 simp: unless_def)
 
 lemma handle_recv_it[wp]: "\<lbrace>\<lambda>s. P (idle_thread s)\<rbrace> handle_recv param_a param_b \<lbrace>\<lambda>_ s. P (idle_thread s)\<rbrace>"
-  sorry
+  apply (clarsimp simp: handle_recv_def Let_def split del: if_split)
+  apply (wpsimp split_del: if_split simp: whenE_def wp: hoare_vcg_if_lift2 hoare_drop_imp)
+     apply (rule_tac Q'="\<lambda>_ s. P (idle_thread s)" in hoare_post_imp_R)
+      by wpsimp+
 
 lemma handle_event_valid_sched:
   "\<lbrace>invs and valid_sched and (\<lambda>s. e \<noteq> Interrupt \<longrightarrow> ct_active s)

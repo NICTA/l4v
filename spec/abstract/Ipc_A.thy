@@ -568,7 +568,8 @@ where
     recv_opt \<leftarrow> get_reply_tcb reply;
     swp maybeM recv_opt (\<lambda>receiver. do
       state \<leftarrow> get_thread_state receiver;
-      if (state = BlockedOnReply (Some reply)) then do
+      case state of BlockedOnReply r \<Rightarrow>
+      if r =(Some reply) then do
         reply_remove reply;
         fault \<leftarrow> thread_get tcb_fault receiver;
         case fault of
@@ -605,7 +606,8 @@ where
             od
          od
        od
-       else return ()
+       else fail
+    | _ \<Rightarrow> return ()
     od)
   od"
 

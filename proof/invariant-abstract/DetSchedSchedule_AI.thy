@@ -2307,6 +2307,14 @@ lemma tcb_dequeue_not_queued:
                   split: option.splits)
   done
 
+lemma tcb_dequeue_not_queued_gen:
+  "\<lbrace>not_queued tptr\<rbrace> tcb_sched_action tcb_sched_dequeue tptr' \<lbrace>\<lambda>_. not_queued tptr\<rbrace>"
+  apply (simp add: tcb_sched_action_def | wp)+
+  apply (clarsimp simp: etcb_at_def tcb_sched_dequeue_def not_queued_def
+                        valid_queues_def
+                  split: option.splits)
+  done
+
 crunch ct_in_state[wp]: set_eobject, set_tcb_queue "ct_in_state P"
   (simp: ct_in_state_def pred_tcb_at_def obj_at_def)
 
@@ -3575,12 +3583,14 @@ lemma reschedule_required_not_queued:
   "\<lbrace>not_queued t and scheduler_act_not t\<rbrace>
     reschedule_required
    \<lbrace>\<lambda>rv. not_queued t\<rbrace>"
-  apply (simp add: reschedule_required_def tcb_sched_action_def
-                   set_scheduler_action_def | wp | wpc)+
-  apply (clarsimp simp: etcb_at_def tcb_sched_enqueue_def not_queued_def
-                        scheduler_act_not_def
-                  split: option.splits)
-  sorry
+  apply (clarsimp simp: reschedule_required_def set_scheduler_action_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (case_tac action; clarsimp simp: bind_assoc scheduler_act_not_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ is_schedulable_sp])
+  apply (rename_tac thread inq schedulable)
+  apply (wpsimp wp: tcb_sched_action_enqueue_not_queued)
+  done
 
 crunch sched_act_not[wp]: tcb_sched_action "scheduler_act_not t"
 
@@ -3648,44 +3658,131 @@ lemma cancel_all_signals_not_queued:
 lemma unbind_maybe_notification_valid_objs:
   "\<lbrace>valid_objs\<rbrace>
    unbind_maybe_notification ptr \<lbrace>\<lambda>rv. valid_objs\<rbrace>"
-  unfolding unbind_maybe_notification_def
-(*  apply (wp thread_set_valid_objs_triv set_simple_ko_valid_objs hoare_drop_imp
-            get_simple_ko_wp | wpc | simp add: tcb_cap_cases_def
-         | strengthen unbind_notification_valid_objs_helper)+
-   apply (clarsimp)
-   apply (erule (1) obj_at_valid_objsE)
-   apply (clarsimp simp:valid_obj_def valid_tcb_def)+
-  done*) sorry
+  by (wpsimp simp: unbind_maybe_notification_def get_sk_obj_ref_def
+         wp: get_simple_ko_wp)
 
 lemma unbind_maybe_notification_sym_refs[wp]:
   "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s\<rbrace>
      unbind_maybe_notification a
    \<lbrace>\<lambda>rv s. sym_refs (state_refs_of s)\<rbrace>"
-  apply (simp add: unbind_maybe_notification_def)
-(*  apply (rule hoare_seq_ext [OF _ get_simple_ko_sp])
-  apply (rule hoare_pre)
-   apply (wp | wpc | clarsimp)+
+  apply (simp add: unbind_maybe_notification_def get_sk_obj_ref_def maybeM_def)
+  apply (rule hoare_seq_ext [OF _ get_simple_ko_sp])
+  apply (wpsimp simp: update_sk_obj_ref_def wp: get_simple_ko_wp)
   apply (rule conjI)
-   apply clarsimp
-   apply (rule delta_sym_refs, assumption)
-    apply (clarsimp split: if_split_asm)
-    apply (frule ko_at_state_refs_ofD, simp)
-   apply (clarsimp split: if_split_asm)
-   apply (frule ko_at_state_refs_ofD, simp)
-   apply (fastforce simp: symreftype_inverse' dest!: refs_in_ntfn_q_refs)
+   apply (clarsimp simp: obj_at_def, frule (4) ntfn_bound_tcb_at)
+   apply (clarsimp simp: pred_tcb_at_def obj_at_def)
   apply clarsimp
   apply (rule delta_sym_refs, assumption)
    apply (clarsimp split: if_split_asm, frule ko_at_state_refs_ofD, simp)+
    apply (frule_tac P="op = (Some a)" in ntfn_bound_tcb_at, simp_all add: obj_at_def)[1]
-   apply (fastforce simp: ntfn_q_refs_no_NTFNBound obj_at_def is_tcb state_refs_of_def
-                          tcb_st_refs_of_no_NTFNBound tcb_bound_refs_def2 tcb_ntfn_is_bound_def
-                          tcb_st_refs_no_TCBBound
-                   dest!: pred_tcb_at_tcb_at bound_tcb_at_state_refs_ofD)
-  apply (frule ko_at_state_refs_ofD, simp)
-  done*) sorry
+  apply (clarsimp simp: obj_at_def, frule (4) ntfn_bound_tcb_at, clarsimp simp: pred_tcb_at_def obj_at_def)
+  apply (frule (1) sym_refs_ko_atD[simplified obj_at_def, simplified])
+  apply (frule ko_at_state_refs_ofD[where ko="TCB _", simplified obj_at_def, simplified])
+  apply (fastforce split: if_split_asm split del: if_split simp: get_refs_def2 obj_at_def)
+  done
 
-crunch not_queued[wp]: unbind_maybe_notification, unbind_notification "not_queued t"
+
+lemma sched_context_unbind_ntfn_valid_objs[wp]:
+  "\<lbrace>valid_objs\<rbrace>
+   sched_context_unbind_ntfn sc_ptr \<lbrace>\<lambda>rv. valid_objs\<rbrace>"
+  apply (clarsimp simp: sched_context_unbind_ntfn_def maybeM_def get_sc_obj_ref_def)
+  apply (rule hoare_seq_ext[OF _ get_sched_context_sp])
+  apply (case_tac "sc_ntfn sc"; clarsimp)
+   apply wpsimp
+  apply (wpsimp simp: update_sk_obj_ref_def
+        wp: get_simple_ko_wp get_sched_context_wp)
+  by (clarsimp simp: valid_obj_def valid_ntfn_def valid_bound_obj_def
+               split: option.splits ntfn.splits elim!: obj_at_valid_objsE)
+
+lemma sched_context_maybe_unbind_ntfn_valid_objs[wp]:
+  "\<lbrace>valid_objs\<rbrace>
+   sched_context_maybe_unbind_ntfn ntfn_ptr \<lbrace>\<lambda>rv. valid_objs\<rbrace>"
+  by (wpsimp simp: sched_context_maybe_unbind_ntfn_def get_sk_obj_ref_def
+         wp: get_simple_ko_wp)
+
+lemma sched_context_unbind_ntfn_sym_refs[wp]:
+  "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s\<rbrace>
+     sched_context_unbind_ntfn sc_ptr
+   \<lbrace>\<lambda>rv s. sym_refs (state_refs_of s)\<rbrace>"
+  apply (clarsimp simp: sched_context_unbind_ntfn_def get_sc_obj_ref_def maybeM_def)
+  apply (rule hoare_seq_ext [OF _ get_sched_context_sp])
+  apply (wpsimp simp: update_sk_obj_ref_def wp: get_simple_ko_wp)
+  apply (rule conjI)
+   apply (erule (1) obj_at_valid_objsE)
+   apply (clarsimp simp: pred_tcb_at_def obj_at_def)
+  apply clarsimp
+  apply (rule delta_sym_refs, assumption)
+   apply (clarsimp split: if_split_asm)
+   apply (frule ko_at_state_refs_ofD)
+   apply (frule ko_at_state_refs_ofD[where ko="Notification _"], simp)
+  apply (frule (1) sym_refs_ko_atD)
+  apply (frule ko_at_state_refs_ofD[where ko="Notification _"])
+  apply (fastforce split: if_split_asm split del: if_split simp: image_iff get_refs_def2 obj_at_def)+
+  done
+
+lemma sched_context_maybe_unbind_ntfn_sym_refs[wp]:
+  "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s\<rbrace>
+     sched_context_maybe_unbind_ntfn a
+   \<lbrace>\<lambda>rv s. sym_refs (state_refs_of s)\<rbrace>"
+  apply (clarsimp simp: sched_context_maybe_unbind_ntfn_def get_sk_obj_ref_def maybeM_def)
+   by (wpsimp simp: update_sk_obj_ref_def wp: get_simple_ko_wp)
+
+crunches unbind_maybe_notification, unbind_notification,sched_context_maybe_unbind_ntfn,reply_unlink_sc
+for  not_queued[wp]: "not_queued t"
+and  scheduler_act_not[wp]: "scheduler_act_not t"
   (wp: crunch_wps maybeM_inv)
+
+crunches blocked_cancel_ipc,cancel_signal
+for not_queued[wp]: "not_queued t"
+and  scheduler_act_not[wp]: "scheduler_act_not t"
+  (wp: hoare_drop_imp)
+
+crunches test_reschedule
+for not_queued[wp]: "not_queued t"
+  (wp: hoare_vcg_if_lift2)
+
+lemma sched_context_donate_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> sched_context_donate scp tp \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  apply (clarsimp simp: sched_context_donate_def get_sc_obj_ref_def)
+  apply (wpsimp simp: wp: get_sched_context_wp tcb_dequeue_not_queued_gen)
+  done
+
+lemma reply_remove_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> reply_remove rptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  apply (clarsimp simp: reply_remove_def assert_opt_def liftM_def get_tcb_obj_ref_def)
+  apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
+  apply (case_tac "reply_tcb reply"; clarsimp)
+  apply (case_tac "reply_sc reply"; clarsimp)
+  apply (rule hoare_seq_ext[OF _ get_sched_context_sp])
+  apply (rule hoare_seq_ext[OF _ thread_get_sp])
+  apply (wpsimp simp: wp: hoare_vcg_if_lift2)
+    apply (rule_tac Q="\<lambda>_. not_queued t and scheduler_act_not t" in hoare_strengthen_post)
+  by wpsimp+
+
+crunch not_queued[wp]: reply_remove_tcb "not_queued t"
+
+lemma reply_cancel_ipc_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> reply_cancel_ipc tptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  by (wpsimp simp: reply_cancel_ipc_def)
+
+lemma cancel_ipc_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> cancel_ipc tptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  apply (clarsimp simp: cancel_ipc_def)
+  apply (rule hoare_seq_ext[OF _ gts_sp])
+  apply (case_tac state; wpsimp)
+  done
+
+crunch not_queued[wp]: sched_context_unbind_yield_from,sched_context_clear_replies "not_queued t"
+  (wp: hoare_drop_imps maybeM_inv mapM_x_wp')
+
+lemma sched_context_unbind_tcb_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> sched_context_unbind_tcb scptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  by (wpsimp simp: sched_context_unbind_tcb_def
+      wp: tcb_dequeue_not_queued_gen reschedule_required_not_queued get_sched_context_wp)
+
+lemma sched_context_unbind_all_tcbs_not_queued[wp]:
+  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> sched_context_unbind_all_tcbs scptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
+  by (wpsimp simp: sched_context_unbind_all_tcbs_def wp: get_sched_context_wp)
 
 context DetSchedSchedule_AI begin
 
@@ -3694,10 +3791,9 @@ lemma fast_finalise_not_queued:
     sym_refs \<circ> state_refs_of)\<rbrace>
    fast_finalise cap final
    \<lbrace>\<lambda>_. not_queued t\<rbrace>"
-  apply (cases cap, simp_all)
-     apply (wp cancel_all_ipc_not_queued cancel_all_signals_not_queued
-            get_simple_ko_wp unbind_maybe_notification_valid_objs | simp)+
-  sorry
+  by (cases cap;
+      wpsimp wp: cancel_all_ipc_not_queued cancel_all_signals_not_queued
+                 unbind_maybe_notification_valid_objs hoare_vcg_if_lift2 hoare_drop_imp)
 
 end
 
@@ -3710,12 +3806,8 @@ lemma set_simple_ko_ct_active:
 
 crunch is_etcb_at_ext[wp]: tcb_sched_action, reschedule_required, empty_slot_ext "is_etcb_at t"
 
-lemma set_thread_state_is_etcb_at[wp]:
-  "\<lbrace>is_etcb_at t\<rbrace> set_thread_state param_a param_b \<lbrace>\<lambda>_. is_etcb_at t\<rbrace>"
-  sorry
-
-lemma reply_remove_is_etcb_at[wp]: "\<lbrace>is_etcb_at t\<rbrace> reply_remove param_a \<lbrace>\<lambda>_. is_etcb_at t\<rbrace>"
-  sorry
+crunch is_etcb_at[wp]: reply_remove "is_etcb_at t"
+  (wp: hoare_drop_imp)
 
 crunch is_etcb_at[wp]: cancel_ipc "is_etcb_at t"
   (wp: hoare_drop_imps crunch_wps select_inv simp: crunch_simps unless_def)
@@ -3770,11 +3862,11 @@ lemma handle_recv_valid_sched:
       and ct_not_queued and scheduler_act_sane\<rbrace>
    handle_recv is_blocking can_reply \<lbrace>\<lambda>rv. valid_sched\<rbrace>"
   apply (simp add: handle_recv_def Let_def ep_ntfn_cap_case_helper
-              cong: if_cong)
-(*  apply (wp get_simple_ko_wp handle_fault_valid_sched
+              cong: if_cong split del: if_split)
+  apply (wp get_simple_ko_wp handle_fault_valid_sched
             receive_ipc_valid_sched receive_signal_valid_sched | simp)+
      apply (rule hoare_vcg_E_elim)
-      apply (wpsimp simp: lookup_cap_def lookup_slot_for_thread_def)
+(*      apply (wpsimp simp: lookup_cap_def lookup_slot_for_thread_def)
        apply (wp resolve_address_bits_valid_fault2)+
     apply (simp add: valid_fault_def)
     apply (wp hoare_drop_imps hoare_vcg_all_lift_R)
@@ -3806,11 +3898,7 @@ crunch valid_sched[wp]: cap_delete_one "valid_sched"
 
 lemma invoke_irq_handler_valid_sched[wp]:
   "\<lbrace> valid_sched \<rbrace> invoke_irq_handler i \<lbrace> \<lambda>_. valid_sched \<rbrace>"
-  apply (cases i; wpsimp)
-  
-  sorry
-(*
-*)
+  by (cases i; wpsimp)
 
 end
 
@@ -4143,17 +4231,13 @@ lemma reschedule_required_ct_not_queued[wp]:
   apply (clarsimp simp: not_queued_def scheduler_act_not_def)
   done
 
-lemma test_reschedule_not_queued[wp]:
-  "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> test_reschedule tptr \<lbrace>\<lambda>_. not_queued t\<rbrace>"
-  by (wpsimp simp: test_reschedule_def wp: reschedule_required_not_queued)
-
 lemma test_reschedule_ct_not_queued[wp]:
   "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace>
      test_reschedule tptr \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
   by (wpsimp simp: test_reschedule_def wp: reschedule_required_not_queued)
 
 lemma sched_context_donate_ct_not_queued[wp]:
-  "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> sched_context_donate sc_ptr sc_ptr \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
+  "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> sched_context_donate sc_ptr tptr \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
   apply (clarsimp simp: sched_context_donate_def)
   apply (wpsimp simp: set_tcb_obj_ref_def set_sc_obj_ref_def update_sched_context_def
        tcb_sched_action_def get_sc_obj_ref_def

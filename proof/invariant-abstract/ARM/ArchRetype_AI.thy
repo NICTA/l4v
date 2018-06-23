@@ -1346,6 +1346,9 @@ lemma init_arch_objects_excap:
 crunch st_tcb_at[wp]: init_arch_objects "st_tcb_at P t"
   (wp: crunch_wps)
 
+crunch bound_sc_tcb_at[wp]: init_arch_objects "bound_sc_tcb_at P t"
+  (wp: crunch_wps)
+
 end
 
 lemmas clearMemory_invs[wp] = ARM.clearMemory_invs

@@ -23,18 +23,13 @@ crunch_ignore (del:
 
 crunch_ignore (add: do_extended_op)
 
-crunch ekheap[wp]: update_cdt_list "\<lambda>s. P (ekheap s)"
-crunch rqueues[wp]: update_cdt_list "\<lambda>s. P (ready_queues s)"
-crunch schedact[wp]: update_cdt_list "\<lambda>s. P (scheduler_action s)"
-crunch cur_domain[wp]: update_cdt_list "\<lambda>s. P (cur_domain s)"
-
-crunch ekheap[wp]: create_cap, cap_insert "\<lambda>s :: det_ext state. P (ekheap s)" (wp: crunch_wps)
-
-crunch rqueues[wp]: create_cap, cap_insert "\<lambda>s :: det_ext state. P (ready_queues s)" (wp: crunch_wps)
-
-crunch schedact[wp]: create_cap, cap_insert "\<lambda>s :: det_ext state. P (scheduler_action s)" (wp: crunch_wps)
-
-crunch cur_domain[wp]: create_cap, cap_insert "\<lambda>s :: det_ext state. P (cur_domain s)" (wp: crunch_wps)
+crunches update_cdt_list, create_cap, cap_insert
+for ekheap[wp]: "\<lambda>s. P (ekheap s)"
+and rqueues[wp]: "\<lambda>s. P (ready_queues s)"
+and schedact[wp]: "\<lambda>s. P (scheduler_action s)"
+and cur_domain[wp]: "\<lambda>s. P (cur_domain s)"
+and release_queue[wp]: "\<lambda>s. P (release_queue s)"
+(wp: crunch_wps)
 
 lemma create_cap_ct[wp]: "\<lbrace>\<lambda>s. P (cur_thread s)\<rbrace> create_cap a b c d e \<lbrace>\<lambda>r s. P (cur_thread s)\<rbrace>"
   apply (simp add: create_cap_def)
@@ -163,9 +158,6 @@ locale DetSchedAux_AI =
   assumes invoke_untyped_bound_sc[wp]:
     "\<And>P i t. \<lbrace>\<lambda>s::'state_ext state. (invs and st_tcb_at ((Not \<circ> inactive) and (Not \<circ> idle)) t
        and bound_sc_tcb_at P t and ct_active and valid_untyped_inv i) s\<rbrace> invoke_untyped i \<lbrace>\<lambda>_ s. bound_sc_tcb_at P t s\<rbrace>"
-  assumes invoke_untyped_schedulable_tcb_at[wp]:
-    "\<And>i t. \<lbrace>\<lambda>s::'state_ext state. (invs and st_tcb_at ((Not \<circ> inactive) and (Not \<circ> idle)) t
-       and schedulable_tcb_at t and ct_active and valid_untyped_inv i) s\<rbrace> invoke_untyped i \<lbrace>\<lambda>_ s. schedulable_tcb_at t s\<rbrace>"
 
 locale DetSchedAux_AI_det_ext = DetSchedAux_AI "TYPE(det_ext)" +
   assumes delete_objects_etcb_at[wp]:
@@ -185,6 +177,11 @@ locale DetSchedAux_AI_det_ext = DetSchedAux_AI "TYPE(det_ext)" +
     "\<And>P i. \<lbrace>\<lambda>s. P (ready_queues s)\<rbrace> invoke_untyped i \<lbrace>\<lambda>_ s. P (ready_queues s)\<rbrace>"
   assumes invoke_untyped_scheduler_action[wp]:
     "\<And>P i. \<lbrace>\<lambda>s. P (scheduler_action s)\<rbrace> invoke_untyped i \<lbrace>\<lambda>_ s. P (scheduler_action s)\<rbrace>"
+  assumes invoke_untyped_release_queue[wp]:
+    "\<And>P i. \<lbrace>\<lambda>s. P (release_queue s)\<rbrace> invoke_untyped i \<lbrace>\<lambda>_ s. P (release_queue s)\<rbrace>"
+  assumes invoke_untyped_schedulable_tcb_at[wp]:
+    "\<And>i t. \<lbrace>\<lambda>s. (invs and st_tcb_at ((Not \<circ> inactive) and (Not \<circ> idle)) t
+       and schedulable_tcb_at t and ct_active and valid_untyped_inv i) s\<rbrace> invoke_untyped i \<lbrace>\<lambda>_ s. schedulable_tcb_at t s\<rbrace>"
 
 lemma delete_objects_valid_etcbs[wp]: "\<lbrace>valid_etcbs\<rbrace> delete_objects a b \<lbrace>\<lambda>_. valid_etcbs\<rbrace>"
   apply (simp add: delete_objects_def)
@@ -254,13 +251,15 @@ lemma valid_sched_tcb_state_preservation:
   assumes valid_etcb: "\<lbrace>valid_etcbs\<rbrace> f \<lbrace>\<lambda>_. valid_etcbs\<rbrace>"
   assumes valid_blocked: "\<lbrace>valid_blocked\<rbrace> f \<lbrace>\<lambda>_. valid_blocked\<rbrace>"
   assumes valid_idle: "\<lbrace>I\<rbrace> f \<lbrace>\<lambda>_. valid_idle\<rbrace>"
-  assumes valid_others: "\<And>P. \<lbrace>\<lambda>s. P (scheduler_action s) (ready_queues s) (cur_domain s)\<rbrace> f \<lbrace>\<lambda>r s. P (scheduler_action s) (ready_queues s) (cur_domain s)\<rbrace>"
+  assumes valid_others:
+        "\<And>P. \<lbrace>\<lambda>s. P (scheduler_action s) (ready_queues s) (cur_domain s) (release_queue s)\<rbrace>
+            f \<lbrace>\<lambda>r s. P (scheduler_action s) (ready_queues s) (cur_domain s) (release_queue s)\<rbrace>"
   shows "\<lbrace>I and ct_active and valid_sched and valid_idle\<rbrace> f \<lbrace>\<lambda>_. valid_sched\<rbrace>"
   apply (clarsimp simp add: valid_sched_def valid_def)
   apply (frule(1) use_valid[OF _ valid_etcb])
   apply (frule(1) use_valid[OF _ valid_blocked])
   apply simp
-  apply (frule_tac P1="\<lambda>sa rq cdom. rq = ready_queues s \<and> sa = scheduler_action s \<and> cdom = cur_domain s" in use_valid[OF _ valid_others])
+  apply (frule_tac P1="\<lambda>sa rq cdom rlq. rq = ready_queues s \<and> sa = scheduler_action s \<and> cdom = cur_domain s \<and> rlq = release_queue s" in use_valid[OF _ valid_others])
    apply simp
   apply (rule conjI)
    apply (clarsimp simp add: valid_queues_def)
@@ -344,7 +343,7 @@ lemma valid_sched_tcb_state_preservation_gen:
   assumes st_tcb: "\<And>P t. \<lbrace>I and ct_active and st_tcb_at (P and Not o inactive and Not o idle) t\<rbrace> f \<lbrace>\<lambda>_.st_tcb_at P t\<rbrace>"
   assumes stuff: "\<And>P t. \<lbrace>(\<lambda>s. etcb_at P t s) and valid_etcbs\<rbrace> f \<lbrace>\<lambda>r s. st_tcb_at (Not o inactive) t s \<longrightarrow> etcb_at P t s\<rbrace>"
   assumes bound_sc:
-            "\<And>Q t. \<lbrace>I and ct_active and st_tcb_at (Not o inactive and Not o idle) t and schedulable_tcb_at t\<rbrace>
+            "\<And>t. \<lbrace>I and ct_active and st_tcb_at (Not o inactive and Not o idle) t and schedulable_tcb_at t\<rbrace>
                                  f \<lbrace>\<lambda>_.schedulable_tcb_at t\<rbrace>"
 (*  assumes bound_sc: "\<And>Q t. \<lbrace>\<lambda>s. bound_sc_tcb_at Q t s\<rbrace> f \<lbrace>\<lambda>rv s. bound_sc_tcb_at Q t s\<rbrace>"*)
   assumes cur_thread: "\<And>P. \<lbrace>\<lambda>s. P (cur_thread s)\<rbrace> f \<lbrace>\<lambda>r s. P (cur_thread s)\<rbrace>"
@@ -352,13 +351,15 @@ lemma valid_sched_tcb_state_preservation_gen:
   assumes valid_etcb: "\<lbrace>valid_etcbs\<rbrace> f \<lbrace>\<lambda>_. valid_etcbs\<rbrace>"
   assumes valid_blocked: "\<lbrace>valid_blocked\<rbrace> f \<lbrace>\<lambda>_. valid_blocked\<rbrace>"
   assumes valid_idle: "\<lbrace>I\<rbrace> f \<lbrace>\<lambda>_. valid_idle\<rbrace>"
-  assumes valid_others: "\<And>P. \<lbrace>\<lambda>s. P (scheduler_action s) (ready_queues s) (cur_domain s)\<rbrace> f \<lbrace>\<lambda>r s. P (scheduler_action s) (ready_queues s) (cur_domain s)\<rbrace>"
+  assumes valid_others:
+        "\<And>P. \<lbrace>\<lambda>s. P (scheduler_action s) (ready_queues s) (cur_domain s) (release_queue s)\<rbrace>
+            f \<lbrace>\<lambda>r s. P (scheduler_action s) (ready_queues s) (cur_domain s) (release_queue s)\<rbrace>"
   shows "\<lbrace>I and ct_active and valid_sched and valid_idle\<rbrace> f \<lbrace>\<lambda>_. valid_sched\<rbrace>"
   apply (clarsimp simp add: valid_sched_def valid_def)
   apply (frule(1) use_valid[OF _ valid_etcb])
   apply (frule(1) use_valid[OF _ valid_blocked])
   apply simp
-  apply (frule_tac P1="\<lambda>sa rq cdom. rq = ready_queues s \<and> sa = scheduler_action s \<and> cdom = cur_domain s" in use_valid[OF _ valid_others])
+  apply (frule_tac P1="\<lambda>sa rq cdom rlq. rq = ready_queues s \<and> sa = scheduler_action s \<and> cdom = cur_domain s \<and> rlq = release_queue s" in use_valid[OF _ valid_others])
    apply simp
   apply (rule conjI)
    apply (clarsimp simp add: valid_queues_def)
@@ -461,6 +462,7 @@ lemma invoke_untyped_valid_sched:
         simp_all add: invs_valid_idle)[1]
    apply (rule_tac f="\<lambda>s. P (scheduler_action s)" in hoare_lift_Pf)
     apply (rule_tac f="\<lambda>s. x (ready_queues s)" in hoare_lift_Pf)
+    apply (rule_tac f="\<lambda>s. xa (cur_domain s)" in hoare_lift_Pf)
      apply wp+
   apply simp+
   done
@@ -484,6 +486,12 @@ lemma schedulable_tcb_at_is_original_cap_update[simp]:
   "schedulable_tcb_at t (s\<lparr>is_original_cap := param_a\<rparr>) = schedulable_tcb_at t s"
   by (clarsimp simp: schedulable_tcb_at_def)
 
+lemma set_mrs_schedulable_tcb_at [wp]:
+  "\<lbrace>schedulable_tcb_at t\<rbrace> set_mrs r t' mrs \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>"
+  apply (rule set_mrs_thread_set_dmo)
+   apply (wpsimp wp: schedulable_tcb_at_thread_set_no_change)
+  apply wp
+  done
 
 lemma set_cap_schedulable_tcb_at[wp]:
  "\<lbrace>schedulable_tcb_at t\<rbrace> set_cap c p \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>"

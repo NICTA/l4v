@@ -1699,7 +1699,7 @@ crunch ct_active: set_thread_state_ext ct_active
   (wp: ignore: set_object)
 
 lemma check_budget_restart_invs:
-  "\<lbrace>invs and ct_active\<rbrace> check_budget_restart \<lbrace>\<lambda>rv. invs\<rbrace>"
+  "\<lbrace>invs\<rbrace> check_budget_restart \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (clarsimp simp: check_budget_restart_def)
   apply (rule hoare_seq_ext[rotated])
   apply (rule check_budget_invs)

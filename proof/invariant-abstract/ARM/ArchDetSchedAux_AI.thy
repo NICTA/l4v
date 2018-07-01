@@ -40,6 +40,11 @@ crunch cur_domain[wp, DetSchedAux_AI_assms]: invoke_untyped "\<lambda>s. P (cur_
       simp: detype_def detype_ext_def whenE_def unless_def
             wrap_ext_det_ext_ext_def mapM_x_defsym
     ignore: freeMemory)
+crunch release_queue[wp, DetSchedAux_AI_assms]: invoke_untyped "\<lambda>s. P (release_queue s)"
+  (wp: crunch_wps mapME_x_inv_wp preemption_point_inv'
+      simp: detype_def detype_ext_def whenE_def unless_def
+            wrap_ext_det_ext_ext_def mapM_x_defsym
+    ignore: freeMemory)
 crunch idle_thread[wp, DetSchedAux_AI_assms]: invoke_untyped "\<lambda>s. P (idle_thread s)"
   (wp: crunch_wps mapME_x_inv_wp preemption_point_inv dxo_wp_weak
       simp: detype_def detype_ext_def whenE_def unless_def
@@ -291,19 +296,19 @@ lemma perform_asid_control_invocation_schedulable_tcb_at:
   apply (auto simp:page_bits_def detype_clear_um_independent)*)
   sorry
 
-crunch ct[wp]: perform_asid_control_invocation "\<lambda>s. P (cur_thread s)"
+crunches perform_asid_control_invocation
+for ct[wp]: "\<lambda>s. P (cur_thread s)"
+and idle_thread[wp]: "\<lambda>s. P (idle_thread s)"
+and valid_etcbs[wp]: valid_etcbs
+and valid_blocked[wp]: valid_blocked
+ (wp: static_imp_wp)
 
-crunch idle_thread[wp]: perform_asid_control_invocation "\<lambda>s. P (idle_thread s)"
-
-crunch valid_etcbs[wp]: perform_asid_control_invocation valid_etcbs (wp: static_imp_wp)
-
-crunch valid_blocked[wp]: perform_asid_control_invocation valid_blocked (wp: static_imp_wp)
-
-crunch schedact[wp]: perform_asid_control_invocation "\<lambda>s :: det_ext state. P (scheduler_action s)" (wp: crunch_wps simp: detype_def detype_ext_def wrap_ext_det_ext_ext_def cap_insert_ext_def ignore: freeMemory)
-
-crunch rqueues[wp]: perform_asid_control_invocation "\<lambda>s :: det_ext state. P (ready_queues s)" (wp: crunch_wps simp: detype_def detype_ext_def wrap_ext_det_ext_ext_def cap_insert_ext_def ignore: freeMemory)
-
-crunch cur_domain[wp]: perform_asid_control_invocation "\<lambda>s :: det_ext state. P (cur_domain s)" (wp: crunch_wps simp: detype_def detype_ext_def wrap_ext_det_ext_ext_def cap_insert_ext_def ignore: freeMemory)
+crunches perform_asid_control_invocation
+for rqueues[wp]: "\<lambda>s :: det_ext state. P (ready_queues s)"
+and schedact[wp]: "\<lambda>s :: det_ext state. P (scheduler_action s)"
+and cur_domain[wp]: "\<lambda>s :: det_ext state. P (cur_domain s)"
+and release_queue[wp]: "\<lambda>s :: det_ext state. P (release_queue s)"
+ (wp: crunch_wps simp: detype_def detype_ext_def wrap_ext_det_ext_ext_def cap_insert_ext_def ignore: freeMemory)
 
 lemma perform_asid_control_invocation_valid_sched:
   "\<lbrace>ct_active and invs and valid_aci aci and valid_sched and valid_idle\<rbrace>
@@ -319,6 +324,7 @@ lemma perform_asid_control_invocation_valid_sched:
    apply (rule hoare_lift_Pf[where f="\<lambda>s. scheduler_action s"])
     apply (rule hoare_lift_Pf[where f="\<lambda>s. cur_domain s"])
      apply (rule hoare_lift_Pf[where f="\<lambda>s. idle_thread s"])
+     apply (rule hoare_lift_Pf[where f="\<lambda>s. release_queue s"])
       apply wp+
   apply simp
   done
@@ -343,11 +349,13 @@ lemma set_pt_schedulable_tcb_at[wp]:
   apply (rule_tac x=scp in exI, clarsimp)
   done
 
-lemma set_mrs_schedulable_tcb_at [wp]:
-  "\<lbrace>schedulable_tcb_at t\<rbrace> set_mrs r t' mrs \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>"
-  apply (rule set_mrs_thread_set_dmo)
-   apply (wpsimp wp: schedulable_tcb_at_thread_set_no_change)
-  apply wp
+lemma set_asid_pool_schedulable_tcb_at[wp]:
+  "\<lbrace>schedulable_tcb_at t\<rbrace> set_asid_pool ptr val \<lbrace>\<lambda>_. schedulable_tcb_at t\<rbrace>"
+  apply (simp add: set_asid_pool_def set_object_def)
+  apply (wpsimp wp: get_object_wp)
+  apply (clarsimp simp: schedulable_tcb_at_def pred_tcb_at_def obj_at_def)
+  apply (case_tac "t=ptr"; clarsimp)
+  apply (rule_tac x=scp in exI, clarsimp)
   done
 
 crunch schedulable_tcb_at[wp]: init_arch_objects "schedulable_tcb_at t"

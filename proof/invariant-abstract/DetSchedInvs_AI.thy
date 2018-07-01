@@ -195,12 +195,12 @@ where
                                     \<and> sc_refill_max sc > 0) scp kh) t kh"
 
 definition
-  schedulable_tcb_at :: "32 word \<Rightarrow> 'a::state_ext state \<Rightarrow> bool"
+  schedulable_tcb_at :: "32 word \<Rightarrow> det_ext state \<Rightarrow> bool"
 where
-  "schedulable_tcb_at t s \<equiv>
+  "schedulable_tcb_at t \<equiv> (\<lambda>s.
     bound_sc_tcb_at (\<lambda>ko. \<exists>scp. ko = Some scp
                  \<and> obj_at (\<lambda>ko. \<exists>sc n. ko = SchedContext sc n
-                                    \<and> sc_refill_max sc > 0) scp s) t s"
+                                    \<and> sc_refill_max sc > 0) scp s) t s)"
 
 lemma schedulable_tcb_at_kh_simp[simp]:
   "schedulable_tcb_at_kh t (kheap s) = schedulable_tcb_at t s"
@@ -248,10 +248,10 @@ lemma schedulable_tcb_at_thread_set_no_change:
     by (fastforce intro: schedulable_tcb_at_set_object_no_change_tcb)
 
 definition weak_valid_sched_action_2 where
-  "weak_valid_sched_action_2 sa ekh kh \<equiv>
+  "weak_valid_sched_action_2 sa ekh kh release_q\<equiv>
     \<forall>t. sa = switch_thread t \<longrightarrow>
     st_tcb_at_kh runnable t kh \<and> (*bound_sc_tcb_at_kh bound t kh*)
-    schedulable_tcb_at_kh t kh"
+    schedulable_tcb_at_kh t kh \<and> \<not> t \<in> set release_q"
 (*
 obj_at_kh (\<lambda>ko. \<exists>tcb. ko = TCB tcb
                       \<and> (\<exists>scp. tcb_sched_context tcb = Some scp
@@ -259,7 +259,7 @@ obj_at_kh (\<lambda>ko. \<exists>tcb. ko = TCB tcb
                                              \<and> sc_refill_max sc > 0) scp kh)) t kh*)
 
 abbreviation weak_valid_sched_action:: "det_ext state \<Rightarrow> bool" where
-  "weak_valid_sched_action s \<equiv> weak_valid_sched_action_2 (scheduler_action s) (ekheap s) (kheap s)"
+  "weak_valid_sched_action s \<equiv> weak_valid_sched_action_2 (scheduler_action s) (ekheap s) (kheap s) (release_queue s)"
 
 lemmas weak_valid_sched_action_def = weak_valid_sched_action_2_def
 
@@ -273,11 +273,11 @@ abbreviation switch_in_cur_domain:: "det_ext state \<Rightarrow> bool" where
 lemmas switch_in_cur_domain_def = switch_in_cur_domain_2_def
 
 definition valid_sched_action_2 where
-  "valid_sched_action_2 sa ekh kh ct cdom \<equiv>
-     is_activatable_2 ct sa kh \<and> weak_valid_sched_action_2 sa ekh kh \<and> switch_in_cur_domain_2 sa ekh cdom"
+  "valid_sched_action_2 sa ekh kh ct cdom rq\<equiv>
+     is_activatable_2 ct sa kh \<and> weak_valid_sched_action_2 sa ekh kh rq \<and> switch_in_cur_domain_2 sa ekh cdom"
 
 abbreviation valid_sched_action :: "det_ext state \<Rightarrow> bool" where
-  "valid_sched_action s \<equiv> valid_sched_action_2 (scheduler_action s) (ekheap s) (kheap s) (cur_thread s) (cur_domain s)"
+  "valid_sched_action s \<equiv> valid_sched_action_2 (scheduler_action s) (ekheap s) (kheap s) (cur_thread s) (cur_domain s) (release_queue s)"
 
 lemmas valid_sched_action_def = valid_sched_action_2_def
 
@@ -295,11 +295,11 @@ abbreviation ct_not_in_q :: "det_ext state \<Rightarrow> bool" where
 lemmas ct_not_in_q_def = ct_not_in_q_2_def
 
 definition valid_sched_2 where
-  "valid_sched_2 queues ekh sa cdom kh ct it \<equiv>
-      valid_etcbs_2 ekh kh \<and> valid_queues_2 queues ekh kh \<and> ct_not_in_q_2 queues sa ct \<and> valid_sched_action_2 sa ekh kh ct cdom \<and> ct_in_cur_domain_2 ct it sa cdom ekh \<and> valid_blocked_2 queues kh sa ct \<and> valid_idle_etcb_2 ekh"
+  "valid_sched_2 queues ekh sa cdom kh ct it rq \<equiv>
+      valid_etcbs_2 ekh kh \<and> valid_queues_2 queues ekh kh \<and> ct_not_in_q_2 queues sa ct \<and> valid_sched_action_2 sa ekh kh ct cdom rq \<and> ct_in_cur_domain_2 ct it sa cdom ekh \<and> valid_blocked_2 queues kh sa ct \<and> valid_idle_etcb_2 ekh"
 
 abbreviation valid_sched :: "det_ext state \<Rightarrow> bool" where
-  "valid_sched s \<equiv> valid_sched_2 (ready_queues s) (ekheap s) (scheduler_action s) (cur_domain s) (kheap s) (cur_thread s) (idle_thread s)"
+  "valid_sched s \<equiv> valid_sched_2 (ready_queues s) (ekheap s) (scheduler_action s) (cur_domain s) (kheap s) (cur_thread s) (idle_thread s) (release_queue s)"
 
 lemmas valid_sched_def = valid_sched_2_def
 
@@ -448,9 +448,11 @@ lemma ct_in_cur_domain_lift:
 
 lemma weak_valid_sched_action_lift:
   assumes a: "\<And>Q t. \<lbrace>\<lambda>s. st_tcb_at Q t s\<rbrace> f \<lbrace>\<lambda>rv s. st_tcb_at Q t s\<rbrace>"
-  assumes b: "\<And>Q t. \<lbrace>\<lambda>s. schedulable_tcb_at t s\<rbrace> f \<lbrace>\<lambda>rv s. schedulable_tcb_at t s\<rbrace>"
+  assumes b: "\<And>t. \<lbrace>\<lambda>s. schedulable_tcb_at t s\<rbrace> f \<lbrace>\<lambda>rv s. schedulable_tcb_at t s\<rbrace>"
   assumes c: "\<And>P. \<lbrace>\<lambda>s. P (scheduler_action s)\<rbrace> f \<lbrace>\<lambda>rv s. P (scheduler_action s)\<rbrace>"
+  assumes d: "\<And>P. \<lbrace>\<lambda>s. P (release_queue s)\<rbrace> f \<lbrace>\<lambda>rv s. P (release_queue s)\<rbrace>"
     shows "\<lbrace>weak_valid_sched_action\<rbrace> f \<lbrace>\<lambda>rv. weak_valid_sched_action\<rbrace>"
+  apply (rule hoare_lift_Pf[where f="\<lambda>s. release_queue s", OF _ d])
   apply (rule hoare_lift_Pf[where f="\<lambda>s. scheduler_action s", OF _ c])
   apply (simp add: weak_valid_sched_action_def)
   apply (wp hoare_vcg_all_lift static_imp_wp a b)
@@ -474,13 +476,14 @@ lemma valid_sched_action_lift:
   assumes c: "\<And>P. \<lbrace>\<lambda>s. P (scheduler_action s)\<rbrace> f \<lbrace>\<lambda>rv s. P (scheduler_action s)\<rbrace>"
   assumes d: "\<And>P. \<lbrace>\<lambda>s. P (cur_thread s)\<rbrace> f \<lbrace>\<lambda>rv s. P (cur_thread s)\<rbrace>"
   assumes e: "\<And>Q. \<lbrace>\<lambda>s. Q (cur_domain s)\<rbrace> f \<lbrace>\<lambda>rv s. Q (cur_domain s)\<rbrace>"
+  assumes f: "\<And>Q. \<lbrace>\<lambda>s. Q (release_queue s)\<rbrace> f \<lbrace>\<lambda>rv s. Q (release_queue s)\<rbrace>"
     shows "\<lbrace>valid_sched_action\<rbrace> f \<lbrace>\<lambda>rv. valid_sched_action\<rbrace>"
   apply (rule hoare_lift_Pf[where f="\<lambda>s. cur_thread s", OF _ d])
   apply (simp add: valid_sched_action_def)
   apply (rule hoare_vcg_conj_lift)
    apply (rule hoare_lift_Pf[where f="\<lambda>s. scheduler_action s", OF _ c])
    apply (simp add: is_activatable_def)
-   apply (wp weak_valid_sched_action_lift switch_in_cur_domain_lift static_imp_wp a a' b c d e)+
+   apply (wp weak_valid_sched_action_lift switch_in_cur_domain_lift static_imp_wp a a' b c d e f)+
   done
 
 lemma valid_sched_lift:
@@ -494,10 +497,11 @@ lemma valid_sched_lift:
   assumes g: "\<And>P. \<lbrace>\<lambda>s. P (cur_domain s)\<rbrace> f \<lbrace>\<lambda>rv s. P (cur_domain s)\<rbrace>"
   assumes h: "\<And>P. \<lbrace>\<lambda>s. P (cur_thread s)\<rbrace> f \<lbrace>\<lambda>rv s. P (cur_thread s)\<rbrace>"
   assumes i: "\<And>P. \<lbrace>\<lambda>s. P (idle_thread s)\<rbrace> f \<lbrace>\<lambda>rv s. P (idle_thread s)\<rbrace>"
+  assumes j: "\<And>Q. \<lbrace>\<lambda>s. Q (release_queue s)\<rbrace> f \<lbrace>\<lambda>rv s. Q (release_queue s)\<rbrace>"
     shows "\<lbrace>valid_sched\<rbrace> f \<lbrace>\<lambda>rv. valid_sched\<rbrace>"
   apply (simp add: valid_sched_def)
   apply (wp valid_etcbs_lift valid_queues_lift ct_not_in_q_lift ct_in_cur_domain_lift
-            valid_sched_action_lift valid_blocked_lift a a' b c d e f g h i hoare_vcg_conj_lift)
+            valid_sched_action_lift valid_blocked_lift a a' b c d e f g h i j hoare_vcg_conj_lift)
   done
 
 lemma valid_etcbs_tcb_etcb:

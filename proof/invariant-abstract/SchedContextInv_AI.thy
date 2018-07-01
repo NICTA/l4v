@@ -1534,23 +1534,38 @@ lemma refill_budget_check_active[wp]:
   by (wpsimp simp: refill_budget_check_def set_refills_def
        wp: hoare_drop_imp get_sched_context_wp split_del: if_split)
 
+lemma charge_budget_invs_helper:
+  "\<lbrace>invs \<rbrace> do
+     ct <- gets cur_thread;
+     st <- get_thread_state ct;
+     when (runnable st) (do y <- end_timeslice canTimeout;
+                            y <- reschedule_required;
+                            modify (reprogram_timer_update (\<lambda>_. True))
+                          od) od \<lbrace> \<lambda>_. invs \<rbrace>"
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ gts_sp])
+  apply (wpsimp wp: end_timeslice_invs)
+  apply (clarsimp simp: pred_tcb_at_def obj_at_def ct_in_state_def)
+  apply (case_tac "tcb_state tcb"; clarsimp)
+  done
+
 lemma charge_budget_invs:
-  "\<lbrace>invs and ct_active\<rbrace>
-     charge_budget capacity consumed canTimeout \<lbrace>\<lambda>rv. invs\<rbrace>"
+  "\<lbrace>invs\<rbrace> charge_budget capacity consumed canTimeout \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (clarsimp simp: charge_budget_def is_round_robin_def)
   by (wpsimp wp: hoare_vcg_if_lift2 hoare_drop_imp hoare_vcg_all_lift refill_budget_check_invs
-                 sc_consumed_add_invs update_sched_context_sc_refills_update_invs end_timeslice_invs
+                 sc_consumed_add_invs update_sched_context_sc_refills_update_invs
+                 charge_budget_invs_helper
             split_del: if_split simp: set_object_def Let_def set_refills_def)
 
 lemma check_budget_invs:
-  "\<lbrace>invs and ct_active\<rbrace> check_budget \<lbrace>\<lambda>rv. invs\<rbrace>"
+  "\<lbrace>invs\<rbrace> check_budget \<lbrace>\<lambda>rv. invs\<rbrace>"
     by (wpsimp simp: check_budget_def refill_full_def refill_size_def
             wp: get_refills_inv hoare_drop_imp get_sched_context_wp charge_budget_invs)
 
 crunch invs[wp]: tcb_release_remove invs
 
 lemma invoke_sched_control_configure_invs[wp]:
-  "\<lbrace>invs and valid_sched_control_inv i and ct_active\<rbrace>
+  "\<lbrace>invs and valid_sched_control_inv i\<rbrace>
          invoke_sched_control_configure i \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (cases i)
   apply (rename_tac sc_ptr budget period mrefills badge)

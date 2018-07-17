@@ -684,9 +684,9 @@ where
   "check_budget = do
      csc \<leftarrow> gets cur_sc;
      consumed \<leftarrow> gets consumed_time;
+     sc \<leftarrow> get_sched_context csc;
      capacity \<leftarrow> refill_capacity csc consumed;
 
-     sc \<leftarrow> get_sched_context csc;
      full \<leftarrow> return (size (sc_refills sc) = sc_refill_max sc); (* = refill_full csc *)
 
      robin \<leftarrow> return (sc_period sc = 0); (* is_round_robin csc;*)

@@ -13,10 +13,9 @@ imports "./$L4V_ARCH/ArchCNodeInv_AI" SchedContextInv_AI IpcDet_AI
 begin
 
 locale Tcb_AI_1 =
-  fixes state_ext_t :: "('state_ext::state_ext) itself"
   fixes is_cnode_or_valid_arch :: "cap \<Rightarrow> bool"
   assumes  activate_idle_invs:
-  "\<And>thread. \<lbrace>(invs::'state_ext state \<Rightarrow> bool) and ct_idle\<rbrace>
+  "\<And>thread. \<lbrace>(invs::det_ext state \<Rightarrow> bool) and ct_idle\<rbrace>
      arch_activate_idle_thread thread
    \<lbrace>\<lambda>rv. invs and ct_idle\<rbrace>"
   assumes empty_fail_getRegister [intro!, simp]:
@@ -25,25 +24,25 @@ locale Tcb_AI_1 =
   "\<And>cap cap'. \<lbrakk> same_object_as cap cap' \<rbrakk>
      \<Longrightarrow> obj_refs cap = obj_refs cap'"
   assumes arch_get_sanitise_register_info_invs[wp]:
-  "\<And>t. \<lbrace>\<lambda>(s::'state_ext state). invs s\<rbrace> arch_get_sanitise_register_info t
+  "\<And>t. \<lbrace>\<lambda>(s::det_ext state). invs s\<rbrace> arch_get_sanitise_register_info t
        \<lbrace>\<lambda>b s. invs s\<rbrace>"
   assumes arch_get_sanitise_register_info_tcb_at[wp]:
-  "\<And>t a. \<lbrace>\<lambda>(s::'state_ext state). tcb_at a s\<rbrace> arch_get_sanitise_register_info t
+  "\<And>t a. \<lbrace>\<lambda>(s::det_ext state). tcb_at a s\<rbrace> arch_get_sanitise_register_info t
        \<lbrace>\<lambda>b s. tcb_at a s\<rbrace>"
   assumes arch_get_sanitise_register_info_ex_nonz_cap_to[wp]:
-  "\<And>t a. \<lbrace>\<lambda>(s::'state_ext state). ex_nonz_cap_to a s\<rbrace> arch_get_sanitise_register_info t
+  "\<And>t a. \<lbrace>\<lambda>(s::det_ext state). ex_nonz_cap_to a s\<rbrace> arch_get_sanitise_register_info t
        \<lbrace>\<lambda>b s. ex_nonz_cap_to a s\<rbrace>"
   assumes arch_post_modify_registers_invs[wp]:
-  "\<And>c t. \<lbrace>\<lambda>(s::'state_ext state). invs s\<rbrace> arch_post_modify_registers c t
+  "\<And>c t. \<lbrace>\<lambda>(s::det_ext state). invs s\<rbrace> arch_post_modify_registers c t
        \<lbrace>\<lambda>b s. invs s\<rbrace>"
   assumes arch_post_modify_registers_tcb_at[wp]:
-  "\<And>c t a. \<lbrace>\<lambda>(s::'state_ext state). tcb_at a s\<rbrace> arch_post_modify_registers c t
+  "\<And>c t a. \<lbrace>\<lambda>(s::det_ext state). tcb_at a s\<rbrace> arch_post_modify_registers c t
        \<lbrace>\<lambda>b s. tcb_at a s\<rbrace>"
   assumes arch_post_modify_registers_ex_nonz_cap_to[wp]:
-  "\<And>c t a. \<lbrace>\<lambda>(s::'state_ext state). ex_nonz_cap_to a s\<rbrace> arch_post_modify_registers c t
+  "\<And>c t a. \<lbrace>\<lambda>(s::det_ext state). ex_nonz_cap_to a s\<rbrace> arch_post_modify_registers c t
        \<lbrace>\<lambda>b s. ex_nonz_cap_to a s\<rbrace>"
   assumes finalise_cap_not_cte_wp_at:
-  "\<And>P cap fin. P cap.NullCap \<Longrightarrow> \<lbrace>\<lambda>(s::'state_ext state). \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>
+  "\<And>P cap fin. P cap.NullCap \<Longrightarrow> \<lbrace>\<lambda>(s::det_ext state). \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>
                 finalise_cap cap fin \<lbrace>\<lambda>rv s. \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>"
   assumes table_cap_ref_max_free_index_upd[simp]: (* reordered to resolve dependency in tc_invs *)
   "\<And>cap. table_cap_ref (max_free_index_update cap) = table_cap_ref cap"
@@ -82,7 +81,7 @@ crunches complete_yield_to
   (wp: maybeM_inv hoare_drop_imp mapM_wp' simp: zipWithM_x_mapM)
 
 lemma (in Tcb_AI_1) activate_invs:
-  "\<lbrace>(invs::'state_ext::state_ext state \<Rightarrow> bool)\<rbrace> activate_thread \<lbrace>\<lambda>rv s. invs s \<and> (ct_running s \<or> ct_idle s)\<rbrace>"
+  "\<lbrace>(invs::det_ext state \<Rightarrow> bool)\<rbrace> activate_thread \<lbrace>\<lambda>rv s. invs s \<and> (ct_running s \<or> ct_idle s)\<rbrace>"
   apply (unfold activate_thread_def get_tcb_obj_ref_def)
   apply (rule hoare_seq_ext [OF _ gets_sp])
   apply (rule hoare_seq_ext [OF _ thread_get_sp])
@@ -171,28 +170,21 @@ lemma readreg_invs:
   "\<lbrace>invs and tcb_at src and ex_nonz_cap_to src\<rbrace>
      invoke_tcb (tcb_invocation.ReadRegisters src susp n arch)
    \<lbrace>\<lambda>rv. invs\<rbrace>"
-(*  by (simp | wp)+
-     (clarsimp simp: invs_def valid_state_def valid_pspace_def
-              dest!: idle_no_ex_cap)*)
-sorry
+  by (wpsimp wp: suspend_invs)
 
 lemma (in Tcb_AI_1) writereg_invs:
   "\<lbrace>(invs::det_ext state \<Rightarrow> bool) and tcb_at dest and ex_nonz_cap_to dest\<rbrace>
      invoke_tcb (tcb_invocation.WriteRegisters dest resume values arch)
    \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (wpsimp |rule conjI)+
-  sorry
+  by (wpsimp |rule conjI)+
 
 lemma (in Tcb_AI_1) copyreg_invs:
   "\<lbrace>(invs::det_ext state \<Rightarrow> bool) and tcb_at src and tcb_at dest and ex_nonz_cap_to dest and
     ex_nonz_cap_to src\<rbrace>
      invoke_tcb (tcb_invocation.CopyRegisters dest src susp resume frames ints arch)
    \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (wpsimp simp: if_apply_def2
-                  wp: mapM_x_wp' suspend_nonz_cap_to_tcb static_imp_wp)
-  apply (clarsimp simp: invs_def valid_state_def valid_pspace_def
-                 dest!: idle_no_ex_cap)
-  sorry
+  by (wpsimp simp: if_apply_def2
+               wp: mapM_x_wp' suspend_invs suspend_nonz_cap_to_tcb static_imp_wp)
 
 lemma out_invs_trivialT:
   assumes x: "\<And>tcb v. \<forall>(getF, setF)\<in>ran tcb_cap_cases. getF (fn v tcb) = getF tcb"
@@ -418,7 +410,7 @@ lemma (in Tcb_AI_1) rec_del_all_caps_in_range:
       and y: "\<And>x n zt. P (cap.ThreadCap x) \<Longrightarrow> P (cap.Zombie x zt n)"
       and z: "\<And>x y gd n zt. P (cap.CNodeCap x y gd) \<Longrightarrow> P (cap.Zombie x zt n)"
       and w: "\<And>x zt zt' n m. P (cap.Zombie x zt n) \<Longrightarrow> P (cap.Zombie x zt' m)"
-  shows      "s \<turnstile> \<lbrace>\<lambda>(s::'state_ext state). \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>
+  shows      "s \<turnstile> \<lbrace>\<lambda>(s::det_ext state). \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>
                      rec_del args
                   \<lbrace>\<lambda>rv s. \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>,
                   \<lbrace>\<lambda>e s. \<forall>cp \<in> ran (caps_of_state s). P cp\<rbrace>"
@@ -496,11 +488,10 @@ lemma no_cap_to_obj_with_diff_ref_ran_caps_form:
   apply auto
   done
 
-locale Tcb_AI = Tcb_AI_1 state_ext_t is_cnode_or_valid_arch
-  for state_ext_t :: "('state_ext::state_ext) itself"
-  and is_cnode_or_valid_arch :: "cap \<Rightarrow> bool" +
+locale Tcb_AI = Tcb_AI_1 is_cnode_or_valid_arch
+  for is_cnode_or_valid_arch :: "cap \<Rightarrow> bool" +
   assumes cap_delete_no_cap_to_obj_asid[wp]:
-  "\<And>cap slot. \<lbrace>(no_cap_to_obj_dr_emp cap::'state_ext state \<Rightarrow> bool)\<rbrace>
+  "\<And>cap slot. \<lbrace>(no_cap_to_obj_dr_emp cap::det_ext state \<Rightarrow> bool)\<rbrace>
      cap_delete slot
    \<lbrace>\<lambda>rv. no_cap_to_obj_dr_emp cap\<rbrace>"
   assumes tc_invs:
@@ -542,26 +533,26 @@ locale Tcb_AI = Tcb_AI_1 state_ext_t is_cnode_or_valid_arch
     \<lbrace>\<lambda>rv. invs\<rbrace>"  (* need more on sc, fh and th *)
   assumes decode_set_ipc_inv[wp]:
   "\<And>P args cap slot excaps.
-    \<lbrace>P::'state_ext state \<Rightarrow> bool\<rbrace> decode_set_ipc_buffer args cap slot excaps \<lbrace>\<lambda>rv. P\<rbrace>"
+    \<lbrace>P::det_ext state \<Rightarrow> bool\<rbrace> decode_set_ipc_buffer args cap slot excaps \<lbrace>\<lambda>rv. P\<rbrace>"
   assumes update_cap_valid:
-  "\<And>cap s capdata rs p. valid_cap cap (s::'state_ext state) \<Longrightarrow>
+  "\<And>cap s capdata rs p. valid_cap cap (s::det_ext state) \<Longrightarrow>
    valid_cap (case capdata of
               None \<Rightarrow> cap_rights_update rs cap
             | Some x \<Rightarrow> update_cap_data p x
                      (cap_rights_update rs cap)) s"
   assumes check_valid_ipc_buffer_wp:
-  "\<And>cap vptr P. \<lbrace>\<lambda>(s::'state_ext state). is_arch_cap cap \<and> is_cnode_or_valid_arch cap
+  "\<And>cap vptr P. \<lbrace>\<lambda>(s::det_ext state). is_arch_cap cap \<and> is_cnode_or_valid_arch cap
           \<and> valid_ipc_buffer_cap cap vptr
           \<and> is_aligned vptr msg_align_bits
              \<longrightarrow> P s\<rbrace>
      check_valid_ipc_buffer vptr cap
    \<lbrace>\<lambda>rv. P\<rbrace>,-"
   assumes derive_no_cap_asid[wp]:
-  "\<And>cap S slot. \<lbrace>(no_cap_to_obj_with_diff_ref cap S)::'state_ext state \<Rightarrow> bool\<rbrace>
+  "\<And>cap S slot. \<lbrace>(no_cap_to_obj_with_diff_ref cap S)::det_ext state \<Rightarrow> bool\<rbrace>
      derive_cap slot cap
    \<lbrace>\<lambda>rv. no_cap_to_obj_with_diff_ref rv S\<rbrace>,-"
   assumes no_cap_to_obj_with_diff_ref_update_cap_data:
-  "\<And>c S s P x. no_cap_to_obj_with_diff_ref c S (s::'state_ext state) \<longrightarrow>
+  "\<And>c S s P x. no_cap_to_obj_with_diff_ref c S (s::det_ext state) \<longrightarrow>
     no_cap_to_obj_with_diff_ref (update_cap_data P x c) S s"
 
 
@@ -838,13 +829,12 @@ lemma bind_notification_invs:
                  split: ntfn.splits)
   done*) sorry
 
-
 lemma (in Tcb_AI) tcbinv_invs:
   "\<lbrace>(invs::det_ext state\<Rightarrow>bool) and tcb_inv_wf ti\<rbrace>
      invoke_tcb ti
    \<lbrace>\<lambda>rv. invs\<rbrace>"
   apply (case_tac ti, simp_all only:)
-        apply ((wp writereg_invs readreg_invs copyreg_invs tc_invs
+        apply ((wp writereg_invs readreg_invs copyreg_invs tc_invs suspend_invs
              | simp
              | clarsimp simp: invs_def valid_state_def valid_pspace_def
                        dest!: idle_no_ex_cap
@@ -854,9 +844,9 @@ lemma (in Tcb_AI) tcbinv_invs:
   apply (case_tac option, simp_all)
    apply (rule hoare_pre)
     apply ((wp unbind_notification_invs get_simple_ko_wp | simp)+)[2]
-(*  apply (wp bind_notification_invs)
+  apply (wp bind_notification_invs)
   apply clarsimp
-  done*)sorry
+  done
 
 lemma inj_ucast: "\<lbrakk> uc = ucast; is_up uc \<rbrakk> \<Longrightarrow> inj uc"
   apply simp
@@ -1050,7 +1040,7 @@ lemma derive_is_arch[wp]:
 
 
 lemma (in Tcb_AI) decode_set_ipc_wf[wp]:
-  "\<lbrace>(invs::('state_ext::state_ext) state\<Rightarrow>bool) and tcb_at t and cte_at slot and ex_cte_cap_to slot
+  "\<lbrace>(invs::det_ext state\<Rightarrow>bool) and tcb_at t and cte_at slot and ex_cte_cap_to slot
       and ex_nonz_cap_to t
       and (\<lambda>s. \<forall>x \<in> set excaps. s \<turnstile> fst x \<and> cte_at (snd x) s
                           \<and> ex_cte_cap_to (snd x) s
@@ -1091,7 +1081,7 @@ lemma val_le_length_Cons:
 
 
 lemma (in Tcb_AI) decode_set_space_wf[wp]:
-  "\<lbrace>(invs::('state_ext::state_ext) state\<Rightarrow>bool)
+  "\<lbrace>(invs::det_ext state\<Rightarrow>bool)
   and tcb_at t and cte_at slot and ex_cte_cap_to slot
           and ex_nonz_cap_to t
           and (\<lambda>s. \<forall>x \<in> set extras. s \<turnstile> fst x \<and> cte_at (snd x) s
@@ -1148,9 +1138,17 @@ lemma decode_set_space_target[wp]:
 lemma boring_simp[simp]:
   "(if x then True else False) = x" by simp
 
+lemma (in Tcb_AI) decode_udpate_sc[wp]:
+  "\<lbrace>tcb_inv_wf (ThreadControl t slot fh to None None nr nv nb None)\<rbrace>
+   decode_udpate_sc (ThreadCap t) slot c
+   \<lbrace>\<lambda>update_sc. tcb_inv_wf (ThreadControl t slot fh to None None nr nv nb (tc_new_sc update_sc))\<rbrace>,-"
+  unfolding decode_udpate_sc_def
+  apply (wpsimp wp: whenE_throwError_wp get_sched_context_wp TcbAcc_AI.gbn_wp simp: unlessE_whenE)
+  apply (clarsimp simp: obj_at_def is_tcb)
+  done
 
 lemma (in Tcb_AI) decode_tcb_conf_wf[wp]:
-  "\<lbrace>(invs::('state_ext::state_ext) state\<Rightarrow>bool)
+  "\<lbrace>(invs::det_ext state\<Rightarrow>bool)
          and tcb_at t and cte_at slot and ex_cte_cap_to slot
          and ex_nonz_cap_to t
          and (\<lambda>s. \<forall>x \<in> set extras. s \<turnstile> fst x \<and> cte_at (snd x) s
@@ -1162,7 +1160,7 @@ lemma (in Tcb_AI) decode_tcb_conf_wf[wp]:
   apply (clarsimp simp add: decode_tcb_configure_def Let_def)
   apply (rule hoare_pre)
    apply wp
-(*       apply (rule_tac Q'="\<lambda>set_space s. tcb_inv_wf set_space s \<and> tcb_inv_wf set_params s
+       apply (rule_tac Q'="\<lambda>set_space s. tcb_inv_wf set_space s \<and> tcb_inv_wf set_params s
                                \<and> is_thread_control set_space \<and> is_thread_control set_params
                                \<and> thread_control_target set_space = t
                                \<and> cte_at slot s \<and> ex_cte_cap_to slot s"
@@ -1172,10 +1170,10 @@ lemma (in Tcb_AI) decode_tcb_conf_wf[wp]:
       apply (wp | simp add: whenE_def split del: if_split)+
   apply (clarsimp simp: linorder_not_less val_le_length_Cons
                    del: ballI)
-  done*) sorry
+  done
 
 lemma (in Tcb_AI) decode_tcb_conf_inv[wp]:
-  "\<lbrace>P::'state_ext state \<Rightarrow> bool\<rbrace> decode_tcb_configure args cap slot extras \<lbrace>\<lambda>rv. P\<rbrace>"
+  "\<lbrace>P::det_ext state \<Rightarrow> bool\<rbrace> decode_tcb_configure args cap slot extras \<lbrace>\<lambda>rv. P\<rbrace>"
   apply (clarsimp simp add: decode_tcb_configure_def decode_udpate_sc_def Let_def whenE_def
                  split del: if_split)
   apply (wpsimp wp: hoare_drop_imps)
@@ -1206,7 +1204,7 @@ lemma decode_bind_notification_inv[wp]:
              split_del: if_split)
 
 lemma (in Tcb_AI) decode_tcb_inv_inv:
-  "\<lbrace>P::'state_ext state \<Rightarrow> bool\<rbrace> decode_tcb_invocation label args (cap.ThreadCap t) slot extras \<lbrace>\<lambda>rv. P\<rbrace>"
+  "\<lbrace>P::det_ext state \<Rightarrow> bool\<rbrace> decode_tcb_invocation label args (cap.ThreadCap t) slot extras \<lbrace>\<lambda>rv. P\<rbrace>"
   apply (simp add: decode_tcb_invocation_def Let_def
              cong: if_cong
         split del: if_split)
@@ -1251,7 +1249,7 @@ lemma decode_unbind_notification_wf:
 lemma decode_tcb_inv_wf:
   "\<lbrace>invs and tcb_at t and ex_nonz_cap_to t
          and cte_at slot and ex_cte_cap_to slot
-         and (\<lambda>(s::'state_ext::state_ext state). \<forall>x \<in> set extras. real_cte_at (snd x) s \<and> s \<turnstile> fst x
+         and (\<lambda>(s::det_ext state). \<forall>x \<in> set extras. real_cte_at (snd x) s \<and> s \<turnstile> fst x
                                  \<and> ex_cte_cap_to (snd x) s
                                  \<and> (\<forall>y \<in> zobj_refs (fst x). ex_nonz_cap_to y s)
                                  \<and> no_cap_to_obj_dr_emp (fst x) s)\<rbrace>

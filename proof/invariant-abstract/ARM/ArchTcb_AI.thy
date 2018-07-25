@@ -45,7 +45,7 @@ lemma same_object_obj_refs[Tcb_AI_asms]:
   "\<lbrakk> same_object_as cap cap' \<rbrakk>
      \<Longrightarrow> obj_refs cap = obj_refs cap'"
   apply (cases cap, simp_all add: same_object_as_def)
-       apply ((clarsimp simp: is_cap_simps bits_of_def same_aobject_as_def
+       apply ((clarsimp simp: is_cap_simps bits_of_def
                       split: cap.split_asm )+)
   by (cases "the_arch_cap cap"; cases "the_arch_cap cap'"; simp)
 
@@ -165,9 +165,8 @@ lemma table_cap_ref_max_free_index_upd[simp,Tcb_AI_asms]:
 
 
 interpretation Tcb_AI_1? : Tcb_AI_1
-  where state_ext_t = state_ext_t
-  and is_cnode_or_valid_arch = is_cnode_or_valid_arch
-by (unfold_locales; fact Tcb_AI_asms)
+  where is_cnode_or_valid_arch = is_cnode_or_valid_arch
+  by (unfold_locales; fact Tcb_AI_asms)
 
 
 lemma use_no_cap_to_obj_asid_strg: (* arch specific *)
@@ -185,7 +184,7 @@ lemma use_no_cap_to_obj_asid_strg: (* arch specific *)
   done
 
 lemma cap_delete_no_cap_to_obj_asid[wp, Tcb_AI_asms]:
-  "\<lbrace>no_cap_to_obj_dr_emp cap\<rbrace>
+  "\<lbrace>no_cap_to_obj_dr_emp cap :: det_ext state \<Rightarrow> bool\<rbrace>
      cap_delete slot
    \<lbrace>\<lambda>rv. no_cap_to_obj_dr_emp cap\<rbrace>"
   apply (simp add: cap_delete_def

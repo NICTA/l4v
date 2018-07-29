@@ -137,16 +137,21 @@ lemma (in Tcb_AI_1) activate_invs:
   apply (wpsimp wp: complete_yield_to_invs)
   done
 
+lemma cancel_ipc_no_refs:
+  "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s\<rbrace>
+  cancel_ipc t \<lbrace>\<lambda>_. st_tcb_at (\<lambda>st'. tcb_st_refs_of st' = {}) t\<rbrace>"
+  apply (rule hoare_strengthen_post)
+   apply (rule cancel_ipc_simple_except_awaiting_reply)
+  apply (auto elim: st_tcb_weakenE)
+  done
+
 lemma restart_invs[wp]:
   "\<lbrace>invs and tcb_at t and ex_nonz_cap_to t\<rbrace> restart t \<lbrace>\<lambda>rv. invs\<rbrace>"
-  apply (simp add: restart_def)
-  apply (rule hoare_seq_ext [OF _ gts_sp])
-  apply (wp sts_invs_minor cancel_ipc_ex_nonz_cap_to_tcb
-            hoare_vcg_disj_lift cancel_ipc_simple2 hoare_drop_imp
-       | simp add: if_apply_def2
-       | strengthen invs_valid_objs2)+
-  apply (auto dest!: idle_no_ex_cap simp: invs_def valid_state_def valid_pspace_def)
-  sorry
+  unfolding restart_def
+  apply (wpsimp wp: hoare_drop_imp sts_invs_minor cancel_ipc_no_refs
+                    cancel_ipc_ex_nonz_cap_to_tcb gts_wp)
+  apply (auto dest!: idle_no_ex_cap simp: invs_def valid_state_def valid_pspace_def)[1]
+  done
 
 lemma restart_typ_at[wp]:
   "\<lbrace>\<lambda>s. P (typ_at T p s)\<rbrace> Tcb_A.restart t \<lbrace>\<lambda>rv s. P (typ_at T p s)\<rbrace>"
@@ -796,11 +801,38 @@ lemma unbind_notification_has_reply[wp]:
   apply (case_tac ntfnptr; wpsimp simp: maybeM_def)
   done
 
+lemma set_ntfn_bound_some_tcb_valid_objs[wp]:
+  "\<lbrace>valid_objs and bound_tcb_at (op = None) tcbptr and
+    obj_at (\<lambda>ko. \<exists>ntfn. ko = Notification ntfn \<and> (ntfn_bound_tcb ntfn = None) \<and>
+                 (\<forall>q. ntfn_obj ntfn \<noteq> WaitingNtfn q)) ntfnptr\<rbrace>
+   set_ntfn_obj_ref ntfn_bound_tcb_update ntfnptr (Some tcbptr) \<lbrace>\<lambda>_. valid_objs\<rbrace>"
+  apply (wpsimp simp: update_sk_obj_ref_def obj_at_def wp: get_simple_ko_wp)
+  apply (erule (1) valid_objsE)
+  apply (clarsimp simp: valid_obj_def valid_ntfn_def pred_tcb_at_tcb_at split: ntfn.splits)
+  done
+
+lemma set_ntfn_bound_tcb_some_if_live_then_nonz_cap [wp]:
+  "\<lbrace>if_live_then_nonz_cap and ex_nonz_cap_to ntfnptr\<rbrace>
+   set_ntfn_obj_ref ntfn_bound_tcb_update ntfnptr (Some tcbptr) \<lbrace>\<lambda>_. if_live_then_nonz_cap\<rbrace>"
+  by (wpsimp simp: update_sk_obj_ref_def wp: get_simple_ko_wp)
+
+lemma set_ntfn_obj_ref_some_state_refs[wp]:
+  "\<lbrace>\<lambda>s. P ((state_refs_of s) (ntfnptr := state_refs_of s ntfnptr \<union> {(tcbptr, NTFNBound)})) \<and>
+        obj_at (\<lambda>ko. \<exists>ntfn. ko = Notification ntfn \<and> ntfn_bound_tcb ntfn = None \<and>
+                     (\<forall>q. ntfn_obj ntfn \<noteq> WaitingNtfn q)) ntfnptr s\<rbrace>
+   set_ntfn_obj_ref ntfn_bound_tcb_update ntfnptr (Some tcbptr) \<lbrace>\<lambda>_ s. P (state_refs_of s)\<rbrace>"
+  apply (wpsimp simp: update_sk_obj_ref_def wp: get_simple_ko_wp)
+  apply (clarsimp simp: obj_at_def)
+  apply (erule rsubst[of P])
+  apply (rule ext)
+  apply clarsimp
+  apply (rename_tac ntfn)
+  apply (case_tac "ntfn_obj ntfn"; simp add: state_refs_of_def)
+  done
+
 lemma bind_notification_invs:
-  notes hoare_pre [wp_pre del]
-  shows
   "\<lbrace>bound_tcb_at (op = None) tcbptr
-    and obj_at (\<lambda>ko. \<exists>ntfn. ko = Notification ntfn \<and> (ntfn_bound_tcb ntfn = None)
+    and obj_at (\<lambda>ko. \<exists>ntfn. ko = Notification ntfn \<and> ntfn_bound_tcb ntfn = None
                            \<and> (\<forall>q. ntfn_obj ntfn \<noteq> WaitingNtfn q)) ntfnptr
     and invs
     and ex_nonz_cap_to ntfnptr
@@ -808,26 +840,17 @@ lemma bind_notification_invs:
      bind_notification tcbptr ntfnptr
    \<lbrace>\<lambda>_. invs\<rbrace>"
   apply (simp add: bind_notification_def invs_def valid_state_def valid_pspace_def)
-(*  apply (rule hoare_seq_ext[OF _ get_simple_ko_sp])
-  apply (wp valid_irq_node_typ set_simple_ko_valid_objs simple_obj_set_prop_at
-         | clarsimp simp:idle_no_ex_cap)+
-            apply (clarsimp simp: obj_at_def is_ntfn)
-           apply (wp | clarsimp)+
-         apply (rule conjI, rule impI)
-          apply (clarsimp simp: obj_at_def pred_tcb_at_def2)
-         apply (rule impI, erule delta_sym_refs)
-          apply (fastforce dest!: symreftype_inverse'
-                            simp: ntfn_q_refs_of_def obj_at_def
-                           split: ntfn.splits if_split_asm)
-         apply (fastforce simp: state_refs_of_def pred_tcb_at_def2 obj_at_def
-                               tcb_st_refs_of_def
-                        split: thread_state.splits if_split_asm)
-        apply (wp | clarsimp simp: is_ntfn)+
-  apply (erule (1) obj_at_valid_objsE)
-  apply (clarsimp simp: valid_obj_def valid_ntfn_def pred_tcb_at_tcb_at
-                 elim!: obj_atE
-                 split: ntfn.splits)
-  done*) sorry
+  apply (wpsimp wp: ntfn_at_typ_at update_sk_obj_ref_typ_at valid_irq_node_typ)
+  apply (clarsimp simp: obj_at_def pred_tcb_at_def is_ntfn)
+  apply (rule conjI, clarsimp simp: obj_at_def)
+  apply clarsimp
+  apply (rule conjI)
+   apply (erule delta_sym_refs)
+    apply (fastforce split: if_split_asm)
+   apply (fastforce simp: state_refs_of_def pred_tcb_at_def2 obj_at_def get_refs_def2
+                   split: if_split_asm)
+  apply (clarsimp simp: idle_no_ex_cap)
+  done
 
 lemma (in Tcb_AI) tcbinv_invs:
   "\<lbrace>(invs::det_ext state\<Rightarrow>bool) and tcb_inv_wf ti\<rbrace>
@@ -999,7 +1022,7 @@ where
  "is_thread_control tinv \<equiv> case tinv of tcb_invocation.ThreadControl a b c d e f g h i j\<Rightarrow> True | _ \<Rightarrow> False"
 
 
-primrec
+primrec (nonexhaustive)
   thread_control_target :: "tcb_invocation \<Rightarrow> machine_word"
 where
  "thread_control_target (tcb_invocation.ThreadControl a b c d e f g h i j) = a"
@@ -1255,8 +1278,7 @@ lemma decode_tcb_inv_wf:
                                  \<and> no_cap_to_obj_dr_emp (fst x) s)\<rbrace>
       decode_tcb_invocation label args (cap.ThreadCap t) slot extras
    \<lbrace>tcb_inv_wf\<rbrace>,-"
-  apply (simp add: decode_tcb_invocation_def Let_def del: tcb_inv_wf_def
-              cong: if_cong split del: if_split)
+  apply (simp add: decode_tcb_invocation_def Let_def cong: if_cong split del: if_split)
   apply (rule hoare_vcg_precond_impE_R)
    apply wpc
    apply (wp decode_tcb_conf_wf decode_readreg_wf
@@ -1346,31 +1368,21 @@ lemma tcb_not_in_state_refs_of_tcb:
   done
 
 lemma unbind_notification_sym_refs[wp]:
-  "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s \<and> tcb_at a s\<rbrace>
-     unbind_notification a
-   \<lbrace>\<lambda>rv s. sym_refs (state_refs_of s)\<rbrace>"
-  apply (simp add: unbind_notification_def)
+  notes unfolds = obj_at_def pred_tcb_at_def state_refs_of_def get_refs_def2
+  shows
+    "\<lbrace>\<lambda>s. sym_refs (state_refs_of s) \<and> valid_objs s \<and> tcb_at a s\<rbrace>
+       unbind_notification a
+     \<lbrace>\<lambda>rv s. sym_refs (state_refs_of s)\<rbrace>"
+  unfolding unbind_notification_def
   apply (rule hoare_seq_ext [OF _ gbn_sp])
   apply (case_tac ntfnptr; simp add: maybeM_def)
-   apply (wpsimp)
-  apply (wpsimp simp: update_sk_obj_ref_def)
-(*  apply (rule hoare_seq_ext [OF _ get_simple_ko_sp])
-  apply (wp | wpc | simp)+
-  apply (rule conjI)
-   apply (fastforce simp: obj_at_def pred_tcb_at_def)
-  apply (rule impI, clarsimp)
+   apply wpsimp
+  apply (wpsimp simp: update_sk_obj_ref_def wp: get_simple_ko_wp)
+  apply (rule conjI, fastforce simp: unfolds)
+  apply clarsimp
   apply (rule delta_sym_refs, assumption)
-   apply (fastforce simp: obj_at_def pred_tcb_at_def ntfn_q_refs_of_def
-                          state_refs_of_def
-                    split: if_split_asm)
-  apply (auto simp: valid_obj_def obj_at_def ntfn_bound_refs_def2 symreftype_inverse'
-                    ntfn_q_refs_of_def tcb_ntfn_is_bound_def state_refs_of_def
-                    tcb_st_refs_of_def tcb_bound_refs_def2
-              split: ntfn.splits thread_state.splits if_split_asm
-              dest!: sym_refs_bound_tcb_atD refs_in_ntfn_bound_refs
-              elim!: obj_at_valid_objsE
-              intro!: ntfn_q_refs_no_NTFNBound)
-  done*) sorry
+   apply (fastforce simp: unfolds split: if_split_asm)
+  by (fastforce dest!: sym_refs_bound_tcb_atD simp: unfolds split: if_split_asm)
 
 lemma tcb_cap_cases_tcb_mcpriority:
   "\<forall>(getF, v)\<in>ran tcb_cap_cases.

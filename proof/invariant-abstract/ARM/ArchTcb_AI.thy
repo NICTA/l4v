@@ -213,6 +213,35 @@ lemma as_user_ipc_tcb_cap_valid4[wp]:
   apply (clarsimp simp: get_tcb_def)
   done
 
+lemma tcb_cap_valid_ep_strgs:
+  "is_ep_cap cap \<or> NullCap = cap \<longrightarrow> tcb_cap_valid cap (t, tcb_cnode_index 3) s"
+  "is_ep_cap cap \<or> NullCap = cap \<longrightarrow> tcb_cap_valid cap (t, tcb_cnode_index 4) s"
+  by (auto simp: tcb_cap_valid_def st_tcb_at_def obj_at_def is_tcb)
+
+lemma sched_context_unbind_tcb_valid_cap[wp]:
+  "sched_context_unbind_tcb t \<lbrace>valid_cap c\<rbrace>"
+  by (rule abs_typ_at_lifts) wp
+
+lemma sched_context_bind_tcb_valid_cap[wp]:
+  "sched_context_bind_tcb t s \<lbrace>valid_cap c\<rbrace>"
+  by (rule abs_typ_at_lifts) wp
+
+lemma sched_context_bind_tcb_cte_wp_at[wp]:
+  "sched_context_bind_tcb t s \<lbrace>cte_wp_at P p\<rbrace>"
+  unfolding sched_context_bind_tcb_def by wpsimp
+
+lemma sched_context_bind_tcb_caps_of_state[wp]:
+  "sched_context_bind_tcb t s \<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace>"
+  unfolding sched_context_bind_tcb_def by wpsimp
+
+lemma sched_context_unbind_tcb_no_cap_to_obj_ref[wp]:
+  "sched_context_unbind_tcb t \<lbrace>no_cap_to_obj_with_diff_ref c S\<rbrace>"
+  by (rule no_cap_to_obj_with_diff_ref_lift) wpsimp
+
+lemma sched_context_bind_tcb_no_cap_to_obj_ref[wp]:
+  "sched_context_bind_tcb t s \<lbrace>no_cap_to_obj_with_diff_ref c S\<rbrace>"
+  by (rule no_cap_to_obj_with_diff_ref_lift) wpsimp
+
 lemma tc_invs[Tcb_AI_asms]:
   "\<lbrace>invs and tcb_at a
        and (case_option \<top> (valid_cap o fst) e)
@@ -243,12 +272,11 @@ lemma tc_invs[Tcb_AI_asms]:
   apply (rule hoare_gen_asm)+
   apply (simp add: split_def set_mcpriority_def cong: option.case_cong)
   apply (rule hoare_vcg_precond_imp)
-   apply wp
-      apply ((simp only: simp_thms
+  apply ((simp only: simp_thms
         | rule wp_split_const_if wp_split_const_if_R
                    hoare_vcg_all_lift_R
                    hoare_vcg_E_elim hoare_vcg_const_imp_lift_R
-                   hoare_vcg_R_conj
+                   hoare_vcg_R_conj allI
         | (wp out_invs_trivial case_option_wpE cap_delete_deletes
              cap_delete_valid_cap cap_insert_valid_cap out_cte_at
              cap_insert_cte_at cap_delete_cte_at out_valid_cap
@@ -266,22 +294,26 @@ lemma tc_invs[Tcb_AI_asms]:
              checked_insert_no_cap_to
              out_no_cap_to_trivial[OF ball_tcb_cap_casesI]
              thread_set_ipc_tcb_cap_valid
-             static_imp_wp static_imp_conj_wp)[1]
+             static_imp_wp static_imp_conj_wp
+             sched_context_unbind_tcb_invs
+             TcbAcc_AI.gbn_wp)[1]
         | simp add: ran_tcb_cap_cases dom_tcb_cap_cases[simplified]
                del: hoare_True_E_R
         | wpc
         | strengthen use_no_cap_to_obj_asid_strg
+                     tcb_cap_valid_ep_strgs
                      tcb_cap_always_valid_strg[where p="tcb_cnode_index 0"]
-                     tcb_cap_always_valid_strg[where p="tcb_cnode_index (Suc 0)"])+)
-  apply (clarsimp simp: tcb_at_cte_at_0 tcb_at_cte_at_1[simplified] is_nondevice_page_cap_arch_def
+                     tcb_cap_always_valid_strg[where p="tcb_cnode_index (Suc 0)"]))
+ (*
+    apply (clarsimp simp: tcb_at_cte_at_0 tcb_at_cte_at_1[simplified] is_nondevice_page_cap_arch_def
                         is_cap_simps is_valid_vtable_root_def is_nondevice_page_cap_simps
                         is_cnode_or_valid_arch_def tcb_cap_valid_def
                         invs_valid_objs cap_asid_def vs_cap_ref_def
                  split: option.split_asm )+
-(*      apply (simp add: case_bool_If valid_ipc_buffer_cap_def is_nondevice_page_cap_simps
+      apply (simp add: case_bool_If valid_ipc_buffer_cap_def is_nondevice_page_cap_simps
                        is_nondevice_page_cap_arch_def
                 split: arch_cap.splits if_splits)+
-  done*) sorry
+  done *) sorry
 
 
 lemma check_valid_ipc_buffer_inv:

@@ -158,7 +158,7 @@ preemptable.
 *}
 
 fun
-  perform_invocation :: "bool \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> invocation \<Rightarrow> (data list, det_ext) p_monad"
+  perform_invocation :: "bool \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> invocation \<Rightarrow> (data list, 'z::state_ext) p_monad"
 where
   "perform_invocation _ _ _ (InvokeUntyped i) =
     doE
@@ -232,7 +232,7 @@ where
   od"
 
 definition
-  handle_invocation :: "bool \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> cap_ref \<Rightarrow> (unit, det_ext) p_monad"
+  handle_invocation :: "bool \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> cap_ref \<Rightarrow> (unit, 'z::state_ext) p_monad"
 where
   "handle_invocation calling blocking can_donate cptr \<equiv> doE
     thread \<leftarrow> liftE $ gets cur_thread;
@@ -270,7 +270,7 @@ where
 
 
 definition
-  handle_yield :: "(unit, det_ext) s_monad" where
+  handle_yield :: "(unit, 'z::state_ext) s_monad" where
   "handle_yield \<equiv> do
      cur_sc \<leftarrow> gets cur_sc;
      refills \<leftarrow> get_refills cur_sc;
@@ -278,14 +278,14 @@ definition
  od"
 
 definition
-  handle_send :: "bool \<Rightarrow> (unit, det_ext) p_monad" where
+  handle_send :: "bool \<Rightarrow> (unit, 'z::state_ext) p_monad" where
   "handle_send bl \<equiv> do
     cptr \<leftarrow> get_cap_reg cap_register;
     handle_invocation False bl False cptr
   od"
 
 definition
-  handle_call :: "(unit, det_ext) p_monad" where
+  handle_call :: "(unit, 'z::state_ext) p_monad" where
  "handle_call \<equiv>  do
     cptr \<leftarrow> get_cap_reg cap_register;
     handle_invocation True True True cptr
@@ -304,7 +304,7 @@ where
   odE"
 
 definition
-  handle_recv :: "bool \<Rightarrow> bool \<Rightarrow> (unit, det_ext) s_monad" where
+  handle_recv :: "bool \<Rightarrow> bool \<Rightarrow> (unit, 'z::state_ext) s_monad" where
   "handle_recv is_blocking can_reply \<equiv> do
      thread \<leftarrow> gets cur_thread;
 
@@ -321,7 +321,7 @@ definition
                reply_cap \<leftarrow> if can_reply then lookup_reply else returnOk NullCap;
                liftE $ receive_ipc thread ep_cap is_blocking reply_cap
              odE
-           | NotificationCap ref badge rights \<Rightarrow> 
+           | NotificationCap ref badge rights \<Rightarrow>
              (if AllowRecv \<in> rights
               then doE
                 boundTCB \<leftarrow> liftE $ get_ntfn_obj_ref ntfn_bound_tcb ref;
@@ -339,7 +339,7 @@ definition
 section {* Top-level event handling  *}
 
 fun
-  handle_event :: "event \<Rightarrow> (unit, det_ext) p_monad"
+  handle_event :: "event \<Rightarrow> (unit, 'z::state_ext) p_monad"
 where
   "handle_event (SyscallEvent call) = doE
     liftE $ update_time_stamp;
@@ -421,7 +421,7 @@ text {*
 *}
 
 definition
-  call_kernel :: "event \<Rightarrow> (unit, det_ext) s_monad" where
+  call_kernel :: "event \<Rightarrow> (unit, 'z::state_ext) s_monad" where
   "call_kernel ev \<equiv> do
        handle_event ev <handle>
            (\<lambda>_. without_preemption $ do

@@ -32,7 +32,7 @@ requalify_consts
   arch_same_region_as
   same_aobject_as
   prepare_thread_delete
-  
+
   cap_transfer_data_size
   msg_max_extra_caps
   msg_align_bits
@@ -336,8 +336,11 @@ where
       (when final $ do
           reply \<leftarrow> get_reply r;
           tptr \<leftarrow> return (reply_tcb reply);
-          when (tptr \<noteq> None) $ cancel_ipc (the tptr)
-           od)"
+          scptr \<leftarrow> return (reply_sc reply);
+          if (tptr \<noteq> None)
+            then cancel_ipc (the tptr)
+            else when (scptr \<noteq> None) $ reply_unlink_sc (the scptr) r
+       od)"
 | "fast_finalise (EndpointCap r b R)     final =
       (when final $ cancel_all_ipc r)"
 | "fast_finalise (NotificationCap r b R) final =
@@ -493,7 +496,10 @@ where
       (liftM (K (NullCap, NullCap)) $ when final $ do
          reply \<leftarrow> get_reply r;
          tptr \<leftarrow> return (reply_tcb reply);
-         when (tptr \<noteq> None) $ cancel_ipc (the tptr)
+         scptr \<leftarrow> return (reply_sc reply);
+         if (tptr \<noteq> None)
+           then cancel_ipc (the tptr)
+           else when (scptr \<noteq> None) $ reply_unlink_sc (the scptr) r
        od)"
 | "finalise_cap (EndpointCap r b R)      final =
       (liftM (K (NullCap, NullCap)) $ when final $ cancel_all_ipc r)"
@@ -907,7 +913,7 @@ definition
          cap_swap cap1 slot1 cap2 slot2
        else
          do cap_move cap2 slot2 slot3; cap_move cap1 slot1 slot2 od
-  | CancelBadgedSendsCall (EndpointCap ep b R) \<Rightarrow> 
+  | CancelBadgedSendsCall (EndpointCap ep b R) \<Rightarrow>
     without_preemption $ when (b \<noteq> 0) $ cancel_badged_sends ep b
   | CancelBadgedSendsCall _ \<Rightarrow> fail"
 

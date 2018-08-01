@@ -42,7 +42,6 @@ crunch_ignore (add:
   set_register get_register setNextPC maskInterrupt)
 
 crunch_ignore (add:
-  cap_swap_ext cap_move_ext cap_insert_ext empty_slot_ext create_cap_ext tcb_sched_action
-  reschedule_required schedule_tcb possible_switch_to set_priority retype_region_ext)
+  cap_swap_ext cap_move_ext cap_insert_ext empty_slot_ext create_cap_ext)
 
 end

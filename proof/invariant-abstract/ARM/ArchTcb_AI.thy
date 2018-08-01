@@ -184,7 +184,7 @@ lemma use_no_cap_to_obj_asid_strg: (* arch specific *)
   done
 
 lemma cap_delete_no_cap_to_obj_asid[wp, Tcb_AI_asms]:
-  "\<lbrace>no_cap_to_obj_dr_emp cap :: det_ext state \<Rightarrow> bool\<rbrace>
+  "\<lbrace>no_cap_to_obj_dr_emp cap\<rbrace>
      cap_delete slot
    \<lbrace>\<lambda>rv. no_cap_to_obj_dr_emp cap\<rbrace>"
   apply (simp add: cap_delete_def
@@ -552,9 +552,9 @@ lemma update_cap_valid[Tcb_AI_asms]:
 crunch pred_tcb_at: switch_to_thread "pred_tcb_at proj P t"
   (wp: crunch_wps simp: crunch_simps)
 
-crunch typ_at[wp]: set_priority "\<lambda>(s::det_ext state). P (typ_at T p s)"
+crunch typ_at[wp]: set_priority "\<lambda>s. P (typ_at T p s)"
   (wp: maybeM_inv hoare_drop_imps)
-crunch typ_at[wp]: invoke_tcb "\<lambda>(s::det_ext state). P (typ_at T p s)"
+crunch typ_at[wp]: invoke_tcb "\<lambda>s. P (typ_at T p s)"
   (wp: hoare_drop_imps mapM_x_wp' check_cap_inv maybeM_inv
      simp: crunch_simps)
 

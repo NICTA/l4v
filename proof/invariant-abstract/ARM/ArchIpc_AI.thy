@@ -507,7 +507,7 @@ crunch cap_refs_respects_device_region[wp, Ipc_AI_assms]: make_arch_fault_msg "c
 
 end
 
-interpretation Ipc_AI?: Ipc_AI
+global_interpretation Ipc_AI?: Ipc_AI
   proof goal_cases
   interpret Arch .
   case 1 show ?case by (unfold_locales; (fact Ipc_AI_assms)?)
@@ -539,10 +539,12 @@ crunch state_hyp_refs_of[wp, Ipc_AI_cont_assms]: do_ipc_transfer "\<lambda> s. P
 
 end
 
-interpretation Ipc_AI?: Ipc_AI_cont
+global_interpretation Ipc_AI_cont?: Ipc_AI_cont
   proof goal_cases
   interpret Arch .
-  case 1 show ?case by (unfold_locales;(fact Ipc_AI_cont_assms)?)
+  case 1 show ?case by (unfold_locales; (fact Ipc_AI_cont_assms)?)
   qed
+
+global_interpretation Ipc_AI_det?: Ipc_AI_det ..
 
 end

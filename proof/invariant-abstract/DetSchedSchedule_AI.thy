@@ -5250,6 +5250,7 @@ lemma handle_timeout_not_queued[wp]:
 
 crunches tcb_release_enqueue
 for not_queued[wp]: "not_queued t"
+and simple_sched_action[wp]: simple_sched_action
   (wp: hoare_drop_imp mapM_wp')
 
 lemma postpone_not_queued[wp]:
@@ -5297,6 +5298,7 @@ lemma end_timeslice_ct_active[wp]:
   apply wpsimp
   sorry
 
+
 (*
 crunches end_timeslice
 for scheduelr_act_not[wp]: "scheduler_act_not t"
@@ -5307,7 +5309,13 @@ lemma charge_budget_valid_sched[wp]:
   "\<lbrace>valid_sched\<rbrace> charge_budget capacity consumed canTimeout \<lbrace>\<lambda>_. valid_sched\<rbrace>"
   apply (clarsimp simp: charge_budget_def)
   by (wpsimp wp: reschedule_preserves_valid_shed simp: Let_def)
-
+(*
+lemma charge_budget_simple_sched_action[wp]:
+  "\<lbrace>simple_sched_action\<rbrace> charge_budget capacity consumed canTimeout \<lbrace>\<lambda>_. simple_sched_action\<rbrace>"
+  apply (clarsimp simp: charge_budget_def)
+  by (wpsimp wp: reschedule_required_simple_sched_action simp: set_refills_def
+           simp: Let_def)
+*)
 lemma charge_budget_ct_active[wp]:
   "\<lbrace>ct_active\<rbrace> charge_budget capacity consumed canTimeout \<lbrace>\<lambda>_. ct_active\<rbrace>"
   by (wpsimp simp: charge_budget_def Let_def)
@@ -5367,18 +5375,15 @@ lemma ct_active_machine_op[wp]:
   apply (rule hoare_lift_Pf [where f=cur_thread])
   by wp+
 
-crunches update_time_stamp,get_cap_reg
+
+crunches do_machine_op,update_time_stamp,get_cap_reg
 for valid_sched[wp]: valid_sched
 and scheduler_action[wp]: "\<lambda>s. P (scheduler_action s)"
 and cur_thread[wp]: "\<lambda>s. P (cur_thread s)"
 and simple_sched_action[wp]: simple_sched_action
 and ct_active[wp]: ct_active
-
-thm check_budget_restart_def check_budget_def reschedule_required_def charge_budget_def
-thm handle_invocation_valid_sched
-thm handle_invocation_def
-
-
+and pred_tcb_at[wp]: "pred_tcb_at p P t"
+and pred_tcb_at_ct[wp]: "\<lambda>s. pred_tcb_at p P (cur_thread s) s"
 
 (* when check_budget returns True, it has not called reschedule_required. Hence the
 scheduler_action remains unchanged *)
@@ -5403,7 +5408,19 @@ lemma check_budget_restart_sched_action:
   apply (rule hoare_seq_ext[OF _ gts_sp])
   apply (wpsimp wp: hoare_vcg_if_lift)
   done
-
+(*
+lemma check_budget_simple_sched_action:
+  "\<lbrace> simple_sched_action \<rbrace> check_budget \<lbrace> \<lambda>_. simple_sched_action \<rbrace>"
+  apply (clarsimp simp: check_budget_def)
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ gets_sp])
+  apply (rule hoare_seq_ext[OF _ get_sched_context_sp])
+  apply (rule hoare_seq_ext[OF _ refill_capacity_sp])
+  apply (rule hoare_if)
+   apply (rule hoare_seq_ext[OF _ gets_sp])
+   apply (rule hoare_if)
+    apply wpsimp+
+*)
 lemma update_time_stamp_invs:
   "\<lbrace>invs\<rbrace> update_time_stamp \<lbrace>\<lambda>_. invs\<rbrace>"
   sorry
@@ -5425,114 +5442,72 @@ simp: Let_def)
 
   sorry
 
-thm check_budget_restart_def check_budget_def reschedule_required_def charge_budget_def
-thm handle_invocation_valid_sched
-thm handle_invocation_def
-
-
 
 (* when check_budget returns True, it has not called reschedule_required. Hence the
 scheduler_action remains unchanged *)
 
+context begin
+ private method handle_event_valid_sched_cases =
+(     (rule hoare_seq_ext),
+      (rule_tac Q="invs and ct_active and valid_sched
+               and (\<lambda>s. scheduler_action s = resume_cur_thread)
+               and (\<lambda>s. bound_sc_tcb_at bound (cur_thread s) s)" in hoare_weaken_pre),
+       (rule hoare_seq_ext[rotated]),
+        (rule hoare_pre),
+         (rule hoare_vcg_conj_lift[OF
+                      check_budget_restart_invs
+                      hoare_vcg_conj_lift[OF
+                        check_budget_restart_valid_sched
+                        hoare_vcg_conj_lift[OF
+                          check_budget_restart_sched_action[where P="op = resume_cur_thread"]
+                          check_budget_restart_ct_active]]]),
+        clarsimp,
+       (rename_tac restart),
+       (case_tac restart; clarsimp simp: whenE_def),
+        (wpsimp wp: handle_fault_valid_sched handle_invocation_valid_sched
+              simp: valid_sched_ct_not_queued),
+       (clarsimp simp: ct_in_state_def valid_fault_def),
+       wpsimp,
+      simp,
+     (wpsimp wp: update_time_stamp_valid_sched update_time_stamp_invs update_time_stamp_pred_tcb_at))
+
 lemma handle_event_valid_sched:
   "\<lbrace>invs and valid_sched and (\<lambda>s. e \<noteq> Interrupt \<longrightarrow> ct_active s)
       and (\<lambda>s. scheduler_action s = resume_cur_thread)
-      and (\<lambda>s. bound_sc_tcb_at bound (cur_thread s) s)
-(*and simple_sched_action*)
-\<rbrace>
+      and (\<lambda>s. bound_sc_tcb_at bound (cur_thread s) s) (*and simple_sched_action*)\<rbrace>
    handle_event e
    \<lbrace>\<lambda>rv. valid_sched\<rbrace>"
   apply (cases e, simp_all)
-      apply (rename_tac syscall)
-      apply (case_tac syscall, simp_all add: handle_send_def handle_call_def liftE_bindE)
+       apply (rename_tac syscall)
+       apply (case_tac syscall, simp_all add: handle_send_def handle_call_def liftE_bindE)
+                 prefer 16
+                 apply wp
+                 apply (fastforce  simp: ct_in_state_def intro: valid_sched_ct_not_queued)
+                apply (handle_event_valid_sched_cases+)[11]
+     apply (simp add: liftE_def bind_assoc, handle_event_valid_sched_cases)+
 
-apply (wp hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-
-apply (simp add: imp_conjR)
-
-apply (wp_once hoare_vcg_conj_lift, wp hoare_drop_imp check_budget_restart_invs)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp check_budget_restart_sched_action)
-apply (wp hoare_drop_imp)
-apply (wpsimp wp: update_time_stamp_invs update_time_stamp_valid_sched
-        update_time_stamp_scheduler_action)
-
-(*
-apply clarsimp
-
-defer
-defer
-defer
-
-apply (wp hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-apply (simp add: imp_conjR)
-apply (wp_once hoare_vcg_conj_lift, wp hoare_drop_imp check_budget_restart_invs)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp check_budget_restart_sched_action)
-apply (wp hoare_drop_imp)
-apply (wpsimp wp: update_time_stamp_invs update_time_stamp_valid_sched
-        update_time_stamp_scheduler_action)
-apply clarsimp
-
-apply (wp hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-apply (simp add: imp_conjR)
-apply (wp_once hoare_vcg_conj_lift, wp hoare_drop_imp check_budget_restart_invs)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp check_budget_restart_sched_action)
-apply (wp hoare_drop_imp)
-apply (wpsimp wp: update_time_stamp_invs update_time_stamp_valid_sched
-        update_time_stamp_scheduler_action)
-apply clarsimp
-
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-prefer 6
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2)
-apply (simp add: imp_conjR)
-apply (wp_once hoare_vcg_conj_lift, wp hoare_drop_imp check_budget_restart_invs)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp hoare_vcg_conj_lift, wp hoare_drop_imp)
-apply (wp check_budget_restart_sched_action)
-apply (wp hoare_drop_imp)
-apply (wpsimp wp: update_time_stamp_invs update_time_stamp_valid_sched
-        update_time_stamp_scheduler_action)
-apply clarsimp
-
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2
-    handle_fault_valid_sched)
-apply (wpsimp wp: hoare_drop_imp check_budget_restart_sched_action check_budget_restart_invs
-check_budget_restart_ct_active[simplified ct_in_state_def])
-*)
-
-(*
-apply (wpsimp wp: update_time_stamp_invs update_time_stamp_valid_sched
-        update_time_stamp_scheduler_action)
-apply clarsimp
-
-
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched
- hoare_vcg_if_lift2 simp: imp_conjR cong: conj_cong imp_cong)
-apply (wpsimp wp: check_budget_restart_sched_action hoare_drop_imp
-check_budget_restart_invs simp: valid_sched_ct_not_queued)
-
-apply (wpsimp wp: hoare_whenE_wp handle_invocation_valid_sched hoare_vcg_if_lift2 hoare_drop_imp
-check_budget_restart_invs check_budget_restart_sched_action)
-apply( clarsimp simp: invs_valid_objs invs_sym_refs valid_sched_ct_not_queued cong: conj_cong)+
-            apply ((rule hoare_pre, wp handle_invocation_valid_sched handle_recv_valid_sched'
-              | fastforce simp: invs_valid_objs invs_sym_refs valid_sched_ct_not_queued)+)[5]
-       apply (wp handle_fault_valid_sched hvmf_active hoare_drop_imps hoare_vcg_disj_lift
-                 handle_recv_valid_sched' hoare_vcg_all_lift|
-              wpc |
-              clarsimp simp: ct_in_state_def valid_sched_ct_not_queued |
-              fastforce simp: valid_fault_def)+*)
+  (* UnknownSyscall *)
+   apply (simp add: liftE_def bind_assoc)
+   apply (rule hoare_seq_ext)
+    apply (rule hoare_seq_ext)
+     apply (rule_tac Q="invs and ct_active and valid_sched
+               and (\<lambda>s. scheduler_action s = resume_cur_thread)
+(*               and simple_sched_action*)
+               and (\<lambda>s. bound_sc_tcb_at bound (cur_thread s) s)" in hoare_weaken_pre)
+      apply (rule hoare_seq_ext[rotated])
+       apply (rule hoare_pre)
+        apply (rule hoare_vcg_conj_lift[OF
+        check_budget_invs
+        hoare_vcg_conj_lift[OF
+          check_budget_valid_sched
+          hoare_vcg_conj_lift[OF
+            check_budget_true_sched_action[where P="op = resume_cur_thread"]
+            check_budget_ct_active]]])
+       apply (clarsimp simp: )
+      apply (wpsimp wp: )
   sorry
+
+end
 
 crunch valid_list[wp]: activate_thread valid_list (wp: hoare_drop_imp)
 crunch valid_list[wp]: guarded_switch_to, switch_to_idle_thread, choose_thread valid_list
@@ -5586,24 +5561,27 @@ lemma call_kernel_valid_sched:
    \<lbrace>\<lambda>_. valid_sched\<rbrace>"
   apply (simp add: call_kernel_def)
   apply (wp schedule_valid_sched activate_thread_valid_sched | simp)+
-     apply (rule_tac Q="\<lambda>rv. invs" in hoare_strengthen_post)
-      apply wp
-     apply (erule invs_valid_idle)
-    apply (wp call_kernel_valid_sched_helper)
+      apply (rule_tac Q="\<lambda>rv. invs" in hoare_strengthen_post)
+       apply wp
+      apply (erule invs_valid_idle)
+     apply (wp call_kernel_valid_sched_helper)
     apply (rule hoare_strengthen_post
-           [where Q="\<lambda>irq s. irq \<notin> Some ` non_kernel_IRQs \<and> valid_sched s \<and> invs s \<and>
+      [where Q="\<lambda>irq s. irq \<notin> Some ` non_kernel_IRQs \<and> valid_sched s \<and> invs s \<and>
                              bound_sc_tcb_at bound (cur_thread s) s"])
      apply (wpsimp wp: getActiveIRQ_neq_non_kernel)
     apply auto[1]
    apply (rule_tac Q="\<lambda>rv s. valid_sched s \<and> invs s" and
-                   E="\<lambda>rv s. valid_sched s \<and> invs s" in hoare_post_impErr)
+      E="\<lambda>rv s. valid_sched s \<and> invs s" in hoare_post_impErr)
      apply (rule valid_validE)
      apply (wp handle_event_valid_sched)
-(*
-    apply (force intro: active_from_running)+
+    apply clarsimp+
+  subgoal for s
+    apply (insert ct_assumptions[where s=s])
+    apply (clarsimp simp: pred_tcb_at_def obj_at_def)
+    done
+  apply (clarsimp simp: ct_in_state_def pred_tcb_at_def obj_at_def)
   done
-*)
-  sorry
+
 
 end
 

@@ -4938,7 +4938,8 @@ crunch weak_valid_sched_action[wp]: cap_delete_one weak_valid_sched_action
        mapM_wp' hoare_vcg_if_lift2 hoare_drop_imp
    simp: cur_tcb_def zipWithM_x_mapM unless_def ignore: sched_context_donate set_object)
 *)
-lemma do_reply_transfer_not_queued[wp]:
+(*
+lemma do_reply_transfer_not_queued:
   "\<lbrace>not_queued t and invs and st_tcb_at active t and scheduler_act_not t and
     K(receiver \<noteq> t)\<rbrace>
      do_reply_transfer sender receiver
@@ -4946,16 +4947,17 @@ lemma do_reply_transfer_not_queued[wp]:
   apply (simp add: do_reply_transfer_def)
   apply (wp hoare_vcg_if_lift | wpc |
          clarsimp split del: if_split | wp_once hoare_drop_imps)+
-  sorry
+  *)
 
-lemma do_reply_transfer_schedact_not[wp]:
+(*
+lemma do_reply_transfer_schedact_not:
   "\<lbrace>scheduler_act_not t and K(receiver \<noteq> t)\<rbrace>
      do_reply_transfer sender receiver
    \<lbrace>\<lambda>_. scheduler_act_not t\<rbrace>"
   apply (simp add: do_reply_transfer_def)
   apply (wp hoare_vcg_if_lift | wpc | clarsimp split del: if_split |
          wp_once hoare_drop_imps)+
-  sorry
+  *)
 
 
 crunch valid_sched[wp]: refill_capacity valid_sched
@@ -4999,7 +5001,7 @@ defer
   apply wp
   apply (clarsimp simp: get_tcb_def pred_tcb_at_def obj_at_def
                   split: option.splits kernel_object.splits)
-  done sorry
+  done 
 *)
 
 (*
@@ -5039,7 +5041,8 @@ lemma sched_context_donate_ct_not_queued[wp]:
 crunch ct_not_queud[wp]: reply_unlink_tcb,reply_unlink_sc ct_not_queued
   (simp: a_type_def wp: hoare_drop_imp)
 
-lemma reply_remove_ct_not_queued[wp]:
+(* needed by do_reply_transfer_ct_not_queued?
+lemma reply_remove_ct_not_queued:
   "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> reply_remove r \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
   apply (clarsimp simp: reply_remove_def assert_opt_def liftM_def)
 
@@ -5055,7 +5058,7 @@ lemma reply_remove_ct_not_queued[wp]:
 apply (rule hoare_seq_ext)
 apply (rule hoare_seq_ext)
   apply (wpsimp wp: sched_context_donate_ct_not_queued)
-sorry
+*)
 
 lemma test_reschedule_scheduler_act_sane[wp]:
   "\<lbrace>scheduler_act_sane\<rbrace> test_reschedule tptr \<lbrace>\<lambda>_. scheduler_act_sane\<rbrace>"
@@ -5084,8 +5087,8 @@ context DetSchedSchedule_AI begin
 
 crunch ct_not_queued[wp]: do_ipc_transfer,handle_fault_reply "ct_not_queued"
   (wp: mapM_wp' simp: zipWithM_x_mapM)
-
-lemma do_reply_transfer_ct_not_queued[wp]:
+(*
+lemma do_reply_transfer_ct_not_queued:
   "\<lbrace>ct_not_queued and invs and ct_active and scheduler_act_sane\<rbrace>
      do_reply_transfer sender receiver
    \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
@@ -5099,15 +5102,15 @@ lemma do_reply_transfer_ct_not_queued[wp]:
          defer 6
          apply (wpsimp+)[7]
   apply (wpsimp wp: hoare_drop_imp simp: thread_set_def)
-  done
+  *)
 
 (*
 crunch cur_thread[wp]: do_reply_transfer "\<lambda>s. P (cur_thread s)"
   (wp: crunch_wps maybeM_inv transfer_caps_loop_pres simp: unless_def crunch_simps
    ignore: test_reschedule tcb_sched_action tcb_release_enqueue)
 *)
-
-lemma do_reply_transfer_scheduler_act_sane[wp]:
+(*
+lemma do_reply_transfer_scheduler_act_sane:
   "\<lbrace>scheduler_act_sane and ct_active\<rbrace>
      do_reply_transfer sender receiver
    \<lbrace>\<lambda>_. scheduler_act_sane\<rbrace>"
@@ -5123,7 +5126,7 @@ lemma do_reply_transfer_scheduler_act_sane[wp]:
 apply (rule hoare_pre)
    apply (wpsimp wp: sch_act_sane_lift set_thread_state_sched_act_not)
  (* apply (clarsimp simp: obj_at_def)
-done*) sorry
+done*) *)
 
 end
 
@@ -5319,12 +5322,12 @@ lemma charge_budget_simple_sched_action[wp]:
 lemma charge_budget_ct_active[wp]:
   "\<lbrace>ct_active\<rbrace> charge_budget capacity consumed canTimeout \<lbrace>\<lambda>_. ct_active\<rbrace>"
   by (wpsimp simp: charge_budget_def Let_def)
-
-lemma charge_budget_not_queued[wp]:
+(*
+lemma charge_budget_not_queued:
   "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> charge_budget capacity consumed canTimeout \<lbrace>\<lambda>_. not_queued t\<rbrace>"
   apply (clarsimp simp: charge_budget_def)
   apply (wpsimp simp: charge_budget_def Let_def wp: reschedule_required_not_queued)
-sorry
+*)
 
 lemma check_budget_valid_sched[wp]:
   "\<lbrace>valid_sched\<rbrace> check_budget \<lbrace>\<lambda>_. valid_sched\<rbrace>"
@@ -5349,20 +5352,22 @@ lemma check_budget_restart_ct_active[wp]:
                  wp: hoare_drop_imp hoare_vcg_if_lift2
         | rule hoare_strengthen_post[where Q="\<lambda>_. ct_active"]
         | simp add: ct_in_state_def pred_tcb_at_def obj_at_def)+
-
-lemma check_budget_not_queued[wp]:
+(*
+lemma check_budget_not_queued:
   "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> check_budget \<lbrace>\<lambda>_. not_queued t\<rbrace>"
   apply (clarsimp simp: check_budget_def)
   by (wpsimp wp: reschedule_required_not_queued refill_capacity_inv hoare_vcg_if_lift2 hoare_drop_imp
                 split_del: if_split)
 
-lemma check_budget_restart_not_queued[wp]:
+lemma check_budget_restart_not_queued:
   "\<lbrace>not_queued t and scheduler_act_not t\<rbrace> check_budget_restart \<lbrace>\<lambda>_. not_queued t\<rbrace>"
   by (wpsimp simp: check_budget_restart_def)
 
 lemma check_budget_restart_ct_not_queued:
   "\<lbrace>ct_not_queued and scheduler_act_sane\<rbrace> check_budget_restart \<lbrace>\<lambda>_. ct_not_queued\<rbrace>"
   by (wpsimp wp: ct_not_queued_lift)
+*)
+
 (*
 crunches send_ipc,check_budget,check_budget_restart
 for simple_sched_action[wp]: simple_sched_action
@@ -5421,9 +5426,18 @@ lemma check_budget_simple_sched_action:
    apply (rule hoare_if)
     apply wpsimp+
 *)
-lemma update_time_stamp_invs:
+
+(* FIXME: Move to Arch *)
+lemma getCurrentTime_invs[wp]:
+  "valid invs (do_machine_op getCurrentTime) (\<lambda>_. invs)"
+  apply (simp add: ARM.getCurrentTime_def modify_def)
+  apply (wpsimp wp: dmo_invs simp: modify_def)
+  by (simp add: do_machine_op_def modify_def in_get bind_assoc get_def put_def gets_def in_bind
+                   split_def select_f_returns in_return)
+
+lemma update_time_stamp_invs[wp]:
   "\<lbrace>invs\<rbrace> update_time_stamp \<lbrace>\<lambda>_. invs\<rbrace>"
-  sorry
+  by (wpsimp simp: update_time_stamp_def)
 
 lemma handle_yield_valid_sched[wp]:
   "\<lbrace>valid_sched\<rbrace> handle_yield \<lbrace>\<lambda>rv. valid_sched\<rbrace>"

@@ -210,10 +210,7 @@ list of pointers to waiting threads;
 >     scBadge :: Word,
 >     scYieldFrom :: Maybe (PPtr TCB),
 >     scRefillMax :: Int,
->     scRefillHead :: Int,
->     scRefillTail :: Int,
->     scReplies :: [PPtr Reply],
->     scSize :: Int }
+>     scReplies :: [PPtr Reply] }
 
 > data Reply = Reply {
 >     replyTCB :: Maybe (PPtr TCB),

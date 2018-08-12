@@ -1017,28 +1017,27 @@ On some architectures, the thread context may include registers that may be modi
 >     in x ++ [v] ++ y
 
 > chargeBudget :: Ticks -> Ticks -> Bool -> Kernel ()
-> chargeBudget capacity consumed canTimeoutFault = do
->     scPtr <- getCurSc
->     sc <- getSchedContext scPtr
->     robin <- isRoundRobin scPtr
+> chargeBudget capacity consumed canTimeout = do
+>     cscPtr <- getCurSc
+>     robin <- isRoundRobin cscPtr
 >     if robin
 >         then do
->             refills <- getRefills scPtr
->             headIndex <- return $ scRefillHead sc
->             tailIndex <- return $ scRefillTail sc
->             rfhd <- return $ refillHd sc
->             rftl <- return $ refillTl sc
->             refills' <- return $ replaceAt headIndex refills (rfhd { rAmount = rAmount rfhd + rAmount rftl })
->             refills'' <- return $ replaceAt tailIndex refills' (rftl { rAmount = 0 })
->             setRefills scPtr refills''
->         else refillBudgetCheck scPtr consumed capacity
->     sc' <- getSchedContext scPtr
->     setSchedContext scPtr (sc' { scConsumed = scConsumed sc' + consumed })
+>             refills <- getRefills cscPtr
+>             let rfhd = head refills
+>                 rftl = last refills
+>                 rfbody = init (tail refills)
+>             setRefills cscPtr
+>                 (rfhd { rAmount = rAmount rfhd + rAmount rftl } : rfbody
+>                  ++ [rftl { rAmount = 0 }])
+>         else
+>             refillBudgetCheck cscPtr consumed capacity
+>     csc <- getSchedContext cscPtr
+>     setSchedContext cscPtr (csc { scConsumed = scConsumed csc + consumed })
 >     setConsumedTime 0
 >     ct <- getCurThread
 >     runnable <- isRunnable ct
 >     when runnable $ do
->         endTimeslice canTimeoutFault
+>         endTimeslice canTimeout
 >         rescheduleRequired
 >         setReprogramTimer True
 

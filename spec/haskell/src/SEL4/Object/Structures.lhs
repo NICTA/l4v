@@ -136,7 +136,7 @@ When stored in the physical memory model (described in \autoref{sec:model.pspace
 >     | KOTCB       TCB
 >     | KOCTE       CTE
 >     | KOArch      ArchKernelObject
->     | KOSchedContext SchedContext
+>     | KOSchedContext Int SchedContext
 >     | KOReply Reply
 
 > kernelObjectTypeName :: KernelObject -> String
@@ -212,13 +212,11 @@ list of pointers to waiting threads;
 >     scRefillMax :: Int,
 >     scRefillHead :: Int,
 >     scRefillTail :: Int,
->     scReply :: Maybe (PPtr Reply),
+>     scReplies :: [PPtr Reply],
 >     scSize :: Int }
 
 > data Reply = Reply {
 >     replyTCB :: Maybe (PPtr TCB),
->     replyPrev :: Maybe (PPtr Reply),
->     replyNext :: Maybe (PPtr Reply),
 >     replySc :: Maybe (PPtr SchedContext) }
 
 > minRefills :: Int

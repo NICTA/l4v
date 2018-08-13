@@ -143,18 +143,11 @@ Threads are treated as special capability nodes; they also become zombies when t
 > finaliseCap (SchedContextCap { capSchedContextPtr = scPtr }) True _ = do
 >     schedContextUnbindAllTCBs scPtr
 >     schedContextUnbindNtfn scPtr
-
->     sc <- getSchedContext scPtr
->     replyPtrOpt <- return $ scReply sc
->     when (replyPtrOpt /= Nothing) $ do
->         replyPtr <- return $ fromJust replyPtrOpt
->         reply <- getReply replyPtr
->         setReply replyPtr (reply { replyNext = Nothing, replySc = Nothing })
->         setSchedContext scPtr (sc { scReply = Nothing })
-
->     sc <- getSchedContext scPtr
->     when (scYieldFrom sc /= Nothing) $ do
->         schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
+>     replies <- liftM scReplies $ getSchedContext scPtr
+>     mapM_ (replyUnlinkSc scPtr) replies
+>     tptrOpt <- liftM scYieldFrom $ getSchedContext scPtr
+>     when (tptrOpt /= Nothing) $ do
+>         schedContextCompleteYieldTo $ fromJust tptrOpt
 >     return (NullCap, NullCap)
 
 > finaliseCap SchedControlCap _ _ = return (NullCap, NullCap)

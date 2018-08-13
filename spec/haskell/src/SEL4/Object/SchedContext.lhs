@@ -32,7 +32,8 @@ This module uses the C preprocessor to select a target architecture.
 >         schedContextMaybeUnbindNtfn, schedContextUnbindNtfn,
 >         isRoundRobin, getRefills, setRefills, refillFull, refillAbsoluteMax,
 >         schedContextCompleteYieldTo, schedContextCancelYieldTo,
->         schedContextUpdateConsumed, setConsumed
+>         schedContextUpdateConsumed, setConsumed, schedContextUnbindReply,
+>         getTCBSc
 >     ) where
 
 \begin{impdetails}
@@ -475,13 +476,7 @@ This module uses the C preprocessor to select a target architecture.
 >     InvokeSchedContextUnbind scPtr -> do
 >         schedContextUnbindAllTCBs scPtr
 >         schedContextUnbindNtfn scPtr
->         sc <- getSchedContext scPtr
->         let replyPtrOpt = scReply sc
->         when (replyPtrOpt /= Nothing) $ do
->             let replyPtr = fromJust replyPtrOpt
->             reply <- getReply replyPtr
->             setReply replyPtr reply { replySc = Nothing }
->             setSchedContext scPtr $ sc { scReply = Nothing }
+>         schedContextUnbindReply scPtr
 >     InvokeSchedContextYieldTo scPtr buffer -> do
 >         schedContextYieldTo scPtr buffer
 
@@ -596,10 +591,16 @@ This module uses the C preprocessor to select a target architecture.
 >     sc <- getSchedContext scPtr
 >     case scNtfn sc of
 >         Nothing -> return ()
->         Just ntfnPtr -> (\ntfn -> do
+>         Just ntfnPtr -> do
+>             ntfn <- getNotification ntfnPtr
+>             setNotification ntfnPtr (ntfn { ntfnSc = Nothing })
 >             setSchedContext scPtr (sc { scNtfn = Nothing })
->             n <- getNotification ntfn
->             setNotification ntfn (n { ntfnSc = Nothing })) ntfnPtr
+
+> schedContextUnbindReply :: PPtr SchedContext -> Kernel ()
+> schedContextUnbindReply scPtr = do
+>     sc <- getSchedContext scPtr
+>     mapM_ (setReplySc Nothing) (scReplies sc)
+>     setSchedContext scPtr sc { scReplies = [] }
 
 > schedContextMaybeUnbindNtfn :: PPtr Notification -> Kernel ()
 > schedContextMaybeUnbindNtfn ntfnPtr = do

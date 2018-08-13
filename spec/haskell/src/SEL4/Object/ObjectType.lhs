@@ -105,10 +105,13 @@ When the last capability to an endpoint is deleted, any IPC operations currently
 >         cancelAllSignals ptr
 >     return (NullCap, NullCap)
 
-> finaliseCap (ReplyCap { capReplyPtr = ptr }) final _ = do
+> finaliseCap (ReplyCap { capReplyPtr = rptr }) final _ = do
 >     when final $ do
->         tptrOpt <- getReplyTCB ptr
->         when (tptrOpt /= Nothing) $ replyClear ptr
+>         tptrOpt <- getReplyTCB rptr
+>         scptrOpt <- getReplySc rptr
+>         if tptrOpt /= Nothing
+>             then cancelIPC $ fromJust tptrOpt
+>             else when (scptrOpt /= Nothing) $ replyUnlinkSc (fromJust scptrOpt) rptr
 >     return (NullCap, NullCap)
 
 No action need be taken for Null or Domain capabilities.
@@ -133,9 +136,10 @@ Threads are treated as special capability nodes; they also become zombies when t
 >     tcb <- getObject tptr
 >     when (tcbSchedContext tcb /= Nothing) $ do
 >         let scPtr = fromJust $ tcbSchedContext tcb
->         sc <- getSchedContext scPtr
->         schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
 >         schedContextUnbindTCB scPtr
+>         sc <- getSchedContext scPtr
+>         when (scYieldFrom sc /= Nothing) $ do
+>             schedContextCompleteYieldTo $ fromJust $ scYieldFrom sc
 >     suspend tptr
 >     Arch.prepareThreadDelete tptr
 >     return (Zombie cte_ptr ZombieTCB 5, NullCap)
@@ -403,8 +407,8 @@ The "decodeInvocation" function parses the message, determines the operation tha
 > decodeInvocation _ _ _ _ cap@(NotificationCap {capNtfnCanSend=True}) _ = do
 >     return $ InvokeNotification (capNtfnPtr cap) (capNtfnBadge cap)
 >
-> decodeInvocation _ _ _ _ (ReplyCap reply) _ = do
->     return $ InvokeReply reply
+> decodeInvocation _ _ _ _ cap@(ReplyCap {}) _ = do
+>     return $ InvokeReply (capReplyPtr cap)
 >
 > decodeInvocation
 >         label args _ slot cap@(ThreadCap {}) extraCaps =

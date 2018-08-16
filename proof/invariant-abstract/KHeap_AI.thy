@@ -60,6 +60,7 @@ requalify_facts
   state_hyp_refs_of_tcb_state_update
   state_hyp_refs_of_tcb_bound_ntfn_update
   state_hyp_refs_of_tcb_domain_update
+  state_hyp_refs_of_tcb_priority_update
   arch_valid_obj_same_type
   default_arch_object_not_live
   default_tcb_not_live

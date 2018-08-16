@@ -91,9 +91,12 @@ lemma retype_region_etcb_at[wp]:
   apply (auto simp: etcb_of_def split: if_split_asm option.splits elim!: rsubst[where P=P])
   done
 
-lemma set_pd_etcs[wp]:
+lemma set_pd_etcbs[wp]:
   "set_pd p pd \<lbrace>\<lambda>s. P (etcbs_of s)\<rbrace>"
-  sorry
+  unfolding set_pd_def
+  apply (wpsimp wp: set_object_wp get_object_wp)
+  apply (auto elim!: rsubst[where P=P] simp: etcbs_of'_def obj_at_def split: kernel_object.splits)
+  done
 
 crunch etcb_at[wp]: init_arch_objects "\<lambda>s. P (etcbs_of s)"
   (wp: crunch_wps ignore: set_object)

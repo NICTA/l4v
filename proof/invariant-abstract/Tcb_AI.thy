@@ -1376,4 +1376,114 @@ lemma set_mcpriority_no_cap_to_obj_with_diff_ref[wp]:
   "\<lbrace>no_cap_to_obj_with_diff_ref c S\<rbrace> set_mcpriority t mcp \<lbrace>\<lambda>rv. no_cap_to_obj_with_diff_ref c S\<rbrace>"
   by (simp add: set_mcpriority_def thread_set_no_cap_to_trivial tcb_cap_cases_tcb_mcpriority)
 
+crunch caps_of_state[wp]: set_priority "\<lambda>s. P (caps_of_state s)"
+  (wp: crunch_wps maybeM_inv)
+
+crunches set_priority
+  for typ_at[wp]:  "\<lambda>s. P (typ_at T p s)"
+  and no_cap_to[wp]: "no_cap_to_obj_with_diff_ref a S"
+  (wp: crunch_wps no_cap_to_obj_with_diff_ref_lift maybeM_inv)
+
+lemma sc_tcb_sc_at_ready_queues_update[simp]:
+  "sc_tcb_sc_at P t s \<Longrightarrow> sc_tcb_sc_at P t (ready_queues_update f s)"
+  by (clarsimp simp: sc_tcb_sc_at_def obj_at_def)
+
+lemma sc_tcb_sc_at_sch_act_update[simp]:
+  "sc_tcb_sc_at P t s \<Longrightarrow> sc_tcb_sc_at P t (scheduler_action_update f s)"
+  by (clarsimp simp: sc_tcb_sc_at_def obj_at_def)
+
+
+(* FIXME move: KHeap_AI *)
+lemma set_notification_obj_at_impossible:
+  "\<forall>ep. \<not> (P (Notification ep)) \<Longrightarrow>
+    \<lbrace>\<lambda>s. Q (obj_at P p s)\<rbrace> set_notification ptr endp \<lbrace>\<lambda>rv s. Q (obj_at P p s)\<rbrace>"
+  apply (simp add: set_simple_ko_def set_object_def cong: kernel_object.case_cong)
+  apply (wpsimp wp: get_object_wp set_object_at_obj)
+  apply (clarsimp simp: obj_at_def split: option.splits)
+  done
+
+lemma reorder_ntfn_sc_tcb_sc_at[wp]:
+  "\<lbrace>sc_tcb_sc_at P t\<rbrace> reorder_ntfn a \<lbrace>\<lambda>rv. sc_tcb_sc_at P t\<rbrace>"
+  by (wpsimp simp: reorder_ntfn_def sc_tcb_sc_at_def
+               wp: set_notification_obj_at_impossible get_simple_ko_wp)
+
+lemma reorder_ep_sc_tcb_sc_at[wp]:
+  "\<lbrace>sc_tcb_sc_at P t\<rbrace> reorder_ep a \<lbrace>\<lambda>rv. sc_tcb_sc_at P t\<rbrace>"
+  by (wpsimp simp: reorder_ep_def sc_tcb_sc_at_def
+               wp: set_endpoint_obj_at_impossible get_simple_ko_wp)
+
+lemma thread_set_priority_ex_nonz_cap_to[wp]:
+  "thread_set_priority t p \<lbrace>ex_nonz_cap_to p'\<rbrace>"
+  by (simp add: ex_nonz_cap_to_def cte_wp_at_caps_of_state) wp
+
+lemma thread_set_priority_pred_tcb_at[wp]:
+  "thread_set_priority t p \<lbrace>pred_tcb_at proj P t'\<rbrace>"
+  apply (simp add: pred_tcb_at_def thread_set_priority_def thread_set_def)
+  apply (wpsimp wp: set_object_wp)
+  apply (clarsimp simp: obj_at_def tcb_to_itcb_def dest!: get_tcb_SomeD)
+  done
+
+lemma thread_set_priority_sc_tcb_sc_at[wp]:
+  "thread_set_priority t p \<lbrace>sc_tcb_sc_at P t'\<rbrace>"
+  apply (simp add: sc_tcb_sc_at_def thread_set_priority_def thread_set_def)
+  apply (wpsimp wp: set_object_wp)
+  apply (clarsimp simp: obj_at_def dest!: get_tcb_SomeD)
+  done
+
+crunches set_priority
+  for valid_cap[wp]: "valid_cap cap"
+  and no_cap_to_diff_ref[wp]: "no_cap_to_obj_with_diff_ref a S"
+  and cte_wp_at[wp]: "\<lambda>s. P (cte_wp_at P' p s)"
+  and ex_nonz_cap_to[wp]: "ex_nonz_cap_to p"
+  and idle_thread[wp]: "\<lambda>s. P (idle_thread s)"
+  and pred_tcb_at[wp]: "pred_tcb_at proj P t"
+  and sc_tcb_sc_at[wp]: "sc_tcb_sc_at P t"
+  (wp: valid_cap_typ crunch_wps maybeM_inv no_cap_to_obj_with_diff_ref_lift reschedule_required_pred_tcb_at
+   simp: crunch_simps cte_wp_at_caps_of_state)
+
+
+lemma sort_queue_valid_ntfn_rv:
+  "\<lbrace>valid_ntfn ntfn and K (ntfn_obj ntfn = WaitingNtfn q)\<rbrace>
+    sort_queue q
+   \<lbrace>\<lambda>rv. valid_ntfn (ntfn\<lparr>ntfn_obj := WaitingNtfn rv\<rparr>)\<rbrace>"
+  apply (clarsimp simp: valid_def sort_queue_def bind_def return_def)
+  apply (case_tac q; clarsimp simp: valid_ntfn_def split: option.splits)
+   apply (case_tac a, clarsimp simp: in_monad mapM_Cons)
+   apply (clarsimp simp del: sort_key_simps(2) zip_Cons_Cons)
+   apply (rule conjI, clarsimp)
+  sorry
+
+lemma reorder_ntfn_invs[wp]:
+  "\<lbrace>invs\<rbrace> reorder_ntfn ptr \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: reorder_ntfn_def live_def live_ntfn_def
+                  wp: set_ntfn_minor_invs sort_queue_valid_ntfn_rv get_simple_ko_wp)
+  apply (clarsimp simp: ntfn_queue_def split: ntfn.splits)
+  apply (rule conjI, clarsimp simp: obj_at_def)
+  apply (rule obj_at_valid_objsE, assumption, fastforce)
+  apply (frule if_live_then_nonz_capD[OF invs_iflive], assumption)
+  by (auto dest!: not_idle_tcb_in_waitingntfn
+            simp: valid_obj_def live_def live_ntfn_def)
+
+lemma set_ep_minor_invs:
+  "\<lbrace>invs and obj_at (\<lambda>ko. refs_of ko = ep_q_refs_of val) ptr
+         and valid_ep val
+         and (\<lambda>s. \<forall>typ. (idle_thread s, typ) \<notin> ep_q_refs_of val)
+         and (\<lambda>s. live (Endpoint val) \<longrightarrow> ex_nonz_cap_to ptr s)\<rbrace>
+     set_endpoint ptr val
+   \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: invs_def valid_state_def valid_pspace_def
+          wp: valid_irq_node_typ simp_del: fun_upd_apply)
+  apply (clarsimp simp: state_refs_of_def obj_at_def ext elim!: rsubst[where P = sym_refs])
+  done
+
+lemma reorder_ep_invs[wp]:
+  "\<lbrace>invs\<rbrace> reorder_ep ptr \<lbrace>\<lambda>rv. invs\<rbrace>"
+  apply (wpsimp simp: reorder_ep_def live_def
+                  wp: set_ep_minor_invs sort_queue_valid_ntfn_rv get_simple_ko_wp)
+  sorry
+
+lemma set_priority_invs[wp]:
+  "set_priority t p \<lbrace>invs\<rbrace>"
+  unfolding set_priority_def by wpsimp
+
 end

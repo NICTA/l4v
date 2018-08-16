@@ -2133,12 +2133,19 @@ lemma set_mrs_st_tcb [wp]:
   apply wp
   done
 
-
 lemma get_tcb_ko_atD:
   "get_tcb t s = Some tcb \<Longrightarrow> ko_at (TCB tcb) t s"
   by auto
 
-crunches thread_set_domain
+lemma live_tcb_domain_update[simp]:
+  "live (TCB (tcb_domain_update f t)) = live (TCB t)"
+  by (simp add: live_def)
+
+lemma live_tcb_priority_update[simp]:
+  "live (TCB (tcb_priority_update f t)) = live (TCB t)"
+  by (simp add: live_def)
+
+crunches thread_set_domain, thread_set_priority
   for aligned[wp]: pspace_aligned
   and distinct[wp]: pspace_distinct
   and typ_at[wp]: "\<lambda>s. P (typ_at T p s)"
@@ -2166,6 +2173,7 @@ crunches thread_set_domain
   (wp: crunch_wps simp: crunch_simps tcb_cap_cases_def)
 
 lemmas thread_set_domain_typ_ats[wp] = abs_typ_at_lifts[OF thread_set_domain_typ_at]
+lemmas thread_set_priority_typ_ats[wp] = abs_typ_at_lifts[OF thread_set_priority_typ_at]
 
 lemma thread_set_domain_caps_of_state[wp]:
   "thread_set_domain t d \<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace>"
@@ -2189,10 +2197,6 @@ lemma thread_set_domain_valid_objs[wp]:
   apply (clarsimp simp: valid_obj_def valid_tcb_def)
   apply (drule (1) bspec)
   by (auto simp: tcb_cap_cases_def)
-
-lemma live_tcb_domain_update[simp]:
-  "live (TCB (tcb_domain_update f t)) = live (TCB t)"
-  by (simp add: live_def)
 
 lemma thread_set_domain_if_live_then_nonz_cap[wp]:
   "thread_set_domain t d \<lbrace>if_live_then_nonz_cap\<rbrace>"
@@ -2262,6 +2266,103 @@ lemma thread_set_domain_valid_arch_caps[wp]:
 
 lemma thread_set_domain_invs[wp]:
   "thread_set_domain t d \<lbrace>invs\<rbrace>"
+  unfolding invs_def valid_state_def valid_pspace_def
+  by (wpsimp wp: valid_mdb_lift hoare_vcg_all_lift hoare_vcg_imp_lift
+           simp: valid_ioc_def valid_global_refs_def valid_refs_def cte_wp_at_caps_of_state)
+
+
+
+lemma thread_set_priority_caps_of_state[wp]:
+  "thread_set_priority t d \<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def set_object_def
+  apply wpsimp
+  apply (erule rsubst[of P])
+  apply (rule cte_wp_caps_of_lift)
+  apply (clarsimp simp: cte_wp_at_cases tcb_cap_cases_def dest!: get_tcb_SomeD)
+  done
+
+lemma thread_set_priority_cte_wp_at[wp]:
+  "thread_set_priority t d \<lbrace>\<lambda>s. P (cte_wp_at Q p s)\<rbrace>"
+  by (wpsimp simp: cte_wp_at_caps_of_state)
+
+lemma thread_set_priority_valid_objs[wp]:
+  "thread_set_priority t d \<lbrace>valid_objs\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def
+  apply (wpsimp wp: set_object_valid_objs)
+  apply (clarsimp simp: obj_at_def dest!: get_tcb_SomeD)
+  apply (erule (1) pspace_valid_objsE)
+  apply (clarsimp simp: valid_obj_def valid_tcb_def)
+  apply (drule (1) bspec)
+  by (auto simp: tcb_cap_cases_def)
+
+lemma thread_set_priority_if_live_then_nonz_cap[wp]:
+  "thread_set_priority t d \<lbrace>if_live_then_nonz_cap\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def
+  apply wpsimp
+  apply (auto simp: if_live_then_nonz_cap_def obj_at_def tcb_cap_cases_def dest!: get_tcb_SomeD)
+  done
+
+lemma thread_set_priority_zombies_final[wp]:
+  "thread_set_priority t d \<lbrace>zombies_final\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def
+  by (wpsimp simp: tcb_cap_cases_def)
+
+lemma thread_set_priority_refs_of[wp]:
+  "thread_set_priority t d \<lbrace>\<lambda>s. P (state_refs_of s)\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def set_object_is_modify
+  apply (wpsimp simp: state_refs_of_def)
+  apply (erule rsubst[of P])
+  apply (rule ext)
+  apply (clarsimp split: option.splits dest!: get_tcb_SomeD)
+  done
+
+lemma thread_set_priority_hyp_refs_of[wp]:
+  "thread_set_priority t d \<lbrace>\<lambda>s. P (state_hyp_refs_of s)\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def set_object_def
+  supply fun_upd_apply [simp del]
+  apply wpsimp
+  apply (clarsimp elim!: rsubst[where P=P] dest!: get_tcb_SomeD)
+  apply (subst state_hyp_refs_of_tcb_priority_update; auto simp: get_tcb_def)
+  done
+
+
+lemma thread_set_priority_valid_idle[wp]:
+  "thread_set_priority t d \<lbrace>valid_idle\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def
+  apply wpsimp
+  apply (drule get_tcb_SomeD)
+  apply (rule conjI, fastforce simp: obj_at_def)
+  apply clarsimp
+  apply (rule conjI, rule refl)
+  apply (rule conjI, rule refl)
+  apply simp
+  done
+
+lemma thread_set_priority_if_unsafe_then_cap[wp]:
+  "thread_set_priority t d \<lbrace>if_unsafe_then_cap\<rbrace>"
+  unfolding thread_set_priority_def thread_set_def
+  by (wpsimp simp: tcb_cap_cases_def)
+
+lemma thread_set_priority_valid_irq_node[wp]:
+  "thread_set_priority t d \<lbrace>valid_irq_node\<rbrace>"
+  apply (wpsimp simp: valid_irq_node_def wp: hoare_vcg_all_lift)
+   apply (rule hoare_lift_Pf[where f="interrupt_irq_node"]; wp)
+  apply simp
+  done
+
+lemma thread_set_priority_valid_irq_handlers[wp]:
+  "thread_set_priority t d \<lbrace>valid_irq_handlers\<rbrace>"
+  apply (wpsimp simp: valid_irq_handlers_def irq_issued_def)
+  apply (rule hoare_lift_Pf[where f="caps_of_state"]; wp)
+  done
+
+lemma thread_set_priority_valid_arch_caps[wp]:
+  "thread_set_priority t d \<lbrace>valid_arch_caps\<rbrace>"
+  unfolding thread_set_priority_def
+  by (wpsimp wp: thread_set_arch_caps_trivial simp: tcb_cap_cases_def)
+
+lemma thread_set_priority_invs[wp]:
+  "thread_set_priority t d \<lbrace>invs\<rbrace>"
   unfolding invs_def valid_state_def valid_pspace_def
   by (wpsimp wp: valid_mdb_lift hoare_vcg_all_lift hoare_vcg_imp_lift
            simp: valid_ioc_def valid_global_refs_def valid_refs_def cte_wp_at_caps_of_state)

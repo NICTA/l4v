@@ -279,17 +279,17 @@ definition
 
 definition
   handle_send :: "bool \<Rightarrow> (unit, 'z::state_ext) p_monad" where
-  "handle_send bl \<equiv> do
-    cptr \<leftarrow> get_cap_reg cap_register;
+  "handle_send bl \<equiv> doE
+    cptr \<leftarrow> liftE $ get_cap_reg cap_register;
     handle_invocation False bl False cptr
-  od"
+  odE"
 
 definition
   handle_call :: "(unit, 'z::state_ext) p_monad" where
- "handle_call \<equiv>  do
-    cptr \<leftarrow> get_cap_reg cap_register;
+ "handle_call \<equiv>  doE
+    cptr \<leftarrow> liftE $ get_cap_reg cap_register;
     handle_invocation True True True cptr
-  od"
+  odE"
 
 definition
   lookup_reply :: "(cap, 'z::state_ext) f_monad"

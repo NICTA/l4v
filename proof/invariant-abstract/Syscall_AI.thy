@@ -1126,16 +1126,15 @@ lemma hs_tcb_on_err:
   "\<lbrace>st_tcb_at active t and invs and ct_active\<rbrace>
      handle_send blocking
    -,\<lbrace>\<lambda>e. tcb_at t :: 'state_ext state \<Rightarrow> bool\<rbrace>"
-  apply (unfold handle_send_def whenE_def fun_app_def validE_E_def validE_def)
-  apply (wpsimp split: sum.split | rule hoare_strengthen_post [OF hinv_tcb])+
-  apply (simp, wpsimp split: sum.split, assumption)
+  apply (unfold handle_send_def whenE_def fun_app_def)
+  apply (wpsimp | rule hoare_strengthen_post [OF hinv_tcb])+
   done
 
 lemma hs_invs[wp]: "\<lbrace>invs and ct_active\<rbrace> handle_send blocking \<lbrace>\<lambda>r. invs :: 'state_ext state \<Rightarrow> bool\<rbrace>"
   apply (rule validE_valid)
   apply (simp add: handle_send_def whenE_def)
   apply (wp | simp add: ct_in_state_def tcb_at_invs)+
-  sorry
+  done
 
 end
 
@@ -1211,7 +1210,7 @@ lemma invs_valid_tcb_ctable_strengthen:
   by (clarsimp simp: invs_valid_tcb_ctable)
 
 lemma hw_invs[wp]: "\<lbrace>invs and ct_active\<rbrace> handle_recv is_blocking can_reply \<lbrace>\<lambda>r. invs\<rbrace>"
-  apply (simp add: handle_recv_def Let_def ep_ntfn_cap_case_helper split del: if_splits
+  apply (simp add: handle_recv_def Let_def ep_ntfn_cap_case_helper split del: if_split
     cong: if_cong)
   apply (wpsimp wp: get_simple_ko_wp)
 (*  apply (wp get_simple_ko_wp hoare_vcg_ball_lift | simp)+
@@ -1341,7 +1340,7 @@ lemma do_reply_transfer_st_tcb_at_active:
 
 lemma hc_invs[wp]:
   "\<lbrace>invs and ct_active\<rbrace> handle_call \<lbrace>\<lambda>rv. invs :: 'state_ext state \<Rightarrow> bool\<rbrace>"
-  by (simp add: handle_call_def) wp
+  by (simp add: handle_call_def) wpsimp
 
 end
 (* FIXME: move *) (* FIXME: should we add this to the simpset? *)

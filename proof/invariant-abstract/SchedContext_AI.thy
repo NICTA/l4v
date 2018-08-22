@@ -505,15 +505,21 @@ lemma ct_in_state_cur_sc_update[iff]:
   "ct_in_state st (cur_sc_update f s) = ct_in_state st s"
   by (simp add: ct_in_state_def)
 
-lemma set_refills_pred_tcb_at[wp]:
-  "\<lbrace> pred_tcb_at proj f t \<rbrace> set_refills p r \<lbrace> \<lambda>rv. pred_tcb_at proj f t \<rbrace>"
-  by (wpsimp simp: set_refills_def)
+lemma update_sched_context_st_tcb_at[wp]:
+ "update_sched_context ptr f \<lbrace>\<lambda>s. P (st_tcb_at Q t s)\<rbrace>"
+  unfolding update_sched_context_def
+  apply (wpsimp wp: set_object_wp get_object_wp)
+  apply (auto elim!: rsubst[where P=P] simp: obj_at_def st_tcb_at_def)
+  done
 
-lemma refill_split_check_pred_tcb_at[wp]:
-  "\<lbrace> pred_tcb_at proj f t \<rbrace> refill_split_check p u \<lbrace> \<lambda>rv. pred_tcb_at proj f t \<rbrace>"
-  by (wpsimp wp: get_sched_context_wp get_refills_wp simp: refill_split_check_def Let_def split_del: if_splits)
+lemma update_sched_context_pred_tcb[wp]:
+ "update_sched_context ptr f \<lbrace>\<lambda>s. P (pred_tcb_at prj Q t s)\<rbrace>"
+  unfolding update_sched_context_def
+  apply (wpsimp wp: set_object_wp get_object_wp)
+  apply (auto elim!: rsubst[where P=P] simp: obj_at_def pred_tcb_at_def)
+  done
 
-crunch pred_tcb[wp]: commit_time "pred_tcb_at proj f t"
+crunch pred_tcb_at[wp]: commit_time "\<lambda>s. P (pred_tcb_at proj f t s)"
   (simp: crunch_simps)
 
 lemma set_sched_context_ct_in_state[wp]:
@@ -532,7 +538,7 @@ lemma set_refills_ct_in_state[wp]:
 
 lemma refill_split_check_ct_in_state[wp]:
   "\<lbrace> ct_in_state t \<rbrace> refill_split_check csc consumed \<lbrace> \<lambda>rv. ct_in_state t \<rbrace>"
-  by (wpsimp simp: refill_split_check_def Let_def split_del: if_splits
+  by (wpsimp simp: refill_split_check_def Let_def split_del: if_split
              wp: get_sched_context_wp get_refills_wp)
 
 (* FIXME: move *)

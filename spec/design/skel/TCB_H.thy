@@ -16,7 +16,10 @@ imports
   TCBDecls_H
   CNode_H
   VSpace_H
+  FaultHandlerDecls_H
+  SchedContext_H
   "./$L4V_ARCH/ArchTCB_H"
+  "../../lib/HaskellLib_H"
 begin
 
 context begin interpretation Arch .
@@ -36,11 +39,12 @@ requalify_consts
   fromVPtr
   setTCBIPCBuffer
   postModifyRegisters
+  max_us_to_ticks
 end
 
 abbreviation "mapMaybe \<equiv> option_map"
 
-#INCLUDE_HASKELL SEL4/Object/TCB.lhs Arch= bodies_only NOT liftFnMaybe assertDerived archThreadGet archThreadSet asUser sanitiseRegister getSanitiseRegisterInfo
+#INCLUDE_HASKELL SEL4/Object/TCB.lhs Arch= bodies_only NOT liftFnMaybe assertDerived archThreadGet archThreadSet asUser sanitiseRegister getSanitiseRegisterInfo takeWhileM sort_key
 
 defs asUser_def:
 "asUser tptr f\<equiv> (do

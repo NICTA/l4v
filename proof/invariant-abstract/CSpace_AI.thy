@@ -904,8 +904,7 @@ where
   else
     (cap_master_cap cap = cap_master_cap cap') \<and>
     (cap_badge cap, cap_badge cap') \<in> capBadge_ordering False) \<and>
-    is_derived_arch cap' cap \<and>
-    \<not> is_reply_cap cap"  (* RT: FIXME *)
+    is_derived_arch cap' cap"
 
 
 lemma the_arch_cap_ArchObjectCap[simp]:

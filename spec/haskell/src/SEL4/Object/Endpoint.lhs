@@ -71,7 +71,7 @@ If the endpoint is already in the sending state, and this is a blocking IPC oper
 >                     blockingIPCBadge = badge,
 >                     blockingIPCCanGrant = canGrant,
 >                     blockingIPCIsCall = call }) thread
->                 qs' <- tcbEPAppend thread queue
+>                 qs' <- sortQueue (queue ++ [thread])
 >                 setEndpoint epptr $ SendEP qs'
 
 A non-blocking IPC to an idle or sending endpoint will be silently dropped.
@@ -154,7 +154,7 @@ The IPC receive operation is essentially the same as the send operation, but wit
 >                       blockingObject = epptr, replyObject = replyOpt }) thread
 >                   when (replyOpt /= Nothing) $
 >                       setReplyTCB (Just thread) $ fromJust replyOpt
->                   qs' <- tcbEPAppend thread queue
+>                   qs' <- sortQueue (queue ++ [thread])
 >                   setEndpoint epptr $ RecvEP $ qs'
 >               False -> doNBRecvFailedTransfer thread
 >             SendEP (sender:queue) -> do
@@ -326,7 +326,6 @@ The following two functions are specialisations of "getObject" and
 > reorderEp epPtr tptr = do
 >     ep <- getEndpoint epPtr
 >     qs <- getEpQueue ep
->     qs' <- tcbEPDequeue tptr qs
->     qs'' <- tcbEPAppend tptr qs'
->     setEndpoint epPtr (updateEpQueue ep qs'')
+>     qs' <- sortQueue qs
+>     setEndpoint epPtr (updateEpQueue ep qs')
 

@@ -370,7 +370,7 @@ New threads are placed in the current security domain, which must be the domain 
 >             placeNewObject (PPtr $ fromPPtr regionBase) (makeObject :: Notification) 0
 >             return $! NotificationCap (PPtr $ fromPPtr regionBase) 0 True True
 >         Just SchedContextObject -> do
->             placeNewObject regionBase (makeObject :: SchedContext) 0
+>             placeNewObject regionBase ((makeObject :: SchedContext) { scSizeBits = userSize }) 0
 >             return $! SchedContextCap (PPtr $ fromPPtr regionBase) userSize
 >         Just ReplyObject -> do
 >             placeNewObject regionBase (makeObject :: Reply) 0

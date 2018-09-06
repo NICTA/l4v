@@ -49,10 +49,11 @@ This module uses the C preprocessor to select a target architecture.
 > import {-# SOURCE #-} SEL4.Object.Notification
 > import {-# SOURCE #-} SEL4.Object.Reply
 > import SEL4.Object.Structures
-> import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet, checkBudget, chargeBudget, replaceAt, setTimeArg, setMessageInfo, setMRs)
+> import {-# SOURCE #-} SEL4.Object.TCB(threadGet, threadSet, checkBudget, chargeBudget, setTimeArg, setMessageInfo, setMRs)
 > import {-# SOURCE #-} SEL4.Kernel.Thread
 > import SEL4.API.Invocation(SchedContextInvocation(..), SchedControlInvocation(..))
 
+> import Data.Bits
 > import Data.List(delete)
 > import Data.Word(Word64)
 > import Data.Maybe
@@ -60,10 +61,10 @@ This module uses the C preprocessor to select a target architecture.
 \end{impdetails}
 
 > minBudget :: Word64
-> minBudget = 2 * kernelWCETTicks
+> minBudget = 2 * kernelWCET_ticks
 
 > minBudgetUs :: Word64
-> minBudgetUs = 2 * kernelWCETUs
+> minBudgetUs = 2 * kernelWCET_us
 
 > getTCBSc :: PPtr TCB -> Kernel SchedContext
 > getTCBSc tcbPtr = do
@@ -102,7 +103,6 @@ This module uses the C preprocessor to select a target architecture.
 > refillCapacity :: PPtr SchedContext -> Time -> Kernel Time
 > refillCapacity scPtr usage = do
 >     refills <- getRefills scPtr
->     sc <- getSchedContext scPtr
 >     return $ refillsCapacity usage refills
 
 > sufficientRefills :: Time -> [Refill] -> Bool
@@ -111,7 +111,6 @@ This module uses the C preprocessor to select a target architecture.
 > refillSufficient :: PPtr SchedContext -> Time -> Kernel Bool
 > refillSufficient scPtr usage = do
 >     refills <- getRefills scPtr
->     sc <- getSchedContext scPtr
 >     return $ sufficientRefills usage refills
 
 > getRefills :: PPtr SchedContext -> Kernel [Refill]
@@ -132,7 +131,7 @@ This module uses the C preprocessor to select a target architecture.
 >     curTime <- getCurTime
 >     sc <- getSchedContext scPtr
 >     scTime <- return $ rTime (refillHd sc)
->     return $ scTime <= curTime + kernelWCETTicks
+>     return $ scTime <= curTime + kernelWCET_ticks
 
 > refillSize :: PPtr SchedContext -> Kernel Int
 > refillSize scPtr = do
@@ -245,12 +244,12 @@ This module uses the C preprocessor to select a target architecture.
 >         refillsBudgetCheck period usage refills
 >         else (usage, refills))
 >     refills'' <- return (if capacity == 0 && 0 < usage' then
->         (let r1 = head refills'
->              r1' = r1 { rTime = rTime r1 + usage }
+>         (let r1 = head refills';
+>              r1' = r1 { rTime = rTime r1 + usage };
 >              rs = tail refills'
->         in if length rs /= 0 && canMergeRefill r1' (head rs)
->            then (mergeRefill r1' (head rs)) : tail rs
->            else r1':rs)
+>          in if length rs /= 0 && canMergeRefill r1' (head rs)
+>             then (mergeRefill r1' (head rs)) : tail rs
+>             else r1' : rs)
 >         else refills')
 >     setRefills scPtr refills''
 >     capacity <- refillCapacity scPtr usage'
@@ -276,7 +275,7 @@ This module uses the C preprocessor to select a target architecture.
 >        then if length refills == 1
 >                 then setRefills scPtr [new { rAmount = rAmount new + remaining }]
 >                 else
->                     let r2 = head (tail refills)
+>                     let r2 = head (tail refills);
 >                         rs = tail (tail refills)
 >                     in setRefills scPtr
 >                            (scheduleUsed (r2 { rAmount = rAmount r2 + remaining } : rs) new)
@@ -295,17 +294,14 @@ This module uses the C preprocessor to select a target architecture.
 >        then do
 >            setSchedContext scPtr (sc { scPeriod = newPeriod,
 >                                        scRefillMax = newMaxRefills,
->                                        scRefills = [Refill { rTime = newTime,
->                                                              rAmount = newBudget }]})
+>                                        scRefills = [Refill newTime newBudget] })
 >            maybeAddEmptyTail scPtr
 >        else
 >            setSchedContext scPtr (sc { scPeriod = newPeriod,
 >                                        scRefillMax = newMaxRefills,
->                                        scRefills = [Refill { rTime = newTime,
->                                                              rAmount = rAmount refillHd },
->                                                     Refill { rTime = newTime + newPeriod,
->                                                              rAmount = newBudget -
->                                                                        rAmount refillHd }] })
+>                                        scRefills = [Refill newTime (rAmount refillHd),
+>                                                     Refill (newTime + newPeriod)
+>                                                            (newBudget - rAmount refillHd)] })
 
 > postpone :: PPtr SchedContext -> Kernel ()
 > postpone scPtr = do
@@ -321,7 +317,7 @@ This module uses the C preprocessor to select a target architecture.
 > schedContextResume scPtr = do
 >     sc <- getSchedContext scPtr
 >     tptrOpt <- return $ scTCB sc
->     assert (tptrOpt /= Nothing) "schedContextResume: option of TCB pointer must not be Nothing"
+>     assert (tptrOpt /= Nothing) "schedContextResume: scPtr must have an associated TCB"
 >     tptr <- return $ fromJust tptrOpt
 >     inRlsQueue <- inReleaseQueue tptr
 >     sched <- isSchedulable tptr inRlsQueue
@@ -345,7 +341,7 @@ This module uses the C preprocessor to select a target architecture.
 > schedContextUnbindTCB scPtr = do
 >     sc <- getSchedContext scPtr
 >     let tptrOpt = scTCB sc
->     assert (tptrOpt /= Nothing) "schedContextUnbind: option of TCB pointer must not be Nothing"
+>     assert (tptrOpt /= Nothing) "schedContextUnbindTCB: option of TCB pointer must not be Nothing"
 >     let tptr = fromJust tptrOpt
 >     cur <- getCurThread
 >     when (tptr == cur) $ rescheduleRequired
@@ -365,9 +361,10 @@ This module uses the C preprocessor to select a target architecture.
 >         threadSet (\tcb -> tcb { tcbSchedContext = Nothing }) from
 >         cur <- getCurThread
 >         action <- getSchedulerAction
->         case action of
->             SwitchToThread candidate | candidate == from -> rescheduleRequired
->             _ -> when (from == cur) rescheduleRequired
+>         flag <- return (case action of
+>                           SwitchToThread candidate -> from == candidate
+>                           _ -> False)
+>         when (from == cur || flag) rescheduleRequired
 >     setSchedContext scPtr (sc { scTCB = Just tcbPtr })
 >     threadSet (\tcb -> tcb { tcbSchedContext = Just scPtr }) tcbPtr
 
@@ -380,31 +377,42 @@ This module uses the C preprocessor to select a target architecture.
 > schedContextUpdateConsumed scPtr = do
 >     sc <- getSchedContext scPtr
 >     consumed <- return $ scConsumed sc
->     if (consumed >= maxTicksToUs)
+>     if (consumed >= max_ticks_to_us)
 >         then do
->             setSchedContext scPtr $ sc { scConsumed = scConsumed sc - maxTicksToUs }
->             return maxTicksToUs
+>             setSchedContext scPtr $ sc { scConsumed = scConsumed sc - max_ticks_to_us }
+>             return max_ticks_to_us
 >         else do
 >             setSchedContext scPtr $ sc { scConsumed = 0 }
->             return $ ticksToUs consumed
+>             return $ ticks_to_us consumed
 
 > schedContextYieldTo :: PPtr SchedContext -> [Word] -> Kernel ()
 > schedContextYieldTo scPtr buffer = do
+>     sc <- getSchedContext scPtr
+>     scYfOpt <- return $ scYieldFrom sc
+>     when (scYfOpt /= Nothing) $
+>         schedContextCompleteYieldTo $ fromJust scYfOpt
+>     flag <- return True
 >     refillUnblockCheck scPtr
 >     sc <- getSchedContext scPtr
 >     tptr <- return $ fromJust $ scTCB sc
->     inq <- inReleaseQueue tptr
->     schedulable <- isSchedulable tptr inq
->     if schedulable
->         then do
->             sufficient <- refillSufficient scPtr 0
->             ready <- refillReady scPtr
->             assert (sufficient && ready) "schedContextYieldTo: refill must be sufficient and ready"
->             ctPtr <- getCurThread
->             threadSet (\tcb -> tcb { tcbYieldTo = Just scPtr }) ctPtr
->             setSchedContext scPtr (sc { scYieldFrom = Just ctPtr })
->             possibleSwitchTo $ fromJust $ scTCB sc
->         else setConsumed scPtr (PPtr (head buffer))
+>     schedulable <- isSchedulable tptr False
+>     when schedulable $ do
+>         sufficient <- refillSufficient scPtr 0
+>         ready <- refillReady scPtr
+>         assert (sufficient && ready) "schedContextYieldTo: refill must be sufficient and ready"
+>         ctPtr <- getCurThread
+>         prios <- threadGet tcbPriority tptr
+>         ctPrios <- threadGet tcbPriority ctPtr
+>         if (prios < ctPrios)
+>             then do
+>                 tcbSchedDequeue tptr
+>                 tcbSchedEnqueue tptr
+>             else do
+>                 flag <- return False
+>                 setSchedContext scPtr (sc { scYieldFrom = Just ctPtr })
+>                 threadSet (\tcb -> tcb { tcbYieldTo = Just scPtr }) ctPtr
+>                 possibleSwitchTo tptr
+>     when flag $ setConsumed scPtr (PPtr (head buffer))
 
 > setConsumed :: PPtr SchedContext -> PPtr Word -> Kernel ()
 > setConsumed scPtr buffer = do
@@ -435,31 +443,26 @@ This module uses the C preprocessor to select a target architecture.
 > invokeSchedControlConfigure iv = case iv of
 >     InvokeSchedControlConfigure scPtr budget period mRefills badge -> withoutFailure $ do
 >         sc <- getSchedContext scPtr
->         let tptrOpt = scTCB sc
 >         setSchedContext scPtr $ sc { scBadge = badge }
->         when (tptrOpt /= Nothing) $ do
->             let tptr = fromJust tptrOpt
+>         let (period, mRefills) = if budget == period then (0, minRefills) else (period, mRefills)
+>         when (scTCB sc /= Nothing) $ do
+>             tptr <- return $ fromJust $ scTCB sc
 >             tcbReleaseRemove tptr
 >             tcbSchedDequeue tptr
 >             curSc <- getCurSc
 >             when (curSc == scPtr) $ do
->                 consumed <- getConsumedTime
->                 capacity <- refillCapacity scPtr consumed
->                 budgetEnough <- checkBudget
->                 if budgetEnough
->                     then commitTime
->                     else chargeBudget capacity consumed False
->             let (period, mRefills) = if budget == period then (0, minRefills) else (period, mRefills)
->             runnable <- isRunnable tptr
->             if scRefillMax sc > 0 && runnable
->                 then refillUpdate scPtr period budget mRefills
+>                 result <- checkBudget
+>                 when result $ commitTime
+>             if 0 < scRefillMax sc
+>                 then do
+>                     runnable <- isRunnable tptr
+>                     when runnable $ refillUpdate scPtr period budget mRefills
+>                     schedContextResume scPtr
+>                     ctPtr <- getCurThread
+>                     if (tptr == ctPtr)
+>                         then rescheduleRequired
+>                         else when runnable $ possibleSwitchTo tptr
 >                 else refillNew scPtr mRefills budget period
->             when (scRefillMax sc > 0) $ do
->                 schedContextResume scPtr
->                 ctPtr <- getCurThread
->                 if (tptr == ctPtr)
->                     then rescheduleRequired
->                     else when runnable $ possibleSwitchTo tptr
 
 > isCurDomainExpired :: Kernel Bool
 > isCurDomainExpired = do
@@ -488,8 +491,8 @@ This module uses the C preprocessor to select a target architecture.
 >         robin <- isRoundRobin scPtr
 >         if robin
 >             then do
->                 let newHd = (refillHd sc) { rTime = rTime (refillHd sc) - consumed }
->                     newTl = (refillTl sc) { rTime = rTime (refillTl sc) + consumed }
+>                 newHd <- return $ (refillHd sc) { rTime = rTime (refillHd sc) - consumed }
+>                 newTl <- return $ (refillTl sc) { rTime = rTime (refillTl sc) + consumed }
 >                 setRefills scPtr (newHd : [newTl])
 >             else refillSplitCheck scPtr consumed
 >     commitDomainTime
@@ -548,7 +551,7 @@ This module uses the C preprocessor to select a target architecture.
 > schedContextUnbindReply scPtr = do
 >     sc <- getSchedContext scPtr
 >     mapM_ (setReplySc Nothing) (scReplies sc)
->     setSchedContext scPtr sc { scReplies = [] }
+>     setSchedContext scPtr (sc { scReplies = [] })
 
 > schedContextMaybeUnbindNtfn :: PPtr Notification -> Kernel ()
 > schedContextMaybeUnbindNtfn ntfnPtr = do
@@ -586,7 +589,8 @@ This module uses the C preprocessor to select a target architecture.
 > refillSizeBytes = 16
 
 > refillAbsoluteMax :: Capability -> Int
-> refillAbsoluteMax (SchedContextCap _ sc) = (sc - coreSchedContextBytes) `div` refillSizeBytes + minRefills
+> refillAbsoluteMax (SchedContextCap _ sc) =
+>     ((1 `shiftL` sc) - coreSchedContextBytes) `div` refillSizeBytes + minRefills
 > refillAbsoluteMax _ = 0
 
 > schedContextCancelYieldTo :: PPtr TCB -> Kernel ()
@@ -595,8 +599,8 @@ This module uses the C preprocessor to select a target architecture.
 >     when (scPtrOpt /= Nothing) $ do
 >         scPtr <- return $ fromJust scPtrOpt
 >         sc <- getSchedContext scPtr
->         setSchedContext scPtr (sc { scYieldFrom = Nothing })
 >         threadSet (\tcb -> tcb { tcbYieldTo = Nothing }) tptr
+>         setSchedContext scPtr (sc { scYieldFrom = Nothing })
 
 > schedContextCompleteYieldTo :: PPtr TCB -> Kernel ()
 > schedContextCompleteYieldTo tptr = do
@@ -609,5 +613,4 @@ This module uses the C preprocessor to select a target architecture.
 >             Just buffer -> do
 >                 setConsumed scPtr buffer
 >                 schedContextCancelYieldTo tptr
->                 setThreadState Running tptr
 

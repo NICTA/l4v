@@ -707,6 +707,14 @@ where
   "cap_bits_untyped (UntypedCap dev r s f) = s"
 
 definition
+  cap_badge :: "cap \<rightharpoonup> badge"
+where
+ "cap_badge cap \<equiv> case cap of
+    cap.EndpointCap r badge rights \<Rightarrow> Some badge
+  | cap.NotificationCap r badge rights \<Rightarrow> Some badge
+  | _ \<Rightarrow> None"
+
+definition
   "tcb_cnode_map tcb \<equiv>
    [tcb_cnode_index 0 \<mapsto> tcb_ctable tcb,
     tcb_cnode_index 1 \<mapsto> tcb_vtable tcb,

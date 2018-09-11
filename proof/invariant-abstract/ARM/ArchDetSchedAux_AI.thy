@@ -134,12 +134,40 @@ and bound_sc_tcb_at Q t
             empty_descendants_range_in)+))
   done
 
+(* FIXME: move *)
+lemma schedulable_tcb_at_def2:
+  "schedulable_tcb_at t = (\<lambda>s.
+          (\<exists>scp. bound_sc_tcb_at (\<lambda>sc. sc = Some scp) t s
+                \<and> obj_at (\<lambda>obj. \<exists>sc n. obj = SchedContext sc n
+                             \<and> 0 < sc_refill_max sc) scp s))"
+  by (auto simp: pred_tcb_at_def schedulable_tcb_at_def obj_at_def)
+
+(* FIEXME: move? *)
+lemma init_arch_objects_obj_at_impossible:
+  "\<forall>ao. \<not> P (ArchObj ao) \<Longrightarrow>
+    \<lbrace>\<lambda>s. Q (obj_at P p s)\<rbrace> init_arch_objects a b c d e \<lbrace>\<lambda>rv s. Q (obj_at P p s)\<rbrace>"
+  apply (wpsimp simp: init_arch_objects_def copy_global_mappings_def store_pde_def
+                      set_pd_def set_object_def obj_at_def
+                  wp: mapM_x_wp' get_object_wp get_pde_wp)
+  done
+
+(* FIXME: move? *)
+lemma init_arch_objects_schedulable_tcb_at[wp]:
+  "\<lbrace>schedulable_tcb_at t\<rbrace>
+     init_arch_objects a b c d e
+   \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>"
+  apply (rule hoare_pre)
+   apply (clarsimp simp: schedulable_tcb_at_def2)
+   apply (wpsimp wp: hoare_vcg_ex_lift init_arch_objects_obj_at_impossible)
+  apply (clarsimp simp: schedulable_tcb_at_def2)
+  done
+
 lemma invoke_untyped_schedulable_tcb_at[wp,DetSchedAux_AI_assms]:
   "\<lbrace>invs and st_tcb_at ((Not \<circ> inactive) and (Not \<circ> idle)) t
 and schedulable_tcb_at t
          and ct_active and valid_untyped_inv ui\<rbrace>
      invoke_untyped ui
-   \<lbrace>\<lambda>rv. \<lambda>s . schedulable_tcb_at t s\<rbrace>"
+   \<lbrace>\<lambda>rv. \<lambda>s :: det_ext state . schedulable_tcb_at t s\<rbrace>"
   apply (rule hoare_pre, rule invoke_untyped_Q,
     (wp init_arch_objects_wps | simp)+)
      apply (rule hoare_name_pre_state, clarsimp)

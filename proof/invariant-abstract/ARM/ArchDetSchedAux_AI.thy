@@ -162,6 +162,42 @@ lemma init_arch_objects_schedulable_tcb_at[wp]:
   apply (clarsimp simp: schedulable_tcb_at_def2)
   done
 
+lemma retype_region_schedulable_tcb_at:
+  "\<lbrace>\<lambda>s. pspace_no_overlap (up_aligned_area ptr' sz) s \<and>
+      range_cover ptr' sz (obj_bits_api ty us) n \<and>
+      valid_objs s \<and> pspace_aligned s
+      \<and> schedulable_tcb_at t s\<rbrace>
+     retype_region ptr' n us ty dev
+   \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>"
+  apply (clarsimp simp: schedulable_tcb_at_def2)
+  apply (wpsimp wp: retype_region_obj_at_other3 hoare_vcg_ex_lift
+                    retype_region_st_tcb_at)
+  by auto
+
+lemma reset_untyped_cap_sched_context_at:
+  "\<lbrace>invs and obj_at (\<lambda>obj. (\<exists>sc n. (obj = SchedContext sc n) \<and> P sc n)) t and cte_wp_at (\<lambda>cp. t \<notin> cap_range cp \<and> is_untyped_cap cp) slot\<rbrace>
+    reset_untyped_cap slot
+  \<lbrace>\<lambda>_. obj_at (\<lambda>obj. (\<exists>sc n. (obj = SchedContext sc n) \<and> P sc n)) t\<rbrace>, \<lbrace>\<lambda>_. obj_at (\<lambda>obj. (\<exists>sc n. (obj = SchedContext sc n) \<and> P sc n)) t\<rbrace>"
+  apply (simp add: reset_untyped_cap_def)
+  apply (rule hoare_pre)
+   apply (wp mapME_x_inv_wp preemption_point_inv set_cap_obj_at_impossible | simp add: unless_def
+     | solves \<open>auto simp: caps_of_def cap_of_def\<close>)+
+    apply (simp add: delete_objects_def)
+    apply (wp get_cap_wp hoare_vcg_const_imp_lift | simp)+
+  apply (auto simp: cte_wp_at_caps_of_state cap_range_def
+                    bits_of_def is_cap_simps caps_of_def cap_of_def)
+  done
+
+lemma reset_untyped_cap_schedulable_tcb_at:
+  "\<lbrace>invs and cte_wp_at (\<lambda>cp. t \<notin> cap_range cp \<and> is_untyped_cap cp) slot
+         and schedulable_tcb_at t\<rbrace>
+     reset_untyped_cap slot
+   \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>, \<lbrace>\<lambda>rv. schedulable_tcb_at t\<rbrace>"
+  apply (clarsimp simp: schedulable_tcb_at_def2)
+  apply (wpsimp wp: reset_untyped_cap_bound_sc_tcb_at hoare_vcg_ex_lift
+                    reset_untyped_cap_sched_context_at)
+  sorry (* not entirely sure why this doesnt work *)
+
 lemma invoke_untyped_schedulable_tcb_at[wp,DetSchedAux_AI_assms]:
   "\<lbrace>invs and st_tcb_at ((Not \<circ> inactive) and (Not \<circ> idle)) t
 and schedulable_tcb_at t
@@ -171,16 +207,16 @@ and schedulable_tcb_at t
   apply (rule hoare_pre, rule invoke_untyped_Q,
     (wp init_arch_objects_wps | simp)+)
      apply (rule hoare_name_pre_state, clarsimp)
-(*     apply (wp retype_region_st_tcb_at, auto)[1]
-    apply (wp reset_untyped_cap_st_tcb_at reset_untyped_cap_bound_sc_tcb_at| simp)+
+     apply (wp retype_region_schedulable_tcb_at, auto)[1]
+    apply (wp reset_untyped_cap_st_tcb_at reset_untyped_cap_schedulable_tcb_at| simp)+
   apply (cases ui, clarsimp)
   apply (frule(1) st_tcb_ex_cap[OF _ invs_iflive])
    apply (clarsimp split: Structures_A.thread_state.splits)
   apply (drule ex_nonz_cap_to_overlap,
     ((simp add:cte_wp_at_caps_of_state
             is_cap_simps descendants_range_def2
-            empty_descendants_range_in)+))*)
-  sorry
+            empty_descendants_range_in)+))
+  done
 
 crunch valid_blocked[wp, DetSchedAux_AI_assms]: init_arch_objects "valid_blocked::det_ext state \<Rightarrow> _"
   (wp: valid_blocked_lift set_cap_typ_at)

@@ -560,10 +560,10 @@ The use of "checkCapAt" addresses a corner case in which the only capability to 
 >             Just (Just scPtr) -> do
 >                 sc' <- threadGet tcbSchedContext target
 >                 when (sc' /= Just scPtr) $ schedContextBindTCB scPtr target
->         installTCBCap target (ThreadCap target) slot 0 croot
->         installTCBCap target (ThreadCap target) slot 1 vroot
 >         installTCBCap target (ThreadCap target) slot 3 faultHandler
 >         installTCBCap target (ThreadCap target) slot 4 timeoutHandler
+>         installTCBCap target (ThreadCap target) slot 0 croot
+>         installTCBCap target (ThreadCap target) slot 1 vroot
 >         maybe (return ())
 >             (\(ptr, frame) -> do
 >                 bufferSlot <- withoutPreemption $ getThreadBufferSlot target

@@ -442,9 +442,9 @@ The full SetSpace call also batches setting the fault handler endpoint.
 >             unless (isSchedContextCap scCap) $ throw (InvalidCapability 0)
 >             scPtr <- return $! capSchedContextPtr scCap
 >             scPtr' <- withoutFailure $ threadGet tcbSchedContext tcbPtr
->             when (scPtr' /= Nothing && scPtr' /= Just scPtr) $ throw IllegalOperation
+>             when (scPtr' /= Nothing) $ throw IllegalOperation
 >             sc <- withoutFailure $ getSchedContext scPtr
->             when (scTCB sc /= Nothing && scTCB sc /= Just tcbPtr) $ throw IllegalOperation
+>             when (scTCB sc /= Nothing) $ throw IllegalOperation
 >             return $! ThreadControl {
 >                 tcThread = tcbPtr,
 >                 tcThreadCapSlot = slot,

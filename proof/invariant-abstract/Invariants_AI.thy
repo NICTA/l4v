@@ -3814,4 +3814,6 @@ proof -
   thus ?thesis by (rule rtrancl_mono)
 qed
 
+lemmas if_live_then_nonz_cap_invs = if_live_then_nonz_capD2[OF invs_iflive]
+
 end

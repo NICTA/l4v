@@ -1725,16 +1725,7 @@ crunch pred_tcb_at[wp]: arm_context_switch "pred_tcb_at proj P t"
 
 lemma svr_pred_st_tcb[wp]:
   "\<lbrace>pred_tcb_at proj P t\<rbrace> set_vm_root t \<lbrace>\<lambda>_. pred_tcb_at proj P t\<rbrace>"
-  apply (simp add: set_vm_root_def)
-  apply wp
-   apply (rename_tac cap, case_tac cap, (simp add: throwError_def | wp)+)
-   apply (rename_tac arch_cap)
-   apply (case_tac arch_cap, (simp add: throwError_def | wp)+)
-   apply (rename_tac word mapped)
-   apply (case_tac mapped, (simp add: throwError_def | wp)+)
-    apply(case_tac "word \<noteq> pd'")
-     apply (simp add: whenE_def | wp find_pd_for_asid_pred_tcb_at)+
-  done
+  unfolding set_vm_root_def by (wpsimp wp: get_cap_wp)
 
 crunch typ_at [wp]: set_vm_root "\<lambda>s. P (typ_at T p s)"
   (simp: crunch_simps)

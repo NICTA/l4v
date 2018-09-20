@@ -333,9 +333,9 @@ where
       unlessE (is_sched_context_cap sc_cap) $ throwError (InvalidCapability 0);
       sc_ptr \<leftarrow> returnOk $ obj_ref_of sc_cap;
       sc_ptr' \<leftarrow> liftE $ get_tcb_obj_ref tcb_sched_context tcb_ptr;
-      whenE (sc_ptr' \<noteq> None \<and> sc_ptr' \<noteq> Some sc_ptr) $ throwError IllegalOperation;
+      whenE (sc_ptr' \<noteq> None) $ throwError IllegalOperation;
       sc \<leftarrow> liftE $ get_sched_context sc_ptr;
-      whenE (sc_tcb sc \<noteq> None \<and> sc_tcb sc \<noteq> Some tcb_ptr) $ throwError IllegalOperation;
+      whenE (sc_tcb sc \<noteq> None) $ throwError IllegalOperation;
       returnOk $ ThreadControl tcb_ptr slot None None None None None None None (Some (Some sc_ptr))
     odE"
 

@@ -130,7 +130,7 @@ Note that the idle thread is not considered runnable; this is to prevent it bein
 >         else do
 >             sc <- getSchedContext $ fromJust $ tcbSchedContext tcb
 >             runnable <- isRunnable tcbPtr
->             return $! runnable && scRefillMax sc > 0 && not inReleaseQ
+>             return $ runnable && scRefillMax sc > 0 && not inReleaseQ
 
 \subsubsection{Suspending a Thread}
 

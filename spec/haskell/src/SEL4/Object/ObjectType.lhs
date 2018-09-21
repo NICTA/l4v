@@ -366,29 +366,29 @@ New threads are placed in the current security domain, which must be the domain 
 >             curdom <- getCurDomain
 >             threadSet (\t -> t { tcbDomain = curdom })
 >                 (PPtr $ fromPPtr regionBase)
->             return $! ThreadCap (PPtr $ fromPPtr regionBase)
+>             return $ ThreadCap (PPtr $ fromPPtr regionBase)
 >         Just EndpointObject -> do
 >             placeNewObject regionBase (makeObject :: Endpoint) 0
->             return $! EndpointCap (PPtr $ fromPPtr regionBase) 0 True True True
+>             return $ EndpointCap (PPtr $ fromPPtr regionBase) 0 True True True
 >         Just NotificationObject -> do
 >             placeNewObject (PPtr $ fromPPtr regionBase) (makeObject :: Notification) 0
->             return $! NotificationCap (PPtr $ fromPPtr regionBase) 0 True True
+>             return $ NotificationCap (PPtr $ fromPPtr regionBase) 0 True True
 >         Just SchedContextObject -> do
 >             placeNewObject regionBase ((makeObject :: SchedContext) { scSizeBits = userSize }) 0
->             return $! SchedContextCap (PPtr $ fromPPtr regionBase) userSize
+>             return $ SchedContextCap (PPtr $ fromPPtr regionBase) userSize
 >         Just ReplyObject -> do
 >             placeNewObject regionBase (makeObject :: Reply) 0
->             return $! ReplyCap (PPtr $ fromPPtr regionBase)
+>             return $ ReplyCap (PPtr $ fromPPtr regionBase)
 >         Just CapTableObject -> do
 >             placeNewObject (PPtr $ fromPPtr regionBase) (makeObject :: CTE) userSize
 >             modify (\ks -> ks { gsCNodes =
 >               funupd (gsCNodes ks) (fromPPtr regionBase) (Just userSize)})
->             return $! CNodeCap (PPtr $ fromPPtr regionBase) userSize 0 0
+>             return $ CNodeCap (PPtr $ fromPPtr regionBase) userSize 0 0
 >         Just Untyped ->
->             return $! UntypedCap isDevice (PPtr $ fromPPtr regionBase) userSize 0
+>             return $ UntypedCap isDevice (PPtr $ fromPPtr regionBase) userSize 0
 >         Nothing -> do
 >             archCap <- Arch.createObject t regionBase userSize isDevice
->             return $! ArchObjectCap archCap
+>             return $ ArchObjectCap archCap
 
 \subsection{Invoking Objects}
 
@@ -456,50 +456,50 @@ This function just dispatches invocations to the type-specific invocation functi
 > 
 > performInvocation _ _ _ (InvokeUntyped invok) = do
 >     invokeUntyped invok
->     return $! []
+>     return $ []
 > 
 > performInvocation block call canDonate (InvokeEndpoint ep badge canGrant) =
 >   withoutPreemption $ do
 >     thread <- getCurThread
 >     sendIPC block call badge canGrant canDonate thread ep
->     return $! []
+>     return $ []
 > 
 > performInvocation _ _ _ (InvokeNotification ep badge) = do
 >     withoutPreemption $ sendSignal ep badge 
->     return $! []
+>     return $ []
 >
 > performInvocation _ _ _ (InvokeReply reply) = withoutPreemption $ do
 >     sender <- getCurThread
 >     doReplyTransfer sender reply
->     return $! []
+>     return $ []
 >
 > performInvocation _ _ _ (InvokeTCB invok) = invokeTCB invok
 >
 > performInvocation _ _ _ (InvokeDomain thread domain) = withoutPreemption $ do
 >     setDomain thread domain
->     return $! []
+>     return $ []
 > 
 > performInvocation _ _ _ (InvokeCNode invok) = do
 >     invokeCNode invok
->     return $! []
+>     return $ []
 > 
 > performInvocation _ _ _ (InvokeIRQControl invok) = do
 >     performIRQControl invok
->     return $! []
+>     return $ []
 > 
 > performInvocation _ _ _ (InvokeIRQHandler invok) = do
 >     withoutPreemption $ invokeIRQHandler invok
->     return $! []
+>     return $ []
 > 
 
 > performInvocation _ _ _ (InvokeSchedContext invok) = do
 >     withoutPreemption $ ignoreFailure (invokeSchedContext invok)
->     return $! []
+>     return $ []
 >
 
 > performInvocation _ _ _ (InvokeSchedControl invok) = do
 >     withoutPreemption $ ignoreFailure (invokeSchedControlConfigure invok)
->     return $! []
+>     return $ []
 >
 > performInvocation _ _ _ (InvokeArchObject invok) = Arch.performInvocation invok
 

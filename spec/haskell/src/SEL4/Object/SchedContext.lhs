@@ -468,7 +468,7 @@ This module uses the C preprocessor to select a target architecture.
 > isCurDomainExpired = do
 >     domainTime <- getDomainTime
 >     consumedTime <- getConsumedTime
->     return $! domainTime < consumedTime + minBudget
+>     return $ domainTime < consumedTime + minBudget
 
 > isRoundRobin :: PPtr SchedContext -> Kernel Bool
 > isRoundRobin scPtr = do

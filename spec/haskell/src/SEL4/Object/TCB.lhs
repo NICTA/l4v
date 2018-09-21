@@ -85,8 +85,8 @@ There are eleven types of invocation for a thread control block. All require wri
 >         TCBReadRegisters -> decodeReadRegisters args cap
 >         TCBWriteRegisters -> decodeWriteRegisters args cap
 >         TCBCopyRegisters -> decodeCopyRegisters args cap $ map fst extraCaps
->         TCBSuspend -> return $! Suspend (capTCBPtr cap)
->         TCBResume -> return $! Resume (capTCBPtr cap)
+>         TCBSuspend -> return $ Suspend (capTCBPtr cap)
+>         TCBResume -> return $ Resume (capTCBPtr cap)
 >         TCBConfigure -> decodeTCBConfigure args cap slot extraCaps
 >         TCBSetPriority -> decodeSetPriority args cap extraCaps
 >         TCBSetMCPriority -> decodeSetMCPriority args cap extraCaps
@@ -221,7 +221,7 @@ Setting the thread's priority is only allowed if the new priority is lower than 
 >         ThreadCap { capTCBPtr = tcbPtr } -> return tcbPtr
 >         _ -> throw $ InvalidCapability 1
 >     checkPrio newPrio authTCB
->     return $! ThreadControl {
+>     return $ ThreadControl {
 >         tcThread = capTCBPtr cap,
 >--       tcThreadCapSlot = error "tcThreadCapSlot unused", In theory tcThreadCapSlot should never been evaluated by lazy evaluation. However, it was evaluated when running sel4 haskell kernel. So it is wired. Thus I change this to 0. I hope this can be changed back once we find out why this is evaluated. (by Xin)
 >         tcThreadCapSlot = 0,
@@ -242,7 +242,7 @@ Setting the thread's priority is only allowed if the new priority is lower than 
 >         ThreadCap { capTCBPtr = tcbPtr } -> return tcbPtr
 >         _ -> throw $ InvalidCapability 1
 >     checkPrio newMCP authTCB
->     return $! ThreadControl {
+>     return $ ThreadControl {
 >         tcThread = capTCBPtr cap,
 >         tcThreadCapSlot = 0,
 >         tcNewFaultHandler = Nothing,
@@ -427,7 +427,7 @@ The full SetSpace call also batches setting the fault handler endpoint.
 >     KernelF SyscallError TCBInvocation
 > decodeUpdateSc cap slot scCap =
 >     case scCap of
->         NullCap -> return $! ThreadControl {
+>         NullCap -> return $ ThreadControl {
 >             tcThread = capTCBPtr cap,
 >             tcThreadCapSlot = slot,
 >             tcNewFaultHandler = Nothing,
@@ -439,9 +439,9 @@ The full SetSpace call also batches setting the fault handler endpoint.
 >             tcNewIPCBuffer = Nothing,
 >             tcNewSc = Just Nothing }
 >         _ -> do
->             tcbPtr <- return $! capTCBPtr cap
+>             tcbPtr <- return $ capTCBPtr cap
 >             unless (isSchedContextCap scCap) $ throw (InvalidCapability 0)
->             scPtr <- return $! capSchedContextPtr scCap
+>             scPtr <- return $ capSchedContextPtr scCap
 >             scPtr' <- withoutFailure $ threadGet tcbSchedContext tcbPtr
 >             when (scPtr' /= Nothing) $ throw IllegalOperation
 >             sc <- withoutFailure $ getSchedContext scPtr
@@ -706,7 +706,7 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >             return $ InvokeSchedContextConsumed scPtr args
 >         SchedContextBind -> do
 >             when (length excaps == 0) $ throw TruncatedMessage
->             cap <- return $! head excaps
+>             cap <- return $ head excaps
 >             sc <- withoutFailure $ getSchedContext scPtr
 >             when (scTCB sc /= Nothing || scNtfn sc /= Nothing) $ throw IllegalOperation
 >             case cap of
@@ -722,7 +722,7 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >             return $ InvokeSchedContextBind scPtr cap
 >         SchedContextUnbindObject -> do
 >             when (length excaps == 0) $ throw TruncatedMessage
->             cap <- return $! head excaps
+>             cap <- return $ head excaps
 >             case cap of
 >                 ThreadCap tcbPtr -> do
 >                     sc <- withoutFailure $ getSchedContext scPtr
@@ -737,7 +737,7 @@ The domain cap is invoked to set the domain of a given TCB object to a given val
 >         SchedContextUnbind -> do
 >             ctPtr <- withoutFailure $ getCurThread
 >             withoutFailure $ setThreadState Restart ctPtr
->             return $! InvokeSchedContextUnbind scPtr
+>             return $ InvokeSchedContextUnbind scPtr
 >         SchedContextYieldTo -> do
 >             sc <- withoutFailure $ getSchedContext scPtr
 >             when (scTCB sc == Nothing) $ throw IllegalOperation
@@ -767,11 +767,11 @@ Unlike the C code, setTimeArg does not set the message registers.
 >     unless (invocationType label == SchedControlConfigure) $ throw IllegalOperation
 >     when (length excaps == 0) $ throw TruncatedMessage
 >     when (length args < timeArgSize * 2 + 2) $ throw TruncatedMessage
->     budgetUs <- return $! parseTimeArg 0 args
->     periodUs <- return $! parseTimeArg timeArgSize args
->     extraRefills <- return $! args !! (2 * timeArgSize)
->     badge <- return $! args !! (2 * timeArgSize + 1)
->     targetCap <- return $! head excaps
+>     budgetUs <- return $ parseTimeArg 0 args
+>     periodUs <- return $ parseTimeArg timeArgSize args
+>     extraRefills <- return $ args !! (2 * timeArgSize)
+>     badge <- return $ args !! (2 * timeArgSize + 1)
+>     targetCap <- return $ head excaps
 >     when (not (isSchedContextCap targetCap)) $ throw (InvalidCapability 1)
 >     scPtr <- return $ capSchedContextPtr targetCap
 >     when (budgetUs > max_us_to_ticks || budgetUs < minBudgetUs) $
@@ -784,7 +784,7 @@ Unlike the C code, setTimeArg does not set the message registers.
 >         throw (RangeError 0 (fromIntegral (refillAbsoluteMax(targetCap) - minRefills)))
 >     ctPtr <- withoutFailure $ getCurThread
 >     withoutFailure $ setThreadState Restart ctPtr
->     return $! InvokeSchedControlConfigure scPtr
+>     return $ InvokeSchedControlConfigure scPtr
 >         (usToTicks budgetUs) (usToTicks periodUs) (fromIntegral extraRefills + minRefills) badge
 
 \subsection{Checks}

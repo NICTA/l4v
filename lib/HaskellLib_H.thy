@@ -416,6 +416,17 @@ where
   odE"
 
 primrec
+  takeWhileM :: "('a \<Rightarrow> ('s, bool) nondet_monad) \<Rightarrow> 'a list \<Rightarrow> ('s, 'a list) nondet_monad"
+where
+  "takeWhileM _ [] = return []"
+| "takeWhileM f (x#xs) = do
+    r \<leftarrow> f x;
+    if r
+      then liftM (\<lambda>a. x # a) (takeWhileM f xs)
+      else return []
+   od"
+
+primrec
   tails :: "'a list \<Rightarrow> 'a list list"
 where
   "tails [] = [[]]"
@@ -545,5 +556,7 @@ definition
 
 abbreviation
   "null == List.null"
+
+
 
 end

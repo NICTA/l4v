@@ -34,7 +34,7 @@ definition init_arch_state :: arch_state
   "init_arch_state \<equiv> \<lparr>
      riscv_asid_table = Map.empty,
      riscv_global_pt = riscv_global_pt_ptr,
-     riscv_kernel_vspace = \<lambda>_. RISCVVSpaceKernelWindow
+     riscv_kernel_vspace = \<lambda>_. RISCVVSpaceKernelWindow  (* FIXME RISCV *)
    \<rparr>"
 
 definition init_global_pt :: kernel_object

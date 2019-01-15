@@ -168,13 +168,6 @@ lemma valid_obj_same_type:
   apply (auto intro: arch_valid_obj_same_type)
   done
 
-(* FIXME RISCV: move to arch (level) *)
-lemma valid_vspace_obj_same_type:
-  "\<lbrakk>valid_vspace_obj ao s;  kheap s p = Some ko; a_type ko' = a_type ko\<rbrakk>
-  \<Longrightarrow> valid_vspace_obj ao (s\<lparr>kheap := kheap s(p \<mapsto> ko')\<rparr>)"
-    apply (rule hoare_to_pure_kheap_upd[OF valid_vspace_obj_typ])
-    by (auto simp: obj_at_def)
-
 lemma set_object_valid_objs:
   "\<lbrace>valid_objs and valid_obj p k and obj_at (\<lambda>ko. a_type k = a_type ko) p\<rbrace>
   set_object p k
@@ -1042,10 +1035,6 @@ lemma valid_kernel_mappings[wp]: "\<lbrace>valid_kernel_mappings\<rbrace> f \<lb
 
 lemma equal_kernel_mappings[wp]: "\<lbrace>equal_kernel_mappings\<rbrace> f \<lbrace>\<lambda>_. equal_kernel_mappings\<rbrace>"
   by (rule equal_kernel_mappings_lift, wp vsobj_at)
-
-(* FIXME RISCV: move to arch (level) *)
-lemma valid_vso_at[wp]:"\<lbrace>valid_vso_at p\<rbrace> f \<lbrace>\<lambda>_. valid_vso_at p\<rbrace>"
-  by (rule valid_vso_at_lift_aobj_at; wp vsobj_at; simp)
 
 lemma in_user_frame[wp]:"\<lbrace>in_user_frame p\<rbrace> f \<lbrace>\<lambda>_. in_user_frame p\<rbrace>"
   by (rule in_user_frame_obj_pred_lift; wp vsobj_at; simp)

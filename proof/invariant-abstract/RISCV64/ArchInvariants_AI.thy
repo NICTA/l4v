@@ -540,6 +540,8 @@ definition table_cap_ref_arch :: "arch_cap \<Rightarrow> (asid \<times> vspace_r
      | PageTableCap _ mapdata \<Rightarrow> mapdata
      | _ \<Rightarrow> None"
 
+lemmas table_cap_ref_arch_simps[simp] = table_cap_ref_arch_def[split_simps arch_cap.split]
+
 definition table_cap_ref :: "cap \<Rightarrow> (asid \<times> vspace_ref) option" where
   "table_cap_ref cap = arch_cap_fun_lift table_cap_ref_arch None cap"
 
@@ -1966,6 +1968,8 @@ lemma lookup_pt_slot_from_level_rec:
   apply (simp (no_asm) add: pt_walk.simps)
   apply (fastforce simp: Let_def obind_assoc intro: opt_bind_cong)
   done
+
+lemmas is_nondevice_page_cap_simps = is_nondevice_page_cap_def[split_simps arch_cap.split cap.split]
 
 end
 

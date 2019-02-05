@@ -1975,6 +1975,8 @@ lemma lookup_pt_slot_from_level_rec:
 
 lemmas is_nondevice_page_cap_simps = is_nondevice_page_cap_def[split_simps arch_cap.split cap.split]
 
+lemmas abs_atyp_at_lifts = valid_pte_lift
+
 end
 
 context Arch_pspace_update_eq begin

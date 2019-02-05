@@ -247,43 +247,45 @@ definition
 
 definition
   "valid_page_inv pg_inv \<equiv> case pg_inv of
-    PageMap cap ptr m \<Rightarrow>
-      cte_wp_at (is_arch_update (ArchObjectCap cap) and ((=) None \<circ> vs_cap_ref)) ptr
+    PageMap acap ptr m \<Rightarrow>
+      cte_wp_at (is_arch_update (ArchObjectCap acap) and ((=) None \<circ> vs_cap_ref)) ptr
       and cte_wp_at is_frame_cap ptr
-      and (\<lambda>s. same_ref m (ArchObjectCap cap) s)
+      and same_ref m (ArchObjectCap acap)
       and valid_slots m
-      and valid_arch_cap cap
+      and valid_arch_cap acap
       and K (is_PagePTE (fst m))
       and (\<lambda>s. \<exists>slot. cte_wp_at (parent_for_refs m) slot s)
   | PageRemap m \<Rightarrow>
       valid_slots m and K (is_PagePTE (fst m))
       and (\<lambda>s. \<exists>slot. cte_wp_at (parent_for_refs m) slot s)
       and (\<lambda>s. \<exists>slot. cte_wp_at (\<lambda>cap. same_ref m cap s) slot s)
-  | PageUnmap cap ptr \<Rightarrow>
-     \<lambda>s. \<exists>dev r R sz m. cap = FrameCap r R sz dev m \<and>
-         case_option True (valid_unmap sz) m \<and>
-         cte_wp_at (is_arch_diminished (ArchObjectCap cap)) ptr s \<and>
-         valid_arch_cap cap s
+  | PageUnmap acap cslot \<Rightarrow>
+     \<lambda>s. \<exists>dev r R sz m.
+            acap = FrameCap r R sz dev m \<and>
+            case_option True (valid_unmap sz) m \<and>
+            cte_wp_at (is_arch_diminished (ArchObjectCap acap)) cslot s \<and>
+            valid_arch_cap acap s
   | PageGetAddr ptr \<Rightarrow> \<top>"
 
 definition
   "valid_pti pti \<equiv> case pti of
-     PageTableMap cap ptr pde p \<Rightarrow>
-     pde_at p and (\<lambda>s. wellformed_pde pde) and
-     valid_pde pde and valid_cap cap and
-     cte_wp_at (\<lambda>c. is_arch_update cap c \<and> cap_asid c = None) ptr and
-     empty_pde_at p and
-     (\<lambda>s. \<exists>p' ref. vs_cap_ref cap = Some (VSRef (p && mask pd_bits >> 2) (Some APageDirectory) # ref)
-              (* \<and> (ref \<rhd> (p && ~~ mask pd_bits)) s *)
-              \<and> pde_ref pde = Some p' \<and> p' \<in> obj_refs cap
-              \<and> (\<exists>ao. ko_at (ArchObj ao) p' s \<and> valid_vspace_obj ao s)
-              \<and> hd (the (vs_cap_ref cap)) \<notin> kernel_vsrefs) and
-     K (is_pt_cap cap \<and> cap_asid cap \<noteq> None)
-   | PageTableUnmap cap ptr \<Rightarrow>
-     cte_wp_at (\<lambda>c. is_arch_diminished cap c) ptr and valid_cap cap
-       and is_final_cap' cap
-       and K (is_pt_cap cap)"
-
+     PageTableMap acap cslot pte pt_slot \<Rightarrow>
+       pte_at pt_slot and K (wellformed_pte pte \<and> is_PageTablePTE pte) and
+       valid_arch_cap acap and
+       cte_wp_at (\<lambda>c. is_arch_update (ArchObjectCap acap) c \<and> cap_asid c = None) cslot and
+       invalid_pte_at pt_slot and
+       (\<lambda>s. \<exists>p' level asid vref.
+                vs_cap_ref_arch acap = Some (asid, vref)
+                \<and> vs_lookup_slot level asid vref s = Some (level, pt_slot)
+                \<and> valid_pte level pte s
+                \<and> pte_ref pte = Some p' \<and> obj_refs (ArchObjectCap acap) = {p'}
+                \<and> (\<exists>ao. ko_at (ArchObj ao) p' s \<and> valid_vspace_obj (level-1) ao s)
+                \<and> vref \<in> user_region s) and
+       K (is_PageTableCap acap \<and> cap_asid_arch acap \<noteq> None)
+   | PageTableUnmap acap cslot \<Rightarrow>
+       cte_wp_at (\<lambda>c. is_arch_diminished (ArchObjectCap acap) c) cslot and valid_arch_cap acap
+       and is_final_cap' (ArchObjectCap acap)
+       and K (is_PageTableCap acap)"
 
 crunches unmap_page
   for aligned [wp]: pspace_aligned

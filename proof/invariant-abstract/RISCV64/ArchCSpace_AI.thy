@@ -246,9 +246,9 @@ lemma set_untyped_cap_as_full_not_reachable_pg_cap[wp]:
 lemma table_cap_ref_eq_rewrite:
   "\<lbrakk>cap_master_cap cap = cap_master_cap capa; (is_frame_cap cap \<or> vs_cap_ref cap = vs_cap_ref capa)\<rbrakk>
    \<Longrightarrow> table_cap_ref cap = table_cap_ref capa"
-  apply (frule cap_master_cap_pg_cap)
+  apply (frule cap_master_cap_frame_cap)
   apply (case_tac "is_frame_cap cap")
-    apply (clarsimp simp:is_cap_simps table_cap_ref_def vs_cap_ref_to_table_cap_ref cap_master_cap_pg_cap)+
+    apply (clarsimp simp:is_cap_simps table_cap_ref_def vs_cap_ref_to_table_cap_ref cap_master_cap_frame_cap)+
   done
 
 lemma is_derived_cap_asid_issues:

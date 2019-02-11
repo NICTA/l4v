@@ -229,14 +229,19 @@ lemma vspace_obj_pred_aobjs:
   apply (simp flip: aobjs_of_ako_at_Some)
   done
 
-lemma pts_of_pred_lift:
+lemma pts_of_lift:
   assumes aobj_at: "\<And>P P' p. vspace_obj_pred P' \<Longrightarrow> f \<lbrace>\<lambda>s. P (obj_at P' p s)\<rbrace>"
   shows "f \<lbrace>\<lambda>s. P (pts_of s)\<rbrace>"
   by (rule hoare_lift_Pf2[where f=aobjs_of], (wp vspace_obj_pred_aobjs aobj_at)+)
 
-lemma ptes_of_pred_lift:
+lemma ptes_of_lift:
   assumes aobj_at: "\<And>P P' p. vspace_obj_pred P' \<Longrightarrow> f \<lbrace>\<lambda>s. P (obj_at P' p s)\<rbrace>"
   shows "f \<lbrace>\<lambda>s. P (ptes_of s)\<rbrace>"
+  by (rule hoare_lift_Pf2[where f=aobjs_of], (wp vspace_obj_pred_aobjs aobj_at)+)
+
+lemma asid_pools_of_lift:
+  assumes aobj_at: "\<And>P P' p. vspace_obj_pred P' \<Longrightarrow> f \<lbrace>\<lambda>s. P (obj_at P' p s)\<rbrace>"
+  shows "f \<lbrace>\<lambda>s. P (asid_pools_of s)\<rbrace>"
   by (rule hoare_lift_Pf2[where f=aobjs_of], (wp vspace_obj_pred_aobjs aobj_at)+)
 
 lemma vs_lookup_vspace_obj_at_lift:
@@ -295,12 +300,12 @@ lemma valid_vspace_objs_lift_weak:
   shows "\<lbrace>valid_vspace_objs\<rbrace> f \<lbrace>\<lambda>_. valid_vspace_objs\<rbrace>"
   by (rule valid_vspace_objs_lift, rule vspace_obj_pred_aobjs; rule assms)
 
-lemma translate_address_pred_lift:
+lemma translate_address_lift_weak:
   assumes aobj_at: "\<And>P P' p. vspace_obj_pred P' \<Longrightarrow> f \<lbrace>\<lambda>s. P (obj_at P' p s)\<rbrace>"
   shows "f \<lbrace>\<lambda>s. P (translate_address pt_root vref s) \<rbrace>"
   unfolding translate_address_def
   apply (clarsimp simp: comp_def obind_def)
-  apply (rule hoare_lift_Pf2[where f=ptes_of, OF _ ptes_of_pred_lift[OF aobj_at]]; simp)
+  apply (rule hoare_lift_Pf2[where f=ptes_of, OF _ ptes_of_lift[OF aobj_at]]; simp)
    apply (clarsimp split: option.splits)
    apply (rule hoare_lift_Pf2[where f=pte_refs_of])
    apply (rule hoare_lift_Pf2[where f=aobjs_of], (wp vspace_obj_pred_aobjs aobj_at)+)
@@ -594,13 +599,13 @@ lemma valid_global_vspace_mappings_lift:
   "f \<lbrace>valid_global_vspace_mappings\<rbrace>"
   unfolding valid_global_vspace_mappings_def
   by (rule hoare_lift_Pf2[where f=arch_state, OF _ arch])
-     (wpsimp simp: Let_def wp: hoare_vcg_ball_lift translate_address_pred_lift aobj_at)
+     (wpsimp simp: Let_def wp: hoare_vcg_ball_lift translate_address_lift_weak aobj_at)
 
 lemma valid_arch_caps_lift_weak:
   assumes cap: "(\<And>P. f \<lbrace>\<lambda>s. P (caps_of_state s)\<rbrace>)"
   shows "f \<lbrace>valid_arch_caps\<rbrace>"
   by (rule valid_arch_caps_lift)
-     (wpsimp wp: vs_lookup_pages_vspace_obj_at_lift[OF aobj_at] pts_of_pred_lift[OF aobj_at]
+     (wpsimp wp: vs_lookup_pages_vspace_obj_at_lift[OF aobj_at] pts_of_lift[OF aobj_at]
                  arch cap)+
 
 lemma valid_global_objs_lift_weak:

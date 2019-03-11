@@ -45,6 +45,9 @@ print "Testing for L4V_ARCH=%s:" % L4V_ARCH
 # enable timing logs in isabelle builds and set report interval to 3 seconds
 os.environ["ISABELLE_TIMING_LOG"]="3.0s"
 
+# RISCV64 abstract invariant proofs in progress, enable quick-and-dirty mode
+os.environ["AINVS_QUICK_AND_DIRTY"]="1"
+
 # Enable quick_and_dirty mode for various images
 if os.environ.has_key("QUICK_AND_DIRTY"):
     os.environ["AINVS_QUICK_AND_DIRTY"]=1
@@ -79,7 +82,6 @@ EXCLUDE["X64"]=[
 ]
 
 EXCLUDE["RISCV64"]=[
-    "AInvs",
     "ASepSpec",
     "DSpec",
     "c-kernel",

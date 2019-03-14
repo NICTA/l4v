@@ -43,10 +43,10 @@ badgeRegister :: Register
 badgeRegister = A0
 
 frameRegisters :: [Register]
-frameRegisters = SEPC : [LR .. A6]
+frameRegisters = SEPC : [LR .. T5]
 
 gpRegisters :: [Register]
-gpRegisters = []
+gpRegisters = [T6]
 
 exceptionMessage :: [Register]
 exceptionMessage = [SEPC, SP, A7]

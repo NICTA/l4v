@@ -33,6 +33,8 @@ lemma valid_global_refs_asid_table_udapte [iff]:
   valid_global_refs s"
   by (simp add: valid_global_refs_def global_refs_def)
 
+(* FIXME RISCV: look at vs_lookup_pages_pt_eq to see if can derive one from other,
+                also fix deceptive name *)
 lemma vs_lookup_pages_eq:
   "\<lbrakk>valid_vspace_objs s; valid_asid_table s;
     valid_cap cap s; table_cap_ref cap = Some (asid, vref); obj_refs cap = {oref}\<rbrakk>
@@ -196,8 +198,7 @@ lemma (* replaceable_more_update *) [simp,Finalise_AI_asms]:
   sorry (* FIXME RISCV
   by (simp add: replaceable_def) *)
 
-lemma (* obj_ref_ofI *) [Finalise_AI_asms]: "obj_refs cap = {x} \<Longrightarrow> obj_ref_of cap = x"
-  by (case_tac cap, simp_all) (rename_tac arch_cap, case_tac arch_cap, simp_all)
+lemmas [Finalise_AI_asms] = obj_refs_obj_ref_of (* used under name obj_ref_ofI *)
 
 lemma (* empty_slot_invs *) [Finalise_AI_asms]:
   "\<lbrace>\<lambda>s. invs s \<and> cte_wp_at (replaceable s sl cap.NullCap) sl s \<and>

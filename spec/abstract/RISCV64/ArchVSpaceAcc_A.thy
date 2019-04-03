@@ -152,7 +152,7 @@ text \<open>Walk page tables in software.\<close>
 (* pte_addrs will always be at least page aligned *)
 definition pptr_from_pte :: "pte \<Rightarrow> vspace_ref"
   where
-  "pptr_from_pte pte \<equiv> ptrFromPAddr (pte_addr pte)"
+  "pptr_from_pte pte \<equiv> ptrFromPAddr (addr_from_pte pte)"
 
 definition pt_slot_offset :: "vm_level \<Rightarrow> obj_ref \<Rightarrow> vspace_ref \<Rightarrow> obj_ref"
   where

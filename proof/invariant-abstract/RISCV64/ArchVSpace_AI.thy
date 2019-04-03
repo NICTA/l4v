@@ -396,6 +396,9 @@ lemma set_cap_valid_pte_stronger:
   "set_cap cap p \<lbrace>\<lambda>s. P (valid_pte level pte s)\<rbrace>"
   by (wp valid_pte_lift3 set_cap_typ_at)
 
+(* FIXME RISCV: this currently only talks about validity of entries *one* level below what we are
+   inserting (and hence making reachable): validity should apply to everything we make reachable!
+*)
 lemma store_pte_vspace_objs_map:
   "\<lbrace>valid_vspace_objs and
    (\<lambda>s. \<forall>ref. pte_ref pte = Some ref \<longrightarrow>

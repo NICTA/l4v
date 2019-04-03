@@ -259,7 +259,7 @@ locale asid_update = Arch +
   assumes ko: "ko_at (ArchObj (ASIDPool Map.empty)) ap s"
   assumes empty: "asid_table s asid = None"
   defines "s' \<equiv> s\<lparr>arch_state := arch_state s\<lparr>riscv_asid_table := riscv_asid_table (arch_state s)(asid \<mapsto> ap)\<rparr>\<rparr>"
-
+(* FIXME RISCV: use asid_pools_of above *)
 
 context asid_update begin
 

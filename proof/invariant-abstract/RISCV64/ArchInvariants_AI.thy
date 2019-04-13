@@ -412,6 +412,8 @@ definition vs_cap_ref_arch :: "arch_cap \<Rightarrow> (asid \<times> vspace_ref)
                           | ASIDControlCap \<Rightarrow> None
                           | _ \<Rightarrow> acap_map_data acap"
 
+lemmas vs_cap_ref_arch_simps[simp] = vs_cap_ref_arch_def [split_simps arch_cap.split]
+
 definition vs_cap_ref :: "cap \<Rightarrow> (asid \<times> vspace_ref) option" where
   "vs_cap_ref cap \<equiv> arch_cap_fun_lift vs_cap_ref_arch None cap"
 
@@ -2238,7 +2240,14 @@ lemma pt_lookup_slot_from_level_rec:
   apply (fastforce simp: Let_def obind_assoc intro: opt_bind_cong)
   done
 
-lemmas abs_atyp_at_lifts = valid_pte_lift
+lemma pte_at_typ_lift:
+  assumes "(\<And>T p. f \<lbrace>typ_at (AArch T) p\<rbrace>)"
+  shows "f \<lbrace>pte_at t\<rbrace>"
+  unfolding pte_at_def by (wpsimp wp: assms)
+
+lemmas abs_atyp_at_lifts =
+  valid_pte_lift valid_vspace_obj_typ valid_arch_cap_ref_lift in_user_frame_lift
+  valid_arch_cap_typ pte_at_typ_lift
 
 lemma vspace_for_asid_lift:
   assumes "\<And>P. f \<lbrace>\<lambda>s. P (asid_table s)\<rbrace>"

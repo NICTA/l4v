@@ -647,14 +647,12 @@ lemma lookupSlotForThread_ccorres':
    apply (clarsimp simp add: conj_comms word_size tcbSlots Kernel_C.tcbCTable_def)
    apply (rule conjI)
     apply fastforce
-   (* FIXME RISCV: wrong size thread bits lead to wrong alignment, should work after spec change
    apply (erule tcb_at_cte_at')
   apply (clarsimp simp add: Collect_const_mem errstate_def tcbSlots
                             Kernel_C.tcbCTable_def word_size lookupSlot_raw_rel_def
                             word_sle_def
                  split del: if_split)
-  done *)
-  sorry
+  done
 
 lemma lookupSlotForThread_ccorres[corres]:
   "ccorres (lookup_failure_rel \<currency> lookupSlot_raw_rel) lookupSlot_raw_xf

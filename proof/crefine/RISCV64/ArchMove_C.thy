@@ -43,6 +43,31 @@ context begin interpretation Arch .
 
 (* FIXME RISCV: some 64-bit lemmas from X64's ArchMove_C will be needed here *)
 
+crunch inv'[wp]: archThreadGet P
+
+(* FIXME MOVE near thm tg_sp' *)
+lemma atg_sp':
+  "\<lbrace>P\<rbrace> archThreadGet f p \<lbrace>\<lambda>t. obj_at' (\<lambda>t'. f (tcbArch t') = t) p and P\<rbrace>"
+  including no_pre
+  apply (simp add: archThreadGet_def)
+  apply wp
+  apply (rule hoare_strengthen_post)
+   apply (rule getObject_tcb_sp)
+  apply clarsimp
+  apply (erule obj_at'_weakenE)
+  apply simp
+  done
+
+(* FIXME: MOVE to EmptyFail *)
+lemma empty_fail_archThreadGet [intro!, wp, simp]:
+  "empty_fail (archThreadGet f p)"
+  by (simp add: archThreadGet_def getObject_def split_def)
+
+(* FIXME: move to ainvs? *)
+lemma sign_extend_canonical_address:
+  "(x = sign_extend 38 x) = canonical_address x"
+  by (fastforce simp: sign_extended_iff_sign_extend canonical_address_sign_extended canonical_bit_def)
+
 end
 
 end

@@ -2553,23 +2553,7 @@ lemma cap_get_capSizeBits_spec:
        \<lbrace>\<acute>ret__unsigned_long = of_nat (get_capSizeBits_CL (cap_lift \<^bsup>s\<^esup>cap))\<rbrace>"
   apply vcg
   apply (clarsimp simp: get_capSizeBits_CL_def)
-  (* FIXME RISCV: original X64 proof should work here once
-                  tcbBlockSizeBits is corrected in spec, should be 10 *)
-  apply safe
-  apply (all\<open>(solves \<open>
-         clarsimp simp: cap_lifts
-                        cap_lift_asid_control_cap
-                        cap_lift_irq_control_cap cap_lift_null_cap
-                        Kernel_C.asidLowBits_def asid_low_bits_def
-                        word_sle_def Let_def mask_def
-                        isZombieTCB_C_def ZombieTCB_C_def
-                        cap_lift_domain_cap cap_get_tag_scast
-                        objBits_defs wordRadix_def
-                        c_valid_cap_def cl_valid_cap_def
-                 dest!: sym [where t = "ucast (cap_get_tag cap)" for cap]\<close>)?\<close>)
-  subgoal sorry (* FIXME RISCV: tcbBlockSizeBits is incorrect in spec, should be 10 *)
-  subgoal sorry (* FIXME RISCV: tcbBlockSizeBits is incorrect in spec, should be 10 *)
-  apply ((*intro conjI impI;*)
+  apply (intro conjI impI;
          clarsimp simp: cap_lifts
                         cap_lift_asid_control_cap
                         cap_lift_irq_control_cap cap_lift_null_cap
@@ -2708,23 +2692,14 @@ lemma cap_get_capPtr_spec:
        \<lbrace>\<acute>ret__ptr_to_void = get_capPtr_CL (cap_lift \<^bsup>s\<^esup>cap)\<rbrace>"
   apply vcg
   apply (clarsimp simp: get_capPtr_CL_def)
-  apply (intro impI conjI)
-                    apply (clarsimp simp: cap_lifts pageBitsForSize_def
-                                          cap_lift_asid_control_cap word_sle_def
-                                          cap_lift_irq_control_cap cap_lift_null_cap
-                                          mask_def objBits_simps' cap_lift_domain_cap
-                                          ptr_add_assertion_positive cap_get_tag_scast
-                                   dest!: sym [where t = "ucast (cap_get_tag cap)" for cap]
-                                   split: vmpage_size.splits)+
-  subgoal sorry (* FIXME RISCV: tcbSizeBits is incorrect in spec, resulting in align mismatch *)
-                apply (clarsimp simp: cap_lifts pageBitsForSize_def
-                                      cap_lift_asid_control_cap word_sle_def
-                                      cap_lift_irq_control_cap cap_lift_null_cap
-                                      mask_def objBits_simps' cap_lift_domain_cap
-                                      ptr_add_assertion_positive cap_get_tag_scast
-                               dest!: sym [where t = "ucast (cap_get_tag cap)" for cap]
-                               split: vmpage_size.splits)+
-
+  apply (intro impI conjI;
+           clarsimp simp: cap_lifts pageBitsForSize_def
+                          cap_lift_asid_control_cap word_sle_def
+                          cap_lift_irq_control_cap cap_lift_null_cap
+                          mask_def objBits_simps' cap_lift_domain_cap
+                          ptr_add_assertion_positive cap_get_tag_scast
+                    dest!: sym [where t = "ucast (cap_get_tag cap)" for cap]
+                    split: vmpage_size.splits)+
   (* XXX: slow. there should be a rule for this *)
   by (case_tac "cap_lift cap", simp_all, case_tac "a",
       auto simp: cap_lift_def cap_lift_defs cap_tag_defs Let_def

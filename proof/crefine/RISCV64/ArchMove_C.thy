@@ -272,6 +272,11 @@ lemma asUser_getRegister_discarded:
 
 crunch pspace_canonical'[wp]: setThreadState pspace_canonical'
 
+lemma obj_at_kernel_mappings':
+  "\<lbrakk>pspace_in_kernel_mappings' s; obj_at' P p s\<rbrakk>
+   \<Longrightarrow> p \<in> kernel_mappings"
+  by (clarsimp simp: pspace_in_kernel_mappings'_def obj_at'_def dom_def)
+
 end
 
 end

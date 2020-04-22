@@ -8,10 +8,7 @@ chapter "Toplevel Refinement Statement"
 
 theory Refine_C
 imports
-  Ipc_C (* FIXME RISCV: replace with below *)
-  IsolatedThreadAction (* FIXME RISCV: replace with below *)
-  Interrupt_C (* FIXME RISCV: replace with below *)
-  Invoke_C (* FIXME RISCV: replace with below *)
+  Syscall_C (* FIXME RISCV: replace with below *)
 
   (* FIXME RISCV:
   Init_C

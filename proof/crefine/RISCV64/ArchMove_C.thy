@@ -10,6 +10,36 @@ theory ArchMove_C
 imports "../Move_C"
 begin
 
+
+lemma ps_clear_is_aligned_ksPSpace_None:
+  "\<lbrakk>ps_clear p n s; is_aligned p n; 0<d; d \<le> mask n\<rbrakk>
+   \<Longrightarrow> ksPSpace s (p + d) = None"
+  apply (simp add: ps_clear_def add_diff_eq[symmetric] mask_2pm1[symmetric])
+  apply (drule equals0D[where a="p + d"])
+  apply (simp add: dom_def word_gt_0 del: word_neq_0_conv)
+  apply (drule mp)
+   apply (rule word_plus_mono_right)
+    apply simp
+   apply (simp add: mask_2pm1)
+   apply (erule is_aligned_no_overflow')
+  apply (drule mp)
+   apply (case_tac "(0::machine_word)<2^n")
+    apply (frule le_m1_iff_lt[of "(2::machine_word)^n" d, THEN iffD1])
+    apply (simp add: mask_2pm1[symmetric])
+    apply (erule (1) is_aligned_no_wrap')
+   apply (simp add: is_aligned_mask mask_2pm1 not_less word_bits_def
+                    power_overflow)
+  by assumption
+
+lemma ps_clear_is_aligned_ctes_None:
+  assumes "ps_clear p tcbBlockSizeBits s"
+      and "is_aligned p tcbBlockSizeBits"
+  shows "ksPSpace s (p + 2*2^cteSizeBits) = None"
+    and "ksPSpace s (p + 3*2^cteSizeBits) = None"
+    and "ksPSpace s (p + 4*2^cteSizeBits) = None"
+  by (auto intro: assms ps_clear_is_aligned_ksPSpace_None
+            simp: objBits_defs mask_def)+
+
 lemma word_shift_by_3:
   "x * 8 = (x::'a::len word) << 3"
   by (simp add: shiftl_t2n)

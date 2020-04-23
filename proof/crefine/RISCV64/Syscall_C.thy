@@ -774,31 +774,6 @@ lemma getMRs_length:
   apply (simp add: msgMaxLength_def msgLengthBits_def n_msgRegisters_def)
   done
 
-
-(* FIXME RAF archmove *)
-lemma getMessageInfo_less_4:
-  "\<lbrace>\<top>\<rbrace> getMessageInfo t \<lbrace>\<lambda>rv s. msgExtraCaps rv < 4\<rbrace>"
-  including no_pre
-  apply (simp add: getMessageInfo_def)
-  apply wp
-  apply (rule hoare_strengthen_post, rule hoare_vcg_prop)
-  apply (simp add: messageInfoFromWord_def Let_def
-                   Types_H.msgExtraCapBits_def)
-  apply (rule word_leq_minus_one_le, simp)
-  apply simp
-  apply (rule word_and_le1)
-  done
-(* FIXME RAF archmove *)
-lemma getMessageInfo_msgLength':
-  "\<lbrace>\<top>\<rbrace> getMessageInfo t \<lbrace>\<lambda>rv s. msgLength rv \<le> 0x78\<rbrace>"
-  including no_pre
-  apply (simp add: getMessageInfo_def)
-  apply wp
-  apply (rule hoare_strengthen_post, rule hoare_vcg_prop)
-  apply (simp add: messageInfoFromWord_def Let_def msgMaxLength_def not_less
-                   Types_H.msgExtraCapBits_def split: if_split )
-  done
-
 lemma handleInvocation_ccorres:
   "ccorres (K dc \<currency> dc) (liftxf errstate id (K ()) ret__unsigned_long_')
        (invs' and
